@@ -17,6 +17,41 @@ import (
 // than one that retries hourly and gets another 429.
 const maxRetryAfterSeconds = 3600
 
+// Only in-flight admission calls need a completion marker. Once they return,
+// the Store's concurrency slots are sufficient for lifecycle bookkeeping.
+type requestAdmission struct {
+	calls     int
+	completed bool
+}
+
+func (a *App) beginAdmission(requestID string) *requestAdmission {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil
+	}
+	a.admissionsMu.Lock()
+	defer a.admissionsMu.Unlock()
+	admission := a.admissions[requestID]
+	if admission == nil {
+		admission = &requestAdmission{}
+		a.admissions[requestID] = admission
+	}
+	admission.calls++
+	return admission
+}
+
+func (a *App) endAdmission(requestID string, admission *requestAdmission) {
+	if admission == nil {
+		return
+	}
+	a.admissionsMu.Lock()
+	defer a.admissionsMu.Unlock()
+	admission.calls--
+	if admission.calls == 0 {
+		delete(a.admissions, strings.TrimSpace(requestID))
+	}
+}
+
 // Enforcement runs before auth so an over-quota request never occupies an
 // upstream credential.
 func (a *App) interceptBeforeAuth(raw []byte) ([]byte, error) {
@@ -24,40 +59,55 @@ func (a *App) interceptBeforeAuth(raw []byte) ([]byte, error) {
 	if errUnmarshal := json.Unmarshal(raw, &req); errUnmarshal != nil {
 		return nil, fmt.Errorf("解析请求拦截参数：%w", errUnmarshal)
 	}
-	if a == nil || a.store == nil || !a.store.Enabled() {
+	if a == nil || a.store == nil {
 		return OKEnvelope(RequestInterceptResponse{})
 	}
-	if metadataString(req.Metadata, MetadataSource) == SourcePluginHostModelCallback {
-		// A nested helper model is an implementation detail of another plugin and
-		// need not be among the models granted to the client. Its reported usage is
-		// still billed by usage.handle when the host attributes it to the client.
+	helper := metadataString(req.Metadata, MetadataSource) == SourcePluginHostModelCallback
+	var admission *requestAdmission
+	if !helper {
+		admission = a.beginAdmission(req.RequestID)
+		defer a.endAdmission(req.RequestID, admission)
+	}
+	if !a.store.Enabled() {
 		return OKEnvelope(RequestInterceptResponse{})
 	}
 	scope := metadataString(req.Metadata, MetadataCallerScope)
-	if scope == "" {
-		return OKEnvelope(RequestInterceptResponse{})
-	}
-
-	// Derive Retry-After from the same instant used for the quota decision.
-	now := a.store.Now()
 	endpoint := metadataString(req.Metadata, MetadataRequestPath)
 
-	// A model the key may not call is refused ahead of the quota check. The
-	// refusal is permanent rather than temporal, so reporting it as an exhausted
-	// budget would send the client back to retry; it also must not open a
-	// subscription period that the request was never admitted into.
-	routing := a.store.ResolveRouting(scope, req.Model, req.RequestedModel)
-	a.beginRouteLog(req.RequestID, scope, routing)
-	if routing.ConfigurationError != "" {
-		return OKEnvelope(routingConfigurationResponse(req.SourceFormat, routing.ConfigurationError))
-	}
-	if routing.RestrictsModels() && !routing.AllowsModel() {
-		return OKEnvelope(modelForbiddenResponse(req.SourceFormat, routing))
+	// Reject disallowed models before quota checks can open a subscription period.
+	if !helper {
+		routing := a.store.ResolveRouting(scope, req.Model, req.RequestedModel)
+		a.beginRouteLog(req.RequestID, scope, routing)
+		if routing.ConfigurationError != "" {
+			return OKEnvelope(routingConfigurationResponse(req.SourceFormat, routing.ConfigurationError))
+		}
+		if routing.RestrictsModels() && !routing.AllowsModel() {
+			return OKEnvelope(modelForbiddenResponse(req.SourceFormat, routing))
+		}
 	}
 
+	price, model, priceErr := a.store.ResolveModelPrice(req.Model, req.RequestedModel, true)
+	if priceErr != nil {
+		return OKEnvelope(priceRefusal(req.SourceFormat, "price_storage_error", "读取模型价格失败，请稍后重试"))
+	}
+	if price.Source == billing.PriceSourceNone {
+		return OKEnvelope(priceRefusal(req.SourceFormat, "model_price_error", fmt.Sprintf("模型 %s 尚未定价", model)))
+	}
+	if helper {
+		// Nested plugin helpers do not consume another client admission slot, but
+		// still need a price: usage.handle can attribute their usage to the client.
+		return OKEnvelope(RequestInterceptResponse{})
+	}
 	generate := true
 	if value, ok := req.Metadata[MetadataGenerate].(bool); ok {
 		generate = value
+	}
+	// Completion and the final admission commit share this lock. Checking the
+	// marker alone would still let completion race with slot/cycle creation.
+	a.admissionsMu.Lock()
+	defer a.admissionsMu.Unlock()
+	if admission != nil && admission.completed {
+		return OKEnvelope(priceRefusal(req.SourceFormat, "request_completed", "请求已结束"))
 	}
 	slot := billing.SlotDecision{Allowed: true}
 	admitted := false
@@ -75,6 +125,9 @@ func (a *App) interceptBeforeAuth(raw []byte) ([]byte, error) {
 		}()
 	}
 
+	// Reference price refresh may have taken time. Quota and Retry-After share the
+	// current instant, rather than the instant before the download.
+	now := a.store.Now()
 	decision := a.store.Authorize(scope, now)
 	if !decision.Allowed {
 		a.store.ReportQuotaBlock(scope, endpoint, decision)
@@ -106,7 +159,14 @@ func (a *App) completeRequest(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("解析请求完成事件：%w", errUnmarshal)
 	}
 	if a != nil && a.store != nil {
-		a.store.ReleaseSlot(completion.RequestID)
+		func() {
+			a.admissionsMu.Lock()
+			defer a.admissionsMu.Unlock()
+			if admission := a.admissions[strings.TrimSpace(completion.RequestID)]; admission != nil {
+				admission.completed = true
+			}
+			a.store.ReleaseSlot(completion.RequestID)
+		}()
 		a.finishRouteLog(completion)
 	}
 	return OKEnvelope(struct{}{})
@@ -131,7 +191,6 @@ func (a *App) handleUsage(raw []byte) ([]byte, error) {
 		recordError = billing.RequestError{StatusCode: failure.StatusCode, ErrorType: failure.ErrorType,
 			Reason: failure.Reason, Body: failure.Body}
 	}
-	_, _ = billing.EnsureBuiltinCatalog()
 	event := billing.UsageEvent{
 		Scope:           scope,
 		AuthIndex:       record.AuthIndex,
@@ -219,9 +278,6 @@ func modelForbiddenResponse(sourceFormat string, decision billing.RoutingDecisio
 	}
 }
 
-// Refusals are worded in English, the language CLIProxyAPI writes its own errors
-// in; the plugin log stays in the panel's language, because an operator reads
-// that one and a client SDK reads these.
 func quotaExhaustedMessage(decision billing.Decision) string {
 	var builder strings.Builder
 	builder.WriteString("API key subscription quota exhausted: $")
@@ -294,6 +350,7 @@ func refusalBody(sourceFormat string, kind refusal, message string) []byte {
 			"type": "error",
 			"error": map[string]any{
 				"type":    kind.anthropicType,
+				"code":    kind.openaiCode,
 				"message": message,
 			},
 		}
@@ -327,4 +384,18 @@ func retryAfterSeconds(resetAt, now time.Time) int {
 
 func formatUSD(amount float64) string {
 	return strconv.FormatFloat(amount, 'f', 4, 64)
+}
+
+func priceRefusal(format, code, message string) RequestInterceptResponse {
+	kind := refusal{
+		anthropicType: "cpa_key_billing_error",
+		openaiType:    "cpa_key_billing_error",
+		openaiCode:    code,
+	}
+	return RequestInterceptResponse{
+		Terminate:       true,
+		StatusCode:      http.StatusServiceUnavailable,
+		ResponseHeaders: http.Header{"Content-Type": {"application/json"}},
+		ResponseBody:    refusalBody(format, kind, message),
+	}
 }

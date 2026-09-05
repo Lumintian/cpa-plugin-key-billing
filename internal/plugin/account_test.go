@@ -213,7 +213,7 @@ func TestAccountRequestEventsUseTheAdministratorSource(t *testing.T) {
 	}
 }
 
-func TestAccountAccessAggregatesRoutesAndPricesReturnSharedCatalog(t *testing.T) {
+func TestAccountAccessAggregatesRoutesAndPricesReturnSharedReferencePrices(t *testing.T) {
 	app := configuredAccountApp(t)
 	app.SetHostCaller(func(method string, _ any) (json.RawMessage, error) {
 		if method != hostAuthList {
@@ -222,7 +222,7 @@ func TestAccountAccessAggregatesRoutesAndPricesReturnSharedCatalog(t *testing.T)
 		return json.RawMessage(`{"files":[{"id":"auth-codex","provider":"codex","source":"file","path":"/auth/codex.json","email":"user@example.com"}]}`), nil
 	})
 	scope := billing.CallerScope(accountTestKeyA)
-	if _, errPrice := app.store.UpsertPrice(billing.PriceRule{Pattern: "other-model", InputPer1M: 9, OutputPer1M: 18}); errPrice != nil {
+	if _, errPrice := app.store.UpsertPrice(billing.CustomPrice{ModelID: "other-model", PriceRates: billing.PriceRates{InputPer1M: 9, OutputPer1M: 18}}); errPrice != nil {
 		t.Fatal(errPrice)
 	}
 	_, errRoute := app.store.CreateRoute(billing.Route{Name: "Codex", Rule: billing.RouteRule{
@@ -232,15 +232,15 @@ func TestAccountAccessAggregatesRoutesAndPricesReturnSharedCatalog(t *testing.T)
 	if errRoute != nil {
 		t.Fatal(errRoute)
 	}
-	response := callAccount(t, app, routePrices, accountTestKeyA, nil)
+	response := callAccount(t, app, routePrices, accountTestKeyA, url.Values{"model": {"gpt-5.5"}})
 	var prices []billing.PriceRow
 	if errDecode := json.Unmarshal(response.Body, &prices); errDecode != nil {
 		t.Fatal(errDecode)
 	}
-	if len(prices) != 2 || prices[0].Pattern != "gpt-5.5" || prices[1].Pattern != "other-model" ||
-		prices[0].OutputPer1M != 2 || prices[1].InputPer1M != 9 || prices[1].OutputPer1M != 18 {
-		t.Fatalf("account prices = %+v", prices)
+	if len(prices) != 1 || prices[0].ModelID != "gpt-5.5" || prices[0].OutputPer1M != 2 {
+		t.Fatalf("account prices=%+v", prices)
 	}
+
 	if !strings.Contains(string(response.Body), `"source"`) {
 		t.Fatalf("account prices did not use management response shape: %s", response.Body)
 	}

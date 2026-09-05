@@ -1,7 +1,9 @@
 package plugin
 
 import (
+	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -77,7 +79,7 @@ func testConfigYAML(t *testing.T, enabled bool) []byte {
 
 func newConfiguredApp(t *testing.T) *App {
 	t.Helper()
-	app := NewApp()
+	app := newTestApp(t)
 	t.Cleanup(app.Shutdown)
 	raw, errHandle := app.HandleMethod(MethodPluginRegister, mustMarshal(t, LifecycleRequest{
 		ConfigYAML: testConfigYAML(t, true),
@@ -96,7 +98,7 @@ func newAppWithPrice(t *testing.T, enabled bool) *App {
 
 func newAppWithPriceAndState(t *testing.T, enabled bool) (*App, string) {
 	t.Helper()
-	app := NewApp()
+	app := newTestApp(t)
 	t.Cleanup(app.Shutdown)
 	statePath := filepath.Join(t.TempDir(), "state.db")
 	configYAML := "enabled: " + strconv.FormatBool(enabled) + "\nstate_file: \"" + statePath + "\"\n"
@@ -107,14 +109,34 @@ func newAppWithPriceAndState(t *testing.T, enabled bool) (*App, string) {
 	}
 	cacheRead := 0.1
 	cacheWrite := 1.25
-	if _, errPrice := app.store.UpsertPrice(billing.PriceRule{
-		Pattern:         "gpt-5.5",
-		InputPer1M:      1,
-		OutputPer1M:     2,
-		CacheReadPer1M:  &cacheRead,
-		CacheWritePer1M: &cacheWrite,
+	if _, errPrice := app.store.UpsertPrice(billing.CustomPrice{
+		ModelID: "gpt-5.5", PriceRates: billing.PriceRates{InputPer1M: 1,
+			OutputPer1M:     2,
+			CacheReadPer1M:  &cacheRead,
+			CacheWritePer1M: &cacheWrite},
 	}); errPrice != nil {
 		t.Fatalf("UpsertPrice error = %v", errPrice)
 	}
 	return app, statePath
+}
+
+func newTestApp(t *testing.T) *App {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "billing", "testdata", "models_dev_prices.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response map[string]any
+	if err = json.Unmarshal(raw, &response); err != nil {
+		t.Fatal(err)
+	}
+	models := response["providers"].(map[string]any)["openai"].(map[string]any)["models"].(map[string]any)
+	for _, id := range []string{"gpt-5.5", "gpt-5.6"} {
+		models[id] = map[string]any{"id": id, "cost": map[string]any{"input": 1.0, "output": 2.0}}
+	}
+	raw, err = json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return newApp(billing.NewStore(openRepository, func(context.Context) ([]byte, error) { return raw, nil }))
 }

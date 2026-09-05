@@ -20,28 +20,27 @@ const (
 var uiHTML []byte
 
 const (
-	routeAccess          = "/access"
-	routePrices          = "/prices"
-	routePriceCatalog    = "/prices/catalog"
-	routeCatalogRefresh  = "/prices/catalog/refresh"
-	routePricesReset     = "/prices/reset"
-	routePricesSync      = "/prices/sync"
-	routePlans           = "/plans"
-	routeRoutes          = "/routes"
-	routeKeysRoutes      = "/keys/routes"
-	routeKeysBind        = "/keys/bind"
-	routeKeysUnbind      = "/keys/unbind"
-	routeKeysReset       = "/keys/reset"
-	routeKeysLabel       = "/keys/label"
-	routeKeysConcurrency = "/keys/concurrency"
-	routeKeysSync        = "/keys/sync"
-	routeCredentialsSync = "/credentials/sync"
-	routeEvents          = "/events"
-	routeErrors          = "/errors"
-	routeAnalysis        = "/analysis"
-	routePluginLogs      = "/plugin-logs"
-	routeAuthFiles       = "/auth-files"
-	routeAuthQuota       = "/auth-files/quota"
+	routeAccess                 = "/access"
+	routePrices                 = "/prices"
+	routeReferencePrices        = "/prices/reference"
+	routeReferencePricesStatus  = "/prices/reference/status"
+	routeReferencePricesRefresh = "/prices/reference/refresh"
+	routePlans                  = "/plans"
+	routeRoutes                 = "/routes"
+	routeKeysRoutes             = "/keys/routes"
+	routeKeysBind               = "/keys/bind"
+	routeKeysUnbind             = "/keys/unbind"
+	routeKeysReset              = "/keys/reset"
+	routeKeysLabel              = "/keys/label"
+	routeKeysConcurrency        = "/keys/concurrency"
+	routeKeysSync               = "/keys/sync"
+	routeCredentialsSync        = "/credentials/sync"
+	routeEvents                 = "/events"
+	routeErrors                 = "/errors"
+	routeAnalysis               = "/analysis"
+	routePluginLogs             = "/plugin-logs"
+	routeAuthFiles              = "/auth-files"
+	routeAuthQuota              = "/auth-files/quota"
 )
 
 type managementEndpoint struct {
@@ -51,12 +50,12 @@ type managementEndpoint struct {
 
 var managementEndpoints = []managementEndpoint{
 	{http.MethodGet, routeAccess, "查看 API Key、订阅计划和路由规则", func(a *App, _ ManagementRequest) ManagementResponse { return a.access() }},
-	{http.MethodGet, routePrices, "查看模型定价", func(a *App, _ ManagementRequest) ManagementResponse { return a.listPrices(viewAccess{}) }},
-	{http.MethodGet, routePriceCatalog, "搜索模型参考价", (*App).searchPriceCatalog},
-	{http.MethodPost, routeCatalogRefresh, "从 models.dev 更新参考价目录", func(a *App, _ ManagementRequest) ManagementResponse { return a.refreshPriceCatalog() }},
+	{http.MethodGet, routePrices, "查看模型定价", func(a *App, req ManagementRequest) ManagementResponse { return a.listPrices(req, viewAccess{}) }},
+	{http.MethodGet, routeReferencePrices, "搜索模型参考价", (*App).searchReferencePrices},
+	{http.MethodGet, routeReferencePricesStatus, "查看参考价状态", func(a *App, _ ManagementRequest) ManagementResponse { return a.referencePriceStatus() }},
+	{http.MethodPost, routeReferencePricesRefresh, "更新参考价", func(a *App, _ ManagementRequest) ManagementResponse { return a.refreshReferencePrices() }},
+	{http.MethodDelete, routePrices, "删除自定义模型价格", (*App).deletePrice},
 	{http.MethodPut, routePrices, "更新模型定价", (*App).putPrices},
-	{http.MethodPost, routePricesReset, "恢复模型参考价", func(a *App, _ ManagementRequest) ManagementResponse { return a.resetPrices() }},
-	{http.MethodPost, routePricesSync, "同步模型价格目录", (*App).syncPriceCatalog},
 	{http.MethodPost, routePlans, "新建订阅计划", (*App).createPlan},
 	{http.MethodPatch, routePlans, "更新订阅计划", (*App).updatePlan},
 	{http.MethodDelete, routePlans, "删除订阅计划并解除 API Key 绑定", (*App).deletePlan},
@@ -93,7 +92,7 @@ var resourceEndpoints = []resourceEndpoint{
 	{routeAccess, func(a *App, _ ManagementRequest, access viewAccess) ManagementResponse {
 		return a.accountAccess(access)
 	}},
-	{routePrices, func(a *App, _ ManagementRequest, access viewAccess) ManagementResponse { return a.listPrices(access) }},
+	{routePrices, (*App).listPrices},
 	{routeAnalysis, (*App).analysis},
 	{routeEvents, (*App).listRequestEvents},
 	{routeErrors, (*App).listRequestErrors},

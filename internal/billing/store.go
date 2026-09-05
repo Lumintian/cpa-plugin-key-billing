@@ -1,9 +1,11 @@
 package billing
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -11,17 +13,11 @@ import (
 // working set, the active config and the repository. A save runs under mu so
 // that memory and disk can never disagree about what was committed.
 //
-// This type deliberately runs no goroutines, and neither does the rest of the
-// plugin. It is compiled into a c-shared library that CLIProxyAPI dlopens, so
-// it carries its own Go runtime inside a process that already has one. Two Go
-// runtimes in one address space only coexist while the second one is inert
-// between host calls: a runtime that keeps its own timers, GC cycles, and
-// preemption signals running concurrently with the host's took the whole proxy
-// down with "fatal error: bad flushGen" in runtime.(*mcache).prepareForSweep.
-// Every write therefore lands inside the host call that caused it. Do not
-// reintroduce a background flusher.
+// Work must finish synchronously within host calls: background activity in this
+// embedded Go runtime can conflict with CLIProxyAPI's runtime.
 type Store struct {
-	cfgMu sync.Mutex
+	cfgMu           sync.Mutex
+	referencePrices atomic.Pointer[referencePriceManager]
 
 	mu    sync.RWMutex
 	state *State
@@ -43,19 +39,24 @@ type Store struct {
 	errMu     sync.Mutex
 	lastError string
 
-	open func(string) (Repository, error)
+	open                    func(string) (Repository, error)
+	downloadReferencePrices func(context.Context) ([]byte, error)
 
 	now func() time.Time
 }
 
-func NewStore(open func(string) (Repository, error)) *Store {
+func NewStore(open func(string) (Repository, error), downloadReferencePrices func(context.Context) ([]byte, error)) *Store {
+	if downloadReferencePrices == nil {
+		downloadReferencePrices = downloadModelsDevPrices
+	}
 	return &Store{
-		state:          NewState(),
-		cfg:            DefaultConfig(),
-		activeRequests: make(map[string]string),
-		activeByScope:  make(map[string]int),
-		open:           open,
-		now:            time.Now,
+		state:                   NewState(),
+		cfg:                     DefaultConfig(),
+		activeRequests:          make(map[string]string),
+		activeByScope:           make(map[string]int),
+		open:                    open,
+		downloadReferencePrices: downloadReferencePrices,
+		now:                     time.Now,
 	}
 }
 
@@ -103,14 +104,21 @@ func (s *Store) Configure(cfg Config) error {
 		s.closeRepository(repo)
 		return errLoad
 	}
+	references, errReferencePrices := openReferencePrices(repo, s.downloadReferencePrices, s.AddPluginLog)
+	if errReferencePrices != nil {
+		s.closeRepository(repo)
+		return errReferencePrices
+	}
 	s.mu.Lock()
 	previous := s.repo
+	previousReferences := s.referencePrices.Swap(references)
 	s.state = snapshot.State
 	s.cfg = normalized
 	s.repo = repo
 	s.path = path
 	s.dirty = Changes{}
 	s.mu.Unlock()
+	previousReferences.close()
 	if previous != nil {
 		s.closeRepository(previous)
 	}
@@ -127,12 +135,14 @@ func (s *Store) Close() {
 	defer s.cfgMu.Unlock()
 	s.mu.Lock()
 	repo := s.repo
+	previousReferences := s.referencePrices.Swap(nil)
 	s.repo = nil
 	s.path = ""
 	s.dirty = Changes{}
 	s.activeRequests = make(map[string]string)
 	s.activeByScope = make(map[string]int)
 	s.mu.Unlock()
+	previousReferences.close()
 	if repo != nil {
 		s.closeRepository(repo)
 	}

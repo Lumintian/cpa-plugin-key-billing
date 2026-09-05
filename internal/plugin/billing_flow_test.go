@@ -304,7 +304,7 @@ func TestUsageHandleSpendDrivesQuotaEnforcement(t *testing.T) {
 	billUsage(t, app, 1000, 0, 0, 500, 0)
 
 	raw, errHandle := app.HandleMethod(MethodRequestInterceptBefore, mustMarshal(t, RequestInterceptRequest{
-		SourceFormat: "openai", Metadata: flowMetadata(),
+		Model: "gpt-5.5", SourceFormat: "openai", Metadata: flowMetadata(),
 	}))
 	if errHandle != nil {
 		t.Fatalf("request.intercept_before error = %v", errHandle)

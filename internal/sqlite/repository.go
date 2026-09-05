@@ -71,11 +71,6 @@ func saveStateTables(tx *sql.Tx, state *billing.State, changes billing.Changes) 
 			return err
 		}
 	}
-	if changes.Prices {
-		if err := replacePrices(tx, state); err != nil {
-			return err
-		}
-	}
 	if changes.Routes {
 		if err := replaceRoutes(tx, state); err != nil {
 			return err

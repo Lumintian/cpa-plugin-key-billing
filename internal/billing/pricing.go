@@ -1,6 +1,8 @@
 package billing
 
-import "strings"
+import (
+	"math"
+)
 
 type TokenAccountingQuality string
 
@@ -55,15 +57,24 @@ func (b TokenBreakdown) Billable() bool {
 	return b.Valid() && b.Quality == TokenAccountingComplete
 }
 
-// PriceSource distinguishes an explicit zero price from an unresolved price.
+// PriceSource records where the applied price came from.
 type PriceSource string
 
 const (
-	PriceSourceOverride PriceSource = "override"
-	PriceSourceBuiltin  PriceSource = "builtin"
-	PriceSourceNone     PriceSource = "none"
-	PriceSourceCustom   PriceSource = "custom"
+	PriceSourceReference PriceSource = "reference"
+	PriceSourceNone      PriceSource = "none"
+	PriceSourceCustom    PriceSource = "custom"
 )
+
+// PriceRates describes token prices in USD per million tokens. Nil cache rates
+// inherit the input rate; configured cache rates are used as supplied.
+type PriceRates struct {
+	InputPer1M      float64           `json:"input_per_1m"`
+	OutputPer1M     float64           `json:"output_per_1m"`
+	CacheReadPer1M  *float64          `json:"cache_read_per_1m,omitempty"`
+	CacheWritePer1M *float64          `json:"cache_write_per_1m,omitempty"`
+	LongContext     *LongContextPrice `json:"long_context,omitempty"`
+}
 
 // Rates are USD per 1,000,000 tokens.
 type Price struct {
@@ -83,7 +94,7 @@ type ResolvedLongContextPrice struct {
 	CacheWritePer1M      float64 `json:"cache_write_per_1m"`
 }
 
-func (r PriceRule) resolve(source PriceSource) Price {
+func (r PriceRates) resolve(source PriceSource) Price {
 	price := Price{
 		InputPer1M:      r.InputPer1M,
 		OutputPer1M:     r.OutputPer1M,
@@ -114,134 +125,6 @@ func (r PriceRule) resolve(source PriceSource) Price {
 		price.LongContext = resolved
 	}
 	return price
-}
-
-// ResolvePrice finds the price for one usage record. Route-specific prices win
-// over upstream-model fallbacks; built-in prices use the opposite order because
-// models.dev normally knows the upstream model rather than local route names.
-func (s *State) ResolvePrice(upstreamModel, billingModel string) Price {
-	baseUpstreamModel := modelWithoutSuffix(upstreamModel)
-	if rule, ok := matchPriceRule(s.Prices, billingModel, baseUpstreamModel); ok {
-		return rule.resolve(PriceSourceOverride)
-	}
-	if rule, ok := lookupBuiltin(baseUpstreamModel, billingModel); ok {
-		return rule.resolve(PriceSourceBuiltin)
-	}
-	return Price{Source: PriceSourceNone}
-}
-
-// ResolveBillingModel returns the stable client-visible model used for pricing
-// and aggregation. A trailing CPA thinking suffix is a request option unless an
-// exact model row declares it as part of a configured model ID.
-func (s *State) ResolveBillingModel(upstreamModel, routeModel string) string {
-	upstreamModel = modelWithoutSuffix(upstreamModel)
-	routeModel = strings.TrimSpace(routeModel)
-	if routeModel == "" {
-		return upstreamModel
-	}
-
-	base := modelWithoutSuffix(routeModel)
-	if strings.EqualFold(base, "auto") {
-		return upstreamModel
-	}
-	if model, ok := exactPriceModel(s.Prices, routeModel); ok {
-		return model
-	}
-	if model, ok := exactPriceModel(s.Prices, base); ok {
-		return model
-	}
-	if strings.EqualFold(base, upstreamModel) {
-		return upstreamModel
-	}
-	return base
-}
-
-func modelWithoutSuffix(model string) string {
-	model = strings.TrimSpace(model)
-	if open := strings.LastIndex(model, "("); open >= 0 && strings.HasSuffix(model, ")") {
-		return strings.TrimSpace(model[:open])
-	}
-	return model
-}
-
-func exactPriceModel(rules []PriceRule, model string) (string, bool) {
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return "", false
-	}
-	for _, rule := range rules {
-		pattern := strings.TrimSpace(rule.Pattern)
-		if !isGlob(pattern) && strings.EqualFold(pattern, model) {
-			return pattern, true
-		}
-	}
-	return "", false
-}
-
-func matchPriceRule(rules []PriceRule, billingModel, upstreamModel string) (PriceRule, bool) {
-	billingModel = strings.TrimSpace(billingModel)
-	upstreamModel = strings.TrimSpace(upstreamModel)
-
-	for _, candidate := range []string{billingModel, upstreamModel} {
-		if candidate == "" {
-			continue
-		}
-		for _, rule := range rules {
-			if !isGlob(rule.Pattern) && strings.EqualFold(strings.TrimSpace(rule.Pattern), candidate) {
-				return rule, true
-			}
-		}
-	}
-	for _, candidate := range []string{billingModel, upstreamModel} {
-		if candidate == "" {
-			continue
-		}
-		for _, rule := range rules {
-			if isGlob(rule.Pattern) && globMatch(strings.TrimSpace(rule.Pattern), candidate) {
-				return rule, true
-			}
-		}
-	}
-	return PriceRule{}, false
-}
-
-func isGlob(pattern string) bool {
-	return strings.ContainsAny(pattern, "*?")
-}
-
-// path.Match is not usable here: its '*' stops at '/', which would break
-// patterns like "*claude*" against OpenRouter-style names such as
-// "anthropic/claude-sonnet-4".
-func globMatch(pattern, value string) bool {
-	pattern = strings.ToLower(pattern)
-	value = strings.ToLower(value)
-
-	var (
-		patternIndex, valueIndex int
-		starIndex                = -1
-		matchIndex               int
-	)
-	for valueIndex < len(value) {
-		switch {
-		case patternIndex < len(pattern) && (pattern[patternIndex] == '?' || pattern[patternIndex] == value[valueIndex]):
-			patternIndex++
-			valueIndex++
-		case patternIndex < len(pattern) && pattern[patternIndex] == '*':
-			starIndex = patternIndex
-			matchIndex = valueIndex
-			patternIndex++
-		case starIndex >= 0:
-			patternIndex = starIndex + 1
-			matchIndex++
-			valueIndex = matchIndex
-		default:
-			return false
-		}
-	}
-	for patternIndex < len(pattern) && pattern[patternIndex] == '*' {
-		patternIndex++
-	}
-	return patternIndex == len(pattern)
 }
 
 type Cost struct {
@@ -313,4 +196,60 @@ func perMillion(tokens int64, pricePer1M float64) float64 {
 		return 0
 	}
 	return float64(tokens) / 1_000_000 * pricePer1M
+}
+
+func samePriceRates(a, b PriceRates) bool {
+	return a.InputPer1M == b.InputPer1M &&
+		a.OutputPer1M == b.OutputPer1M &&
+		sameOptionalPrice(a.CacheReadPer1M, b.CacheReadPer1M) &&
+		sameOptionalPrice(a.CacheWritePer1M, b.CacheWritePer1M) &&
+		sameLongContextPrice(a.LongContext, b.LongContext)
+}
+
+func sameLongContextPrice(a, b *LongContextPrice) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.ThresholdInputTokens == b.ThresholdInputTokens &&
+		a.InputPer1M == b.InputPer1M && a.OutputPer1M == b.OutputPer1M &&
+		sameOptionalPrice(a.CacheReadPer1M, b.CacheReadPer1M) &&
+		sameOptionalPrice(a.CacheWritePer1M, b.CacheWritePer1M)
+}
+
+func sameOptionalPrice(a, b *float64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func (r PriceRates) validate(modelID string) error {
+	if invalidPrice(r.InputPer1M) || invalidPrice(r.OutputPer1M) {
+		return invalidf("模型 %q：Token 单价必须是非负有限数", modelID)
+	}
+	if r.CacheReadPer1M != nil && invalidPrice(*r.CacheReadPer1M) {
+		return invalidf("模型 %q：缓存读取单价必须是非负有限数", modelID)
+	}
+	if r.CacheWritePer1M != nil && invalidPrice(*r.CacheWritePer1M) {
+		return invalidf("模型 %q：缓存写入单价必须是非负有限数", modelID)
+	}
+	if tier := r.LongContext; tier != nil {
+		if tier.ThresholdInputTokens <= 0 {
+			return invalidf("模型 %q：长上下文阈值必须大于 0", modelID)
+		}
+		if invalidPrice(tier.InputPer1M) || invalidPrice(tier.OutputPer1M) {
+			return invalidf("模型 %q：长上下文 Token 单价必须是非负有限数", modelID)
+		}
+		if tier.CacheReadPer1M != nil && invalidPrice(*tier.CacheReadPer1M) {
+			return invalidf("模型 %q：长上下文缓存读取单价必须是非负有限数", modelID)
+		}
+		if tier.CacheWritePer1M != nil && invalidPrice(*tier.CacheWritePer1M) {
+			return invalidf("模型 %q：长上下文缓存写入单价必须是非负有限数", modelID)
+		}
+	}
+	return nil
+}
+
+func invalidPrice(value float64) bool {
+	return value < 0 || math.IsNaN(value) || math.IsInf(value, 0)
 }

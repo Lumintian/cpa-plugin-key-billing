@@ -9,7 +9,7 @@ CREATE TABLE api_keys (
 	in_config             INTEGER NOT NULL DEFAULT 0,
 	deleted_at            INTEGER NOT NULL DEFAULT 0,
 	plan_id               TEXT    NOT NULL DEFAULT '',
-	concurrency_limit      INTEGER NOT NULL DEFAULT 0,
+	concurrency_limit     INTEGER NOT NULL DEFAULT 0,
 	cycle_plan_id         TEXT    NOT NULL DEFAULT '',
 	cycle_start_at        INTEGER NOT NULL DEFAULT 0,
 	cycle_end_at          INTEGER NOT NULL DEFAULT 0,
@@ -34,7 +34,7 @@ CREATE TABLE plans (
 
 CREATE TABLE prices (
 	position                        INTEGER PRIMARY KEY,
-	pattern                         TEXT    NOT NULL,
+	model_id                        TEXT    NOT NULL COLLATE NOCASE UNIQUE,
 	input_per_1m                    REAL    NOT NULL DEFAULT 0,
 	output_per_1m                   REAL    NOT NULL DEFAULT 0,
 	cache_read_per_1m               REAL,
@@ -45,6 +45,30 @@ CREATE TABLE prices (
 	long_context_cache_read_per_1m  REAL,
 	long_context_cache_write_per_1m REAL
 );
+
+CREATE TABLE reference_prices_metadata (
+	id                   INTEGER PRIMARY KEY CHECK (id = 1),
+	source_url           TEXT    NOT NULL,
+	content_hash         TEXT    NOT NULL DEFAULT '',
+	version              INTEGER NOT NULL DEFAULT 0,
+	fetched_at           INTEGER NOT NULL DEFAULT 0,
+	model_count          INTEGER NOT NULL DEFAULT 0,
+	last_attempt_at      INTEGER NOT NULL DEFAULT 0,
+	retry_after          INTEGER NOT NULL DEFAULT 0,
+	last_error           TEXT    NOT NULL DEFAULT '',
+	consecutive_failures INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE reference_prices (
+    provider_id  TEXT    NOT NULL,
+    model_id     TEXT    NOT NULL,
+    match_key    TEXT    NOT NULL,
+    is_canonical INTEGER NOT NULL,
+    rates_json   TEXT,
+    PRIMARY KEY (provider_id, model_id)
+);
+
+CREATE INDEX reference_prices_match_key ON reference_prices(match_key);
 
 CREATE TABLE credentials (
 	auth_index TEXT PRIMARY KEY,

@@ -1461,6 +1461,7 @@
       }
       .switch-field input { width: auto; }
       .tier-fields { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+      .price-footnote { margin: 12px 0 0; }
       .tier-price { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
       .key-picker {
         width: 100%;
@@ -2029,7 +2030,8 @@
           max-width: none;
           min-width: 0;
         }
-        #tab-prices .section-actions { grid-template-columns: minmax(0, 1fr) auto auto; }
+        #tab-prices .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        #price-filter { grid-column: 1 / -1; }
         #tab-plugin-logs .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
         #tab-plugin-logs .section-actions > *,
         #tab-plugin-logs .section-actions select {
@@ -2643,11 +2645,12 @@
               <h2>模型定价</h2>
               <div class="row section-actions">
                 <input id="price-filter" placeholder="搜索模型" />
-                <button id="price-catalog-refresh">更新参考价</button>
-                <button id="price-reset" class="danger">恢复参考价</button>
+                <button id="price-reference-refresh">更新参考价</button>
+                <button id="price-add">新增定价</button>
               </div>
             </div>
             <div id="prices-body"></div>
+            <p id="price-status" class="muted small price-footnote"></p>
           </div>
         </section>
 
@@ -2967,24 +2970,20 @@
     </div>
 
     <dialog id="price-dlg" class="price-dialog">
-      <h2>编辑模型定价</h2>
-      <p class="muted mono price-dialog-model" id="price-model"></p>
+      <h2 id="price-dialog-title">编辑模型定价</h2>
+      <label class="field">模型 ID<input class="mono price-dialog-model" id="price-model" placeholder="模型 ID" maxlength="1024" /></label>
       <div class="price-reference">
         <label class="field"
-          >选择内置参考价
-          <input id="price-reference-search" placeholder="搜索内置模型" autocomplete="off" />
+          >选择参考价
+          <input id="price-reference-search" placeholder="搜索参考模型" autocomplete="off" />
         </label>
         <div id="price-reference-results" class="price-reference-results" aria-live="polite"></div>
       </div>
       <div class="price-fields">
         <label class="field">输入 / 1M Token<input id="price-in" type="number" step="any" min="0" value="0" /></label>
         <label class="field">输出 / 1M Token<input id="price-out" type="number" step="any" min="0" value="0" /></label>
-        <label class="field"
-          >缓存读 / 1M Token<input id="price-cr" type="number" step="any" min="0" placeholder="留空时沿用输入单价"
-        /></label>
-        <label class="field"
-          >缓存写 / 1M Token<input id="price-cw" type="number" step="any" min="0" placeholder="留空时沿用输入单价"
-        /></label>
+        <label class="field">缓存读 / 1M Token<input id="price-cr" type="number" step="any" min="0" /></label>
+        <label class="field">缓存写 / 1M Token<input id="price-cw" type="number" step="any" min="0" /></label>
       </div>
       <label class="switch-field"><input id="price-tiered" type="checkbox" />启用长上下文阶梯计价</label>
       <div id="price-tier-fields" class="price-fields tier-fields hidden">
@@ -2999,20 +2998,10 @@
           >长上下文输出 / 1M Token<input id="price-tier-out" type="number" step="any" min="0" value="0"
         /></label>
         <label class="field"
-          >长上下文缓存读 / 1M Token<input
-            id="price-tier-cr"
-            type="number"
-            step="any"
-            min="0"
-            placeholder="留空时沿用长上下文输入单价"
+          >长上下文缓存读 / 1M Token<input id="price-tier-cr" type="number" step="any" min="0"
         /></label>
         <label class="field"
-          >长上下文缓存写 / 1M Token<input
-            id="price-tier-cw"
-            type="number"
-            step="any"
-            min="0"
-            placeholder="留空时沿用长上下文输入单价"
+          >长上下文缓存写 / 1M Token<input id="price-tier-cw" type="number" step="any" min="0"
         /></label>
       </div>
       <div class="row price-dialog-actions">
@@ -3139,6 +3128,8 @@
           keys: [],
           plans: [],
           prices: null,
+          priceModelError: "",
+          models: [],
           routes: [],
           credentials: [],
           access: null,
@@ -3374,7 +3365,6 @@
         adminAuthFiles: emptyLoadState(),
         accountAuthFiles: emptyLoadState(),
         adminInventory: emptyLoadState(),
-        accountModels: emptyLoadState(),
       };
       const requestEventLoads = { admin: emptyRequestEventLoadState(), account: emptyRequestEventLoadState() };
       let requestEventExporting = false;
@@ -3494,7 +3484,7 @@
         if (role === "account") accountState = emptyAccountState();
         else state = emptyAdminState();
         for (const name of role === "account"
-          ? ["accountAccess", "accountPrices", "accountAnalysis", "accountErrors", "accountAuthFiles", "accountModels"]
+          ? ["accountAccess", "accountPrices", "accountAnalysis", "accountErrors", "accountAuthFiles"]
           : [
               "adminAccess",
               "adminPrices",
@@ -4037,18 +4027,85 @@
         );
       }
 
+      async function fetchModelPrices(models, account) {
+        const batches = [];
+        let query = new URLSearchParams();
+        for (const model of models) {
+          const parameter = new URLSearchParams({ model }).toString();
+          if (parameter.length > 3300) throw new Error("模型 ID 过长");
+          if (query.size && query.toString().length + parameter.length + 1 > 3300) {
+            batches.push(query);
+            query = new URLSearchParams();
+          }
+          query.append("model", model);
+        }
+        if (query.size || !batches.length) batches.push(query);
+        const prices = new Map();
+        for (const [index, batch] of batches.entries()) {
+          batch.set("include_custom", String(!account && index === 0));
+          const path = "/prices?" + batch.toString();
+          const rows = await (account ? accountAPI(path) : plugin("GET", path));
+          for (const row of rows) {
+            const key = row.model_id.toLowerCase();
+            const previous = prices.get(key);
+            prices.set(key, { ...row, in_models: row.in_models || previous?.in_models || false });
+          }
+        }
+        return [...prices.values()];
+      }
+
+      async function fetchPricingModels(account) {
+        let key = authKey;
+        if (!account) {
+          const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
+          key = (result["api-keys"] || []).find((value) => value.trim()) || "";
+        }
+        const result = await api("GET", "/v1/models", null, { raw: true, key });
+        if (!Array.isArray(result.data)) throw new Error("CPA 模型列表格式无效");
+        return [...new Set(result.data.map((item) => item.id).filter((id) => typeof id === "string" && id.trim()))];
+      }
+
       function loadAdminPrices() {
         return loadResource(
           detailLoads.adminPrices,
-          () => plugin("GET", "/prices"),
-          (prices) => {
-            state.prices = prices || [];
+          async () => {
+            let models = [];
+            let modelError = "";
+            try {
+              models = await fetchPricingModels(false);
+            } catch (error) {
+              if (error instanceof StaleRequestError) throw error;
+              modelError = "模型列表获取失败：" + error.message;
+            }
+            const [prices, status] = await Promise.all([
+              fetchModelPrices(models, false),
+              plugin("GET", "/prices/reference/status"),
+            ]);
+            return { models, prices, status, modelError };
           },
-          () =>
-            currentRole === "admin" &&
+          ({ models, prices, status, modelError }) => {
+            if (!modelError) state.models = models;
+            state.prices = prices.map((price) => ({
+              ...price,
+              in_models: modelError ? undefined : price.in_models,
+            }));
+            state.priceModelError = modelError;
+            renderReferencePriceStatus(status.metadata);
+          },
+          () => currentRole === "admin" &&
             ["keys", "settings"].includes(activeAdminTab()) &&
             renderAdminTab(activeAdminTab(), true),
         );
+      }
+
+      function renderReferencePriceStatus(metadata) {
+        $("price-status").textContent = [
+          metadata?.usable && metadata?.fetched_at
+            ? "参考价更新时间：" + new Date(metadata.fetched_at).toLocaleString()
+            : "暂无参考价",
+          metadata?.last_error,
+          state.priceModelError,
+        ].filter(Boolean).join("；");
       }
 
       function loadAccountAccess() {
@@ -4062,11 +4119,16 @@
         );
       }
 
-      function loadAccountPrices() {
+      function loadAccountPrices(initialModels) {
         return loadResource(
           detailLoads.accountPrices,
-          () => accountAPI("/prices"),
-          (prices) => {
+          async () => {
+            const models = initialModels ?? await fetchPricingModels(true);
+            const prices = await fetchModelPrices(models, true);
+            return { models, prices };
+          },
+          ({ models, prices }) => {
+            accountState.models = models;
             accountState.prices = prices || [];
           },
           () => currentRole === "account" && renderAccount(false),
@@ -4232,7 +4294,7 @@
           settings: ["access", "prices", "logs"],
         },
         account: {
-          subscription: ["access", "models", "prices"],
+          subscription: ["access", "prices"],
           analysis: ["access", "analysis"],
           "request-events": ["access", "events"],
           errors: ["access", "errors"],
@@ -4249,7 +4311,6 @@
           const names = {
             access: "Access",
             prices: "Prices",
-            models: "Models",
             analysis: "Analysis",
             errors: "Errors",
             authFiles: "AuthFiles",
@@ -4280,21 +4341,9 @@
             if (syncError) throw syncError;
           },
           prices: async () => {
-            if (account) return loadAccountPrices();
-            await inventory;
+            if (account) return loadAccountPrices(reason === "login" ? accountState.models : undefined);
             if (generation === sessionGeneration) return loadAdminPrices();
           },
-          models: () =>
-            reason === "login"
-              ? undefined
-              : loadResource(
-                  detailLoads.accountModels,
-                  () => api("GET", "/v1/models", null, { raw: true }),
-                  (result) => {
-                    accountState.models = result.data.map((item) => item.id);
-                  },
-                  () => currentRole === "account" && renderAccount(false),
-                ),
           analysis: () => (background ? undefined : loadAnalysis(account)),
           events: () =>
             !background || canBackgroundRefreshRequestEvents(account)
@@ -4510,24 +4559,13 @@
         $("account-access").replaceChildren(...nodes);
       }
 
-      function pricePatternMatches(pattern, model) {
-        const expression = String(pattern)
-          .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-          .replace(/\*/g, ".*")
-          .replace(/\?/g, ".");
-        return new RegExp("^" + expression + "$", "i").test(model);
-      }
-
       function accountModelPrice(model) {
-        const prices = accountState.prices || [];
-        return (
-          prices.find((price) => !/[?*]/.test(price.pattern) && price.pattern.toLowerCase() === model.toLowerCase()) ||
-          prices.find((price) => pricePatternMatches(price.pattern, model))
-        );
+        return (accountState.prices || []).find((price) => price.model_id.toLowerCase() === model.toLowerCase());
       }
 
       function renderAccountModel(model) {
-        const price = accountModelPrice(model);
+        const candidate = accountModelPrice(model);
+        const price = candidate?.source === "none" ? null : candidate;
         const fields = [
           ["输入", "input_per_1m"],
           ["输出", "output_per_1m"],
@@ -4576,7 +4614,7 @@
                 { class: "account-model-price-list" },
                 priceRows.map((item) => priceRow(item)),
               )
-            : el("span", { class: "muted small", text: "暂无定价，不收取费用" }),
+            : el("span", { class: "muted small", text: "未定价，暂时无法使用" }),
         );
       }
 
@@ -6051,17 +6089,13 @@
         );
       }
 
-      // Glob rows are pricing rules, not callable models.
-      function catalogModels() {
-        return (state.prices || [])
-          .map((row) => row.pattern)
-          .filter((pattern) => pattern && !/[*?]/.test(pattern))
-          .sort(compareModelId);
+      function currentModelIDs() {
+        return [...(state.models || [])].sort(compareModelId);
       }
 
       // Keep retired selections so a temporary provider outage cannot rewrite access.
       function retiredModels(selected) {
-        const known = new Set(catalogModels().map((model) => model.toLowerCase()));
+        const known = new Set(currentModelIDs().map((model) => model.toLowerCase()));
         return [...selected].filter((model) => !known.has(model.toLowerCase())).sort(compareModelId);
       }
 
@@ -6244,7 +6278,7 @@
           pickerSection("credentials", "上游凭证", credentialOptions, term ? "没有匹配的上游凭证" : "暂无上游凭证"),
         );
 
-        const modelOptions = catalogModels()
+        const modelOptions = currentModelIDs()
           .filter((model) => matchesTerm(model, term))
           .map((model) => {
             return pickerOption(routePicker.models.has(model), "model", model, "", (checked) => {
@@ -6254,9 +6288,9 @@
             });
           });
         for (const model of routePicker.models)
-          if (!catalogModels().some((item) => item.toLowerCase() === model.toLowerCase()) && matchesTerm(model, term))
+          if (!currentModelIDs().some((item) => item.toLowerCase() === model.toLowerCase()) && matchesTerm(model, term))
             modelOptions.push(
-              pickerOption(true, "model", model, "CPA 当前未公布此模型", (checked) => {
+              pickerOption(true, "model", model, "不在 CPA 模型列表中", (checked) => {
                 if (!checked) routePicker.models.delete(model);
                 renderRoutePicker();
               }),
@@ -6654,7 +6688,7 @@
         const node = $("route-model-list");
         const term = routeRuleSearchTerm();
         const retired = new Set(retiredModels(routeModels));
-        const models = catalogModels().concat([...retired]);
+        const models = currentModelIDs().concat([...retired]);
         $("route-model-count").textContent = routeModels.size ? String(routeModels.size) : "全部";
         const options = models
           .filter((model) => matchesTerm(model, term))
@@ -6673,7 +6707,7 @@
                 },
               }),
               el("span", { class: "mono", title: model }, model),
-              retired.has(model) ? el("span", { class: "muted small", text: "CPA 当前未公布此模型" }) : null,
+              retired.has(model) ? el("span", { class: "muted small", text: "不在 CPA 模型列表中" }) : null,
             ),
           );
         node.replaceChildren(
@@ -6682,7 +6716,7 @@
             : [
                 el("div", {
                   class: "empty",
-                  text: (state.prices || []).length ? "没有匹配的模型" : "暂无模型，请先在「模型定价」同步",
+                  text: currentModelIDs().length ? "没有匹配的模型" : "暂无可选模型",
                 }),
               ]),
         );
@@ -6747,44 +6781,45 @@
         switch (source) {
           case "custom":
             return el("span", { class: "tag warn", text: "自定义" });
-          case "builtin":
+          case "reference":
             return el("span", { class: "tag ok", text: "参考价" });
           default:
-            return el("span", { class: "tag plain", text: "待定价" });
+            return el("span", { class: "tag plain", text: "未定价" });
         }
       }
 
-      function optionalPrice(value) {
-        return value === null || value === undefined ? el("span", { class: "muted", text: "-" }) : usd(value);
+      function priceValue(value) {
+        return value === null || value === undefined ? el("span", { class: "muted", text: "—" }) : usd(value);
       }
 
-      function tierPriceCell(row, field, optional) {
+      function tierPriceCell(row, field) {
+        if (row.source === "none") return priceValue(null);
         const base = row[field];
         const tier = row.long_context;
-        if (!tier) return optional ? optionalPrice(base) : usd(base);
+        if (!tier) return priceValue(base);
         const threshold = tokenThreshold(tier.threshold_input_tokens);
         const longValue = tier[field];
-        if (optional && (base === null || base === undefined) && (longValue === null || longValue === undefined)) {
-          return el("span", { class: "muted", text: "-" });
+        if ((base === null || base === undefined) && (longValue === null || longValue === undefined)) {
+          return priceValue(null);
         }
         return el(
           "div",
           { class: "tier-price" },
-          el("span", {}, optional ? optionalPrice(base) : usd(base)),
+          el("span", {}, priceValue(base)),
           el(
             "span",
             { class: "muted small" },
             ">" + threshold + " ",
-            optional ? optionalPrice(longValue) : usd(longValue),
+            priceValue(longValue),
           ),
         );
       }
 
       // Group prefixed and unprefixed variants by base model name.
-      function modelIdParts(pattern) {
-        const slash = pattern.indexOf("/");
-        if (slash < 0) return { name: pattern, prefix: "" };
-        return { name: pattern.slice(slash + 1), prefix: pattern.slice(0, slash) };
+      function modelIdParts(modelID) {
+        const slash = modelID.indexOf("/");
+        if (slash < 0) return { name: modelID, prefix: "" };
+        return { name: modelID.slice(slash + 1), prefix: modelID.slice(0, slash) };
       }
 
       function compareModelId(a, b) {
@@ -6798,15 +6833,25 @@
       function renderPriceTable(target, prices, filter, editable) {
         filter = filter.trim().toLowerCase();
         const rows = (prices || [])
-          .filter((row) => !filter || row.pattern.toLowerCase().includes(filter))
-          .sort((a, b) => compareModelId(a.pattern, b.pattern))
+          .filter((row) => !filter || row.model_id.toLowerCase().includes(filter))
+          .sort((a, b) => compareModelId(a.model_id, b.model_id))
           .map((row) => {
             const cells = [
-              el("td", { class: "mono" }, row.pattern),
-              el("td", { class: "num" }, tierPriceCell(row, "input_per_1m", false)),
-              el("td", { class: "num" }, tierPriceCell(row, "output_per_1m", false)),
-              el("td", { class: "num" }, tierPriceCell(row, "cache_read_per_1m", true)),
-              el("td", { class: "num" }, tierPriceCell(row, "cache_write_per_1m", true)),
+              el(
+                "td",
+                { class: "mono" },
+                row.model_id,
+                editable && row.in_models === false
+                  ? el("div", { class: "muted small", text: "不在 CPA 模型列表中" })
+                  : null,
+                editable && row.custom_price_model_id && row.custom_price_model_id !== row.model_id
+                  ? el("div", { class: "muted small", text: "沿用 " + row.custom_price_model_id + " 的自定义价" })
+                  : null,
+              ),
+              el("td", { class: "num" }, tierPriceCell(row, "input_per_1m")),
+              el("td", { class: "num" }, tierPriceCell(row, "output_per_1m")),
+              el("td", { class: "num" }, tierPriceCell(row, "cache_read_per_1m")),
+              el("td", { class: "num" }, tierPriceCell(row, "cache_write_per_1m")),
             ];
             if (editable) {
               cells.push(el("td", {}, priceSourceTag(row.source)));
@@ -6815,6 +6860,12 @@
                   "td",
                   { class: "small" },
                   el("button", { class: "link", text: "编辑", onclick: () => editPrice(row) }),
+                  el("button", {
+                    class: "link danger",
+                    text: "删除",
+                    disabled: row.source !== "custom",
+                    onclick: () => guard(() => deleteCustomPrice(row)),
+                  }),
                 ),
               );
             }
@@ -7288,7 +7339,7 @@
             );
           }
           if (entry.price_source === "none" && entry.accounting_quality === "complete") {
-            statusMarks.push(el("span", { class: "tag warn", text: "待定价" }));
+            statusMarks.push(el("span", { class: "tag warn", text: "未定价" }));
           }
           if (!statusMarks.length) statusMarks.push(el("span", { class: "tag ok", text: "正常" }));
 
@@ -7661,13 +7712,21 @@
         };
       }
 
-      let editingModel = "";
       let priceReferenceTimer = 0;
       let priceReferenceRequest = 0;
 
-      function optionalNumber(id) {
-        const raw = $(id).value.trim();
-        return raw === "" ? null : Number(raw);
+      function priceNumber(id, emptyValue = 0) {
+        const input = $(id);
+        // Check badInput before treating an empty value as an omitted field.
+        // Browsers can expose an invalid numeric entry as an empty string.
+        if (!input.reportValidity()) throw new Error("请检查模型定价中的数值");
+        if (input.value.trim() === "") return emptyValue;
+        const value = input.valueAsNumber;
+        if (!Number.isFinite(value) || value < 0) {
+          input.focus();
+          throw new Error("价格必须是有效的非负数");
+        }
+        return value;
       }
 
       function fillPriceFields(row) {
@@ -7710,14 +7769,14 @@
         $("price-tier-fields").classList.toggle("hidden", !$("price-tiered").checked);
       }
 
-      function renderPriceReferences(models) {
+      function renderPriceReferences(prices) {
         const results = $("price-reference-results");
-        if (!models.length) {
+        if (!prices.length) {
           results.replaceChildren(el("div", { class: "price-reference-empty", text: "未找到参考价" }));
           return;
         }
         results.replaceChildren(
-          ...models.map((row) =>
+          ...prices.map((row) =>
             el(
               "button",
               {
@@ -7730,7 +7789,7 @@
                   event.currentTarget.classList.add("selected");
                 },
               },
-              el("span", { class: "mono price-reference-name", text: row.pattern }),
+              el("span", { class: "mono price-reference-name", text: row.provider_id + "/" + row.model_id }),
               el("span", { class: "price-reference-prices", text: referencePriceText(row) }),
             ),
           ),
@@ -7749,8 +7808,8 @@
         }
         $("price-reference-results").replaceChildren(el("div", { class: "price-reference-empty", text: "正在搜索…" }));
         try {
-          const result = await plugin("GET", "/prices/catalog?q=" + encodeURIComponent(query) + "&limit=20");
-          if (request === priceReferenceRequest) renderPriceReferences(result.models || []);
+          const result = await plugin("GET", "/prices/reference?q=" + encodeURIComponent(query) + "&limit=20");
+          if (request === priceReferenceRequest) renderPriceReferences(result.prices || []);
         } catch (err) {
           if (request === priceReferenceRequest) {
             if (err instanceof AuthError) {
@@ -7759,51 +7818,22 @@
               return;
             }
             $("price-reference-results").replaceChildren(
-              el("div", { class: "price-reference-empty", text: "参考价格搜索失败：" + (err.message || err) }),
+              el("div", { class: "price-reference-empty", text: "搜索参考价失败：" + (err.message || err) }),
             );
           }
         }
       }
 
       function editPrice(row) {
-        editingModel = row.pattern;
-        $("price-model").textContent = row.pattern;
+        const model = row.custom_price_model_id || row.model_id;
+        $("price-dialog-title").textContent = row.model_id ? "编辑模型定价" : "新增模型定价";
+        $("price-model").value = model;
+        $("price-model").readOnly = !!row.model_id;
         fillPriceFields(row);
-        $("price-reference-search").value = row.pattern;
+        $("price-reference-search").value = row.model_id;
         $("price-dlg").showModal();
-        $("price-reference-search").focus();
+        $(row.model_id ? "price-reference-search" : "price-model").focus();
         searchPriceReferences();
-      }
-
-      // /v1/models requires a downstream API Key, so the browser borrows one only
-      // for this same-origin request. The plugin never stores it.
-      async function syncPriceCatalog(apiKeys) {
-        const key = (apiKeys || []).map((value) => (value || "").trim()).find(Boolean);
-        if (!key) return "";
-        try {
-          const payload = await api("GET", "/v1/models", null, { raw: true, key });
-          const models = payload.data.map((item) => item.id);
-          if (!models.length) {
-            return "";
-          }
-          const result = await plugin("POST", "/prices/sync", { models });
-          if (result.added || result.removed) {
-            return (
-              "模型同步完成：新增 " +
-              result.added +
-              " 个（" +
-              result.priced +
-              " 个有参考价），移除 " +
-              result.removed +
-              " 个"
-            );
-          }
-          return "";
-        } catch (err) {
-          if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
-          notify("同步模型失败：" + (err.message || err), "err");
-          return "";
-        }
       }
 
       async function autoSyncKeys() {
@@ -7822,8 +7852,6 @@
           if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
           notify("同步 API Key 失败：" + (err.message || err), "err");
         }
-        const priceCatalog = await syncPriceCatalog(keys);
-        if (priceCatalog) summaries.push(priceCatalog);
         return summaries.join("；");
       }
 
@@ -8253,7 +8281,7 @@
         renderRouteCredentialList();
       });
       $("route-rule-all").onclick = () => {
-        routeModels = new Set(catalogModels());
+        routeModels = new Set(currentModelIDs());
         routeCredentialIDs = new Set();
         routeProviders = routeProviderChoices(routeProviders).map((item) => ({
           source: item.source,
@@ -8408,6 +8436,8 @@
         renderPriceTable("prices-body", state.prices, $("price-filter").value, true),
       );
       $("price-reference-search").addEventListener("input", () => {
+        priceReferenceRequest++;
+        $("price-reference-results").replaceChildren();
         clearTimeout(priceReferenceTimer);
         priceReferenceTimer = setTimeout(() => {
           priceReferenceTimer = 0;
@@ -8420,55 +8450,66 @@
         priceReferenceTimer = 0;
         priceReferenceRequest++;
       });
+      async function deleteCustomPrice(row) {
+        const model = row.custom_price_model_id || row.model_id;
+        const message = "删除 " + model + " 的自定义价后，使用该定价的模型将改用参考价。若无参考价，将无法使用。";
+        if (!(await confirmAction("删除自定义价？", message))) return;
+        await plugin("DELETE", "/prices?model_id=" + encodeURIComponent(model));
+        notify("已删除自定义价");
+        await refreshPrices();
+      }
+
+      async function refreshPrices() {
+        resetLoadState(detailLoads.adminPrices);
+        await loadAdminPrices();
+      }
+      $("price-add").onclick = () => editPrice({ model_id: "", input_per_1m: 0, output_per_1m: 0 });
       $("price-cancel").onclick = () => $("price-dlg").close();
       $("price-save").onclick = () =>
         guard(async () => {
-          if (!editingModel) return;
-          const rule = {
-            pattern: editingModel,
-            input_per_1m: Number($("price-in").value || 0),
-            output_per_1m: Number($("price-out").value || 0),
-            cache_read_per_1m: optionalNumber("price-cr"),
-            cache_write_per_1m: optionalNumber("price-cw"),
+          const model = $("price-model").value.trim();
+          if (!model) throw new Error("请输入模型 ID");
+          const price = {
+            model_id: model,
+            input_per_1m: priceNumber("price-in"),
+            output_per_1m: priceNumber("price-out"),
+            cache_read_per_1m: priceNumber("price-cr", null),
+            cache_write_per_1m: priceNumber("price-cw", null),
           };
           if ($("price-tiered").checked) {
-            const threshold = Number($("price-tier-threshold").value);
-            if (!Number.isInteger(threshold) || threshold <= 0) throw new Error("长上下文阈值必须是大于 0 的整数");
-            rule.long_context = {
+            const threshold = priceNumber("price-tier-threshold");
+            if (!Number.isSafeInteger(threshold) || threshold <= 0) throw new Error("长上下文阈值必须是有效的正整数");
+            price.long_context = {
               threshold_input_tokens: threshold,
-              input_per_1m: Number($("price-tier-in").value || 0),
-              output_per_1m: Number($("price-tier-out").value || 0),
-              cache_read_per_1m: optionalNumber("price-tier-cr"),
-              cache_write_per_1m: optionalNumber("price-tier-cw"),
+              input_per_1m: priceNumber("price-tier-in"),
+              output_per_1m: priceNumber("price-tier-out"),
+              cache_read_per_1m: priceNumber("price-tier-cr", null),
+              cache_write_per_1m: priceNumber("price-tier-cw", null),
             };
           }
-          await plugin("PUT", "/prices", rule);
+          await plugin("PUT", "/prices", price);
           $("price-dlg").close();
-          notify("已保存 " + editingModel + " 的定价");
-          await refreshPage("foreground");
+          notify("已保存 " + model + " 的定价");
+          await refreshPrices();
         });
-      $("price-reset").onclick = () =>
+      $("price-reference-refresh").onclick = () =>
         guard(async () => {
-          if (!(await confirmAction("恢复全部参考价？", "自定义定价将被覆盖；没有参考价的模型将恢复为 0 USD。")))
-            return;
-          const result = await plugin("POST", "/prices/reset");
-          notify("已恢复 " + result.restored + " 个模型的参考价");
-          await refreshPage("foreground");
-        });
-      $("price-catalog-refresh").onclick = () =>
-        guard(async () => {
-          const button = $("price-catalog-refresh");
+          const button = $("price-reference-refresh");
           button.disabled = true;
           try {
-            const result = await plugin("POST", "/prices/catalog/refresh");
-            notify(
-              "参考价目录已更新，共 " +
-                int(result.catalog?.models) +
-                " 个模型；同步更新 " +
-                int(result.updated_models) +
-                " 个当前价格",
-            );
-            await refreshPage("foreground");
+            const result = await plugin("POST", "/prices/reference/refresh", null, { timeoutMS: 45000 });
+            notify(result.changed ? "参考价已更新" : "参考价已是最新");
+            await refreshPrices();
+          } catch (err) {
+            if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
+            try {
+              const status = await plugin("GET", "/prices/reference/status");
+              renderReferencePriceStatus(status.metadata);
+            } catch (statusError) {
+              if (statusError instanceof AuthError || statusError instanceof StaleRequestError) throw statusError;
+              throw new Error((err.message || err) + "；参考价状态获取失败：" + (statusError.message || statusError));
+            }
+            throw err;
           } finally {
             button.disabled = false;
           }

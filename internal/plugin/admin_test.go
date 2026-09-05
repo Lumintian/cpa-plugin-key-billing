@@ -55,54 +55,42 @@ func readAccess(t *testing.T, app *App) accessResponse {
 	return access
 }
 
-func readPrices(t *testing.T, app *App) []billing.PriceRow {
+func readPrices(t *testing.T, app *App, models ...string) []billing.PriceRow {
 	t.Helper()
 	var prices []billing.PriceRow
-	callOK(t, app, http.MethodGet, routePrices, nil, nil, http.StatusOK, &prices)
+	callOK(t, app, http.MethodGet, routePrices, url.Values{"model": models}, nil, http.StatusOK, &prices)
 	return prices
 }
 
 func TestPricesRoundTripThroughTheManagementAPI(t *testing.T) {
 	app := newConfiguredApp(t)
 
-	var synced billing.PriceCatalogSyncResult
-	callOK(t, app, http.MethodPost, routePricesSync, nil, map[string]any{
-		"models": []string{"gpt-4o", "house-model-x"},
-	}, http.StatusOK, &synced)
-	if synced.Added != 2 || synced.Priced != 1 {
-		t.Fatalf("result = %+v, want two rows with one priced from the catalog", synced)
-	}
+	models := []string{"gpt-4o", "house-model-x"}
 
-	prices := readPrices(t, app)
-	if len(prices) != 2 || prices[0].Pattern != "gpt-4o" || prices[0].Source != billing.PriceSourceBuiltin ||
+	prices := readPrices(t, app, models...)
+	if len(prices) != 2 || prices[0].ModelID != "gpt-4o" || prices[0].Source != billing.PriceSourceReference ||
 		prices[1].Source != billing.PriceSourceNone {
-		t.Fatalf("prices = %+v, want the catalog price and an unpriced row", prices)
+		t.Fatalf("prices = %+v, want the reference price and an unpriced row", prices)
 	}
 
 	callOK(t, app, http.MethodPut, routePrices, nil, map[string]any{
-		"pattern":           "house-model-x",
+		"model_id":          "house-model-x",
 		"input_per_1m":      1.25,
 		"output_per_1m":     10,
 		"cache_read_per_1m": 0.125,
 	}, http.StatusOK, nil)
-	if prices = readPrices(t, app); prices[1].InputPer1M != 1.25 ||
+	if prices = readPrices(t, app, models...); prices[1].InputPer1M != 1.25 ||
 		prices[1].Source != billing.PriceSourceCustom {
 		t.Fatalf("row = %+v, want the edit recorded as custom", prices[1])
 	}
 
-	var reset struct {
-		Restored int `json:"restored"`
-	}
-	callOK(t, app, http.MethodPost, routePricesReset, nil, nil, http.StatusOK, &reset)
-	if reset.Restored != 1 {
-		t.Fatalf("restored = %d, want 1", reset.Restored)
-	}
-	if prices = readPrices(t, app); len(prices) != 2 || prices[1].InputPer1M != 0 {
+	callOK(t, app, http.MethodDelete, routePrices, url.Values{"model_id": {"house-model-x"}}, nil, http.StatusOK, nil)
+	if prices = readPrices(t, app, models...); len(prices) != 2 || prices[1].InputPer1M != 0 {
 		t.Fatalf("prices = %+v, want the rows kept and the edit dropped", prices)
 	}
 
-	if resp := callManagement(t, app, http.MethodPost, routePricesSync, nil, map[string]any{"models": []string{}}); resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (body=%s)", resp.StatusCode, resp.Body)
+	if resp := callManagement(t, app, http.MethodPost, "/prices/sync", nil, map[string]any{"models": []string{}}); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (body=%s)", resp.StatusCode, resp.Body)
 	}
 }
 
@@ -577,8 +565,9 @@ func TestPluginLogReportsStartupAndFailures(t *testing.T) {
 		Entries []billing.PluginLog `json:"entries"`
 	}
 	callOK(t, app, http.MethodGet, routePluginLogs, nil, nil, http.StatusOK, &loaded)
-	if len(loaded.Entries) != 1 || loaded.Entries[0].Level != billing.PluginLogInfo ||
-		!strings.Contains(loaded.Entries[0].Message, "已加载计费数据库") {
+	if len(loaded.Entries) != 3 || loaded.Entries[0].Level != billing.PluginLogInfo ||
+		!strings.Contains(loaded.Entries[0].Message, "参考价已更新") ||
+		!strings.Contains(loaded.Entries[2].Message, "已加载计费数据库") {
 		t.Fatalf("plugin logs = %+v, want the loaded database reported", loaded.Entries)
 	}
 
@@ -588,7 +577,7 @@ func TestPluginLogReportsStartupAndFailures(t *testing.T) {
 		t.Fatal("plugin.reconfigure accepted a malformed config")
 	}
 	callOK(t, app, http.MethodGet, routePluginLogs, nil, nil, http.StatusOK, &loaded)
-	if len(loaded.Entries) != 2 || loaded.Entries[0].Level != billing.PluginLogError ||
+	if len(loaded.Entries) != 4 || loaded.Entries[0].Level != billing.PluginLogError ||
 		!strings.Contains(loaded.Entries[0].Message, "应用插件配置失败") {
 		t.Fatalf("plugin logs = %+v, want the rejected config reported first", loaded.Entries)
 	}

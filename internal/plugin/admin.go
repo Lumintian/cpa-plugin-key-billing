@@ -13,53 +13,6 @@ import (
 	"cpa-key-billing/internal/billing"
 )
 
-func (a *App) putPrices(req ManagementRequest) ManagementResponse {
-	var rule billing.PriceRule
-	if errDecode := decodeStrict(req.Body, &rule); errDecode != nil {
-		return errorResponse(errDecode)
-	}
-	stored, errUpsert := a.store.UpsertPrice(rule)
-	if errUpsert != nil {
-		return errorResponse(errUpsert)
-	}
-	return JSONResponse(http.StatusOK, map[string]any{"price": stored})
-}
-
-func (a *App) searchPriceCatalog(req ManagementRequest) ManagementResponse {
-	if _, errCatalog := billing.EnsureBuiltinCatalog(); errCatalog != nil {
-		return errorResponse(errCatalog)
-	}
-	limit := 20
-	if raw := strings.TrimSpace(req.Query.Get("limit")); raw != "" {
-		parsed, errParse := strconv.Atoi(raw)
-		if errParse != nil || parsed < 1 || parsed > 50 {
-			return JSONError(http.StatusBadRequest, "invalid", "查询条数必须为 1 到 50 的整数")
-		}
-		limit = parsed
-	}
-	return JSONResponse(http.StatusOK, map[string]any{
-		"models": billing.SearchCatalog(req.Query.Get("q"), limit),
-	})
-}
-
-// The UI supplies /v1/models because the plugin has no model-list callback.
-func (a *App) syncPriceCatalog(req ManagementRequest) ManagementResponse {
-	if _, errCatalog := billing.EnsureBuiltinCatalog(); errCatalog != nil {
-		return errorResponse(errCatalog)
-	}
-	var body struct {
-		Models []string `json:"models"`
-	}
-	if errDecode := decodeStrict(req.Body, &body); errDecode != nil {
-		return errorResponse(errDecode)
-	}
-	result, errSync := a.store.SyncPriceCatalog(body.Models)
-	if errSync != nil {
-		return errorResponse(errSync)
-	}
-	return JSONResponse(http.StatusOK, result)
-}
-
 type accessResponse struct {
 	Keys                     []billing.KeyView   `json:"keys"`
 	Plans                    []billing.Plan      `json:"plans"`
@@ -77,23 +30,6 @@ func (a *App) access() ManagementResponse {
 		Keys: a.store.KeyViews(), Plans: a.store.Plans(), Routes: a.store.RouteViews(),
 		Credentials: a.credentialInventory(), CredentialInventoryError: credentialError,
 	})
-}
-
-func (a *App) refreshPriceCatalog() ManagementResponse {
-	result, errRefresh := a.store.RefreshPriceCatalog()
-	if errRefresh != nil {
-		a.store.AddPluginLog(billing.PluginLogError, "更新 models.dev 参考价目录失败：%v", errRefresh)
-		return errorResponse(errRefresh)
-	}
-	a.store.AddPluginLog(billing.PluginLogInfo, "models.dev 参考价目录已更新：%d 条定价调整", result.UpdatedModels)
-	return JSONResponse(http.StatusOK, result)
-}
-
-func (a *App) resetPrices() ManagementResponse {
-	if _, errCatalog := billing.EnsureBuiltinCatalog(); errCatalog != nil {
-		return errorResponse(errCatalog)
-	}
-	return JSONResponse(http.StatusOK, map[string]any{"restored": a.store.ResetPrices()})
 }
 
 func (a *App) createPlan(req ManagementRequest) ManagementResponse {

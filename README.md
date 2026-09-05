@@ -90,7 +90,10 @@ plugins:
 ```
 
 > [!WARNING]
-> v1.0.0 插件不会迁移旧版 JSON 或 SQLite 数据。请使用新的 `state_file`；如果路径指向旧格式，插件会拒绝打开且不会修改原文件。
+> 升级前请备份数据文件。
+>
+> - v1.0.0 至 v1.2.3 的数据库文件支持自动迁移。
+> - v0.8.4 及更早版本的 JSON 或 SQLite 数据文件不支持迁移，请将 `state_file` 指向新文件。
 
 重启 CLIProxyAPI 后，在管理中心打开「API Key 计费」。确认模型定价后，创建订阅计划并绑定需要限制的 API Key。
 
@@ -112,7 +115,7 @@ http(s)://<CLIProxyAPI 地址>/v0/resource/plugins/cpa-key-billing/ui#account
 
 - 未绑定订阅计划的 API Key 只统计用量，不限制额度。
 - 每个 API Key 独立计算订阅周期。
-- 未定价模型按 `0 USD` 记录。
+- 自定义价优先于 models.dev 参考价，两者都没有时拒绝新请求。
 - 请求事件只保留最近 30 天。
 
 ## 路由规则
@@ -131,6 +134,7 @@ http(s)://<CLIProxyAPI 地址>/v0/resource/plugins/cpa-key-billing/ui#account
 | 模型无权访问 | `403` | `permission_error` | `insufficient_quota` |
 | 没有符合规则且可用的凭证 | `503` | `server_error` | `internal_server_error` |
 | 已绑定的路由规则不存在或损坏 | `503` | `server_error` | `routing_configuration_error` |
+| 模型未定价 | `503` | `cpa_key_billing_error` | `model_price_error` |
 
 ## 致谢
 

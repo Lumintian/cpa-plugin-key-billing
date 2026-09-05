@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,12 +16,11 @@ func newAccountStoreWithRepository(t *testing.T, now time.Time) (*Store, *memory
 	store, repo := newStoreWithRepository(t)
 	store.now = func() time.Time { return now }
 	store.ReplaceAll(func(state *State) {
-		state.Prices = []PriceRule{{
-			Pattern:         "gpt-5.5",
-			InputPer1M:      1,
-			OutputPer1M:     2,
-			CacheReadPer1M:  floatPtr(0.1),
-			CacheWritePer1M: floatPtr(1.25),
+		state.Prices = map[string]CustomPrice{"gpt-5.5": {
+			ModelID: "gpt-5.5", PriceRates: PriceRates{InputPer1M: 1,
+				OutputPer1M:     2,
+				CacheReadPer1M:  floatPtr(0.1),
+				CacheWritePer1M: floatPtr(1.25)},
 		}}
 	})
 	return store, repo
@@ -71,9 +71,9 @@ func TestRecordUsageGroupsAndPricesByBillingModel(t *testing.T) {
 	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	store := newAccountStore(t, now)
 	store.ReplaceAll(func(state *State) {
-		state.Prices = append(state.Prices, PriceRule{
-			Pattern: "claude/gpt-latest", InputPer1M: 3, OutputPer1M: 4,
-		})
+		state.Prices["claude/gpt-latest"] = CustomPrice{
+			ModelID: "claude/gpt-latest", PriceRates: PriceRates{InputPer1M: 3, OutputPer1M: 4},
+		}
 	})
 	event := subsetEvent("scope-a", now)
 	event.RouteModel = "claude/gpt-latest"
@@ -200,5 +200,25 @@ func TestCompletionDoesNotOpenCycleAfterAdministrativeChange(t *testing.T) {
 				t.Fatal("completion request event was not preserved")
 			}
 		})
+	}
+}
+
+func TestReferenceUsageLogsAppliedTierRatesAndBillingModel(t *testing.T) {
+	store, _ := newReferencePriceStore(t, 0)
+	if _, err := store.ClearPluginLogs(); err != nil {
+		t.Fatal(err)
+	}
+	store.RecordUsage(UsageEvent{
+		UpstreamModel: "gpt-5.6-sol", RouteModel: "codex/gpt-5.6-sol(xhigh)", At: store.Now(),
+		Breakdown: completeBreakdown(300000, 0, 0, 100, 0),
+	})
+	logs := mustPluginLogs(t, store)
+	if len(logs) != 1 || logs[0].Level != PluginLogDebug {
+		t.Fatalf("reference usage logs = %+v", logs)
+	}
+	for _, want := range []string{`billing_model="codex/gpt-5.6-sol"`, "输入=$10", "输出=$45", "费用=$3.00450000"} {
+		if !strings.Contains(logs[0].Message, want) {
+			t.Fatalf("reference usage log missing %q: %s", want, logs[0].Message)
+		}
 	}
 }

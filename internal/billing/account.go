@@ -38,14 +38,22 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		at = s.Now()
 	}
 	event.At = at
+	price, billingModel, priceErr := s.ResolveModelPrice(event.UpstreamModel, event.RouteModel, false)
+	if priceErr != nil {
+		s.AddPluginLog(PluginLogError, "模型价格读取失败，保留用量事件并按零计费")
+	}
+	if priceErr != nil || price.Source == PriceSourceNone {
+		// Usage has already happened. Keep all reported tokens and failure
+		// details even if its price was deleted or reference prices are unavailable.
+		price = Price{Source: PriceSourceNone}
+	}
+
+	cost := ComputeCost(price, event.Breakdown)
 	updateResult(s, func(state *State) (struct{}, Changes) {
 		upstreamModel := strings.TrimSpace(event.UpstreamModel)
 		if upstreamModel == "" {
 			upstreamModel = strings.TrimSpace(event.RouteModel)
 		}
-		billingModel := state.ResolveBillingModel(event.UpstreamModel, event.RouteModel)
-		price := state.ResolvePrice(upstreamModel, billingModel)
-		cost := ComputeCost(price, event.Breakdown)
 		failed := failure != nil
 		entryAt := event.RequestedAt
 		if entryAt.IsZero() {
@@ -94,6 +102,12 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		}
 		return struct{}{}, changes
 	})
+	if price.Source == PriceSourceReference {
+		s.AddPluginLog(PluginLogDebug,
+			"参考价计费：billing_model=%q，费用=$%.8f，单价（每百万 Token）：输入=$%g，输出=$%g，缓存读=$%g，缓存写=$%g",
+			billingModel, cost.TotalUSD, cost.AppliedInputPer1M, cost.AppliedOutputPer1M,
+			cost.AppliedCacheReadPer1M, cost.AppliedCacheWritePer1M)
+	}
 }
 
 // chargeCycle charges only a window opened when the request was admitted.

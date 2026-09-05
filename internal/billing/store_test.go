@@ -20,7 +20,7 @@ func TestConfigureLoadsTheDocumentBehindTheNewPath(t *testing.T) {
 			return first, nil
 		}
 		return second, nil
-	})
+	}, nil)
 	t.Cleanup(store.Close)
 
 	cfg := testConfig(t)
@@ -63,7 +63,7 @@ func TestConfigureKeepsTheLiveDocumentWhenTheNewPathFails(t *testing.T) {
 			return nil, errors.New("not a database")
 		}
 		return repo, nil
-	})
+	}, nil)
 	t.Cleanup(store.Close)
 
 	cfg := testConfig(t)
@@ -112,24 +112,16 @@ func TestMutationsWriteOnlyWhatTheyTouched(t *testing.T) {
 	}
 }
 
-// The panel synchronizes keys and models on every session start, and moving
-// nothing is the ordinary outcome. Recording that would be the largest write the
-// plugin makes: every key, every per-model row and the whole price table.
+// Unchanged key synchronization must not rewrite unrelated prices or history.
 func TestSyncsWriteNothingWhenNothingMoved(t *testing.T) {
 	store, repo := newStoreWithRepository(t)
 	if _, errKeys := store.SyncKeys([]string{"sk-live-000000001"}, false); errKeys != nil {
 		t.Fatalf("SyncKeys error = %v", errKeys)
 	}
-	if _, errModels := store.SyncPriceCatalog([]string{"gpt-5.5"}); errModels != nil {
-		t.Fatalf("SyncPriceCatalog error = %v", errModels)
-	}
 
 	repo.saves = nil
 	if _, errKeys := store.SyncKeys([]string{"sk-live-000000001"}, false); errKeys != nil {
 		t.Fatalf("SyncKeys error = %v", errKeys)
-	}
-	if _, errModels := store.SyncPriceCatalog([]string{"gpt-5.5"}); errModels != nil {
-		t.Fatalf("SyncPriceCatalog error = %v", errModels)
 	}
 	if len(repo.saves) != 0 {
 		t.Fatalf("saves = %+v, want a sync that moved nothing to write nothing", repo.saves)
@@ -148,7 +140,7 @@ func TestReconfigureReportsADatabaseThatFailsToClose(t *testing.T) {
 		repo := repos[0]
 		repos = repos[1:]
 		return repo, nil
-	})
+	}, nil)
 	t.Cleanup(store.Close)
 	for range 2 {
 		if errConfigure := store.Configure(testConfig(t)); errConfigure != nil {

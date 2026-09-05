@@ -1,10 +1,10 @@
 package plugin
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
-	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,22 +60,12 @@ func TestUnknownMethodReturnsErrorEnvelopeNotAnError(t *testing.T) {
 	}
 }
 
-func TestConfigureReportsCatalogPreloadFailure(t *testing.T) {
-	t.Cleanup(func() {
-		if _, errCatalog := billing.EnsureBuiltinCatalog(); errCatalog != nil {
-			t.Errorf("restore test catalog: %v", errCatalog)
-		}
-	})
+func TestConfigureReportsReferencePricePreloadFailure(t *testing.T) {
 	requests := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	app := newApp(billing.NewStore(openRepository, func(context.Context) ([]byte, error) {
 		requests++
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		return nil, errors.New("下载参考价：HTTP 503")
 	}))
-	defer server.Close()
-	t.Setenv("CPA_KEY_BILLING_CATALOG_CACHE", filepath.Join(t.TempDir(), "missing.json"))
-	t.Setenv("CPA_KEY_BILLING_CATALOG_URL", server.URL)
-
-	app := NewApp()
 	t.Cleanup(app.Shutdown)
 	raw, errHandle := app.HandleMethod(MethodPluginRegister, mustMarshal(t, LifecycleRequest{
 		ConfigYAML: testConfigYAML(t, true),
@@ -85,7 +75,7 @@ func TestConfigureReportsCatalogPreloadFailure(t *testing.T) {
 	}
 	decodeResult(t, raw, nil)
 	if requests != 1 {
-		t.Fatalf("catalog preload requests = %d, want 1", requests)
+		t.Fatalf("reference price preload requests = %d, want 1", requests)
 	}
 	page, errEvents := app.store.PluginLogsPage(billing.PluginLogQuery{Limit: 500})
 	if errEvents != nil {
@@ -93,7 +83,7 @@ func TestConfigureReportsCatalogPreloadFailure(t *testing.T) {
 	}
 	events := page.Entries
 	if len(events) == 0 || events[0].Level != billing.PluginLogError ||
-		!strings.Contains(events[0].Message, "加载 models.dev 参考价目录失败") {
+		!strings.Contains(events[0].Message, "同步 models.dev 参考价失败") {
 		t.Fatalf("events = %+v, want the preload failure", events)
 	}
 }
@@ -102,8 +92,8 @@ func TestManagementRegistrationExposesOnlyCurrentEndpoints(t *testing.T) {
 	registration := managementRegistration()
 	wantRoutes := map[string]bool{}
 	for _, value := range []string{
-		"GET /access", "GET /prices", "GET /prices/catalog",
-		"POST /prices/catalog/refresh", "PUT /prices", "POST /prices/reset", "POST /prices/sync",
+		"GET /access", "GET /prices", "GET /prices/reference",
+		"POST /prices/reference/refresh", "PUT /prices", "DELETE /prices", "GET /prices/reference/status",
 		"POST /plans", "PATCH /plans", "DELETE /plans",
 		"POST /routes", "PATCH /routes", "DELETE /routes", "PUT /keys/routes",
 		"POST /keys/bind", "POST /keys/unbind", "POST /keys/reset",
@@ -159,7 +149,7 @@ func TestManagementRegistrationExposesOnlyCurrentEndpoints(t *testing.T) {
 }
 
 func TestManagementRejectsLookalikeRoutePrefixes(t *testing.T) {
-	app := NewApp()
+	app := newTestApp(t)
 	for _, path := range []string{managementBase + "-other/access", resourceBase + "-other/ui"} {
 		raw, errHandle := app.handleManagement(mustMarshal(t, ManagementRequest{
 			Method: http.MethodGet,
@@ -183,7 +173,7 @@ func TestManagementRejectsLookalikeRoutePrefixes(t *testing.T) {
 }
 
 func TestHandleMethodRecoversFromPanic(t *testing.T) {
-	app := NewApp()
+	app := newTestApp(t)
 	t.Cleanup(app.Shutdown)
 	app.store = nil
 	_, errHandle := app.HandleMethod(MethodManagementHandle, mustMarshal(t, ManagementRequest{

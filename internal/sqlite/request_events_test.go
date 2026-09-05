@@ -15,7 +15,7 @@ func requestEvent(scope string, at time.Time) billing.RequestEvent {
 		ReasoningEffort: "high", ServiceTier: "auto",
 		UpstreamModel: "gpt-5.5", BillingModel: "gpt-5.5",
 		LatencyMS: 1500, TTFTMS: 250,
-		AccountingQuality: billing.TokenAccountingComplete, PriceSource: billing.PriceSourceOverride,
+		AccountingQuality: billing.TokenAccountingComplete, PriceSource: billing.PriceSourceCustom,
 		Cost: billing.Cost{
 			TotalUSD: 0.5, UncachedInputUSD: 0.2, OutputUSD: 0.3,
 			UncachedInputTokens: 500, BilledOutputTokens: 500,

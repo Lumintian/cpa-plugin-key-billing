@@ -49,7 +49,7 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	start := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
 	state := billing.NewState()
 	state.Plans = []billing.Plan{{ID: "weekly", Name: "Weekly 10", AmountUSD: 10, PeriodSeconds: 604800}}
-	state.Prices = []billing.PriceRule{{Pattern: "gpt-5.5", InputPer1M: 1, OutputPer1M: 2, CacheReadPer1M: price(.1)}}
+	state.Prices = map[string]billing.CustomPrice{"gpt-5.5": {ModelID: "gpt-5.5", PriceRates: billing.PriceRates{InputPer1M: 1, OutputPer1M: 2, CacheReadPer1M: price(.1)}}}
 	state.Routes = []billing.Route{{ID: "fast", Name: "Fast", Rule: billing.RouteRule{Models: []string{"gpt-5.5"}, CredentialIDs: []string{}, CredentialProviders: []billing.CredentialProviderSelector{}}}}
 	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", Label: "Alice", InConfig: true,
 		PlanID: "weekly", ConcurrencyLimit: 7, RouteBindings: billing.RouteBindings{
@@ -60,7 +60,12 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	state.Credentials["auth-1"] = billing.Credential{Provider: "codex", Account: "ops@example.com"}
 
 	database := openDatabase(t, path)
-	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true, Prices: true, Routes: true, Credentials: true,
+	for _, price := range state.Prices {
+		if err := database.UpsertPrice(price); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true, Routes: true, Credentials: true,
 		RequestErrorEvents: []billing.RequestErrorEvent{{Event: billing.RequestEvent{At: start, Scope: "scope-a", AuthIndex: "auth-1", Provider: "codex", BillingModel: "gpt-5.5"},
 			Error: billing.RequestError{StatusCode: 429, ErrorType: "rate_limit", Body: "limited"}}}})
 	if err := database.Close(); err != nil {
@@ -116,7 +121,7 @@ func TestFreshSchemaVersionAndTables(t *testing.T) {
 	want := map[string]bool{
 		"api_keys": true, "routes": true, "plans": true,
 		"prices": true, "credentials": true, "request_events": true,
-		"request_errors": true, "plugin_logs": true,
+		"request_errors": true, "plugin_logs": true, "reference_prices_metadata": true, "reference_prices": true,
 	}
 	rows, err := database.db.Query(`SELECT name FROM sqlite_master
 		WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
@@ -153,7 +158,7 @@ func TestOpenRejectsExistingSchemas(t *testing.T) {
 			if reopened, err := Open(path); err == nil {
 				_ = reopened.Close()
 				t.Fatal("Open accepted an existing schema")
-			} else if !strings.Contains(err.Error(), "不迁移旧数据") {
+			} else if !strings.Contains(err.Error(), "文件格式不受支持") {
 				t.Fatalf("error = %v", err)
 			}
 		})

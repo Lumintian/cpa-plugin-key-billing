@@ -15,10 +15,11 @@ import (
 // It shares the state document with the store rather than copying it, so a
 // mutation is visible here as soon as it is saved.
 type memoryRepository struct {
-	state         *State
-	requestEvents []RequestEvent
-	requestErrors []RequestErrorEvent
-	pluginLogs    []PluginLog
+	referencePrices *memoryReferencePriceRepository
+	state           *State
+	requestEvents   []RequestEvent
+	requestErrors   []RequestErrorEvent
+	pluginLogs      []PluginLog
 	// saves records the write set of every mutation, which is how a test asks
 	// what a store operation actually persisted.
 	saves []Changes
@@ -94,6 +95,12 @@ func keptPluginLogs(entries []PluginLog, cutoff time.Time) []PluginLog {
 	}
 	return kept
 }
+
+// Prices share the loaded state; Store publishes each change after these
+// methods report whether the write succeeded.
+func (r *memoryRepository) UpsertPrice(CustomPrice) error { return r.fail }
+
+func (r *memoryRepository) DeletePrice(string) error { return r.fail }
 
 func (r *memoryRepository) Save(state *State, changes Changes) error {
 	if r.fail != nil {
@@ -197,7 +204,7 @@ func newStore(t *testing.T) *Store {
 func newStoreWithRepository(t *testing.T) (*Store, *memoryRepository) {
 	t.Helper()
 	repo := &memoryRepository{}
-	store := NewStore(func(string) (Repository, error) { return repo, nil })
+	store := NewStore(func(string) (Repository, error) { return repo, nil }, nil)
 	if errConfigure := store.Configure(testConfig(t)); errConfigure != nil {
 		t.Fatalf("Configure error = %v", errConfigure)
 	}
@@ -208,7 +215,7 @@ func newStoreWithRepository(t *testing.T) (*Store, *memoryRepository) {
 func (s *Store) ReplaceAll(fn func(*State)) {
 	updateResult(s, func(state *State) (struct{}, Changes) {
 		fn(state)
-		return struct{}{}, Changes{AllKeys: true, Plans: true, Prices: true, Routes: true, Credentials: true}
+		return struct{}{}, Changes{AllKeys: true, Plans: true, Routes: true, Credentials: true}
 	})
 }
 

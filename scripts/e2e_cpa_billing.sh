@@ -12,8 +12,8 @@ set -euo pipefail
 #	../cli-proxy-api    可执行文件，直接使用
 readonly github_repo="router-for-me/CLIProxyAPI"
 # The upstream is scripts/dummy_provider.py: it answers all four protocols this
-# suite routes to, so a run needs no network, no credentials, and returns the
-# same token counts every time.
+# suite routes to, so model requests need no real credentials and return fixed
+# token counts. Reference prices are downloaded separately from models.dev.
 readonly upstream_api_key="dummy-upstream-key-e2e"
 readonly expected_input_tokens=128
 readonly expected_output_tokens=8
@@ -489,7 +489,7 @@ assert_billing_entry() {
       .failed == false and
       .source == $source and
       .accounting_quality == "complete" and
-      .price_source == "override" and
+      .price_source == "custom" and
       (.cost.total_usd > 0)
     ' "$entry_file" >/dev/null; then
     echo "${client} → ${upstream} 的模型、来源、usage 或定价不正确。" >&2
@@ -958,6 +958,78 @@ assert_quota_exhausted() {
     "$runtime_dir/responses/quota-restored.json" false
 }
 
+assert_headless_price_admission() {
+  local port="$1" runtime_dir="$2" client header_line body endpoint http_status
+  local -a headers
+  # This registered test model has no custom or models.dev reference price. No panel, model
+  # price setup or key synchronization has happened yet.
+  for client in chat responses anthropic gemini; do
+    headers=()
+    while IFS= read -r header_line; do
+      headers+=(-H "$header_line")
+    done < <(client_headers "$client")
+    body="$(request_body "$client" "e2e-chat-to-chat-nonstream" false "Reply with exactly OK.")"
+    endpoint="$(client_endpoint "$client" "e2e-chat-to-chat-nonstream" false)"
+    http_status="$(curl -sS --max-time 30 "${headers[@]}" --data "$body" \
+      --output "$runtime_dir/unpriced-$client.json" --write-out '%{http_code}' \
+      "http://127.0.0.1:$port$endpoint")"
+    if [[ "$http_status" != "503" ]] || ! jq -e '
+      .error.type == "cpa_key_billing_error" and .error.code == "model_price_error" and
+      .error.message == "模型 e2e-chat-to-chat-nonstream 尚未定价"
+    ' "$runtime_dir/unpriced-$client.json" >/dev/null; then
+      echo "未访问前端时的 ${client} 定价拦截失败，HTTP ${http_status}。" >&2
+      return 1
+    fi
+  done
+  log_step "未访问前端：4 种协议均拒绝未定价模型"
+}
+
+assert_reference_price_billing() {
+  local port="$1" runtime_dir="$2" body count stream model requested_model response_name
+  local prices_file="$runtime_dir/reference-prices.json"
+  local events_file="$runtime_dir/reference-price-events.json"
+  for model in "gpt-4o" "gpt-5.6-sol" "codex/gpt-5.6-sol"; do
+    management_call DELETE "$port" "/v0/management/plugins/cpa-key-billing/prices?model_id=$model" >/dev/null
+  done
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/events?limit=100" >"$events_file"
+  count="$(jq -er '.entries | length' "$events_file")"
+  for model in "gpt-4o" "codex/gpt-5.6-sol"; do
+    requested_model="$model"
+    if [[ "$model" == codex/* ]]; then
+      requested_model="$model(xhigh)"
+    fi
+    response_name="${model//\//-}"
+    management_call GET "$port" "/v0/management/plugins/cpa-key-billing/prices?model=$requested_model&include_custom=false" >"$prices_file"
+    if ! jq -e 'length == 1 and .[0].source == "reference"' "$prices_file" >/dev/null; then
+      echo "模型 $requested_model 未匹配到 models.dev 参考价。" >&2
+      return 1
+    fi
+    for stream in false true; do
+      body="$(request_body chat "$requested_model" "$stream" "Reply with exactly OK.")"
+      api_call "$port" "参考价准入与记账：$requested_model stream=$stream" \
+        "/v1/chat/completions" "$body" chat "$runtime_dir/responses/reference-$response_name-$stream.json"
+      count=$((count + 1))
+      wait_for_event_count "$port" "$count" "$events_file"
+      if ! jq -e --slurpfile prices "$prices_file" --arg model "$model" '
+        $prices[0][0] as $price |
+        ((80 * $price.input_per_1m +
+          32 * ($price.cache_read_per_1m // $price.input_per_1m) +
+          16 * ($price.cache_write_per_1m // $price.input_per_1m) +
+          8 * $price.output_per_1m) / 1000000) as $expected |
+        .entries[0] |
+        .billing_model == $model and .price_source == "reference" and .failed == false and
+        .cost.uncached_input_tokens == 80 and .cost.cache_read_tokens == 32 and
+        .cost.cache_write_tokens == 16 and .cost.billed_output_tokens == 8 and
+        ((.cost.total_usd - $expected) | fabs) < 0.000000000001
+      ' "$events_file" >/dev/null; then
+        echo "参考价准入后的 usage.handle 计费不正确。" >&2
+        return 1
+      fi
+    done
+  done
+  log_step "参考价已验证：普通模型及带前缀、思考后缀的模型，流式和非流式均按参考价记账"
+}
+
 run_target() {
   local target="$1"
   local index="$2"
@@ -981,7 +1053,6 @@ run_target() {
     return 1
   fi
   cp "$plugin_path" "$runtime_dir/plugins/cpa-key-billing.$plugin_extension"
-  cp "$repo_dir/internal/billing/testdata/catalog.json" "$runtime_dir/catalog.json"
 
   # The models and providers live in scripts/e2e_config.yaml; only runtime paths,
   # ports and the dummy credential are filled in here.
@@ -1003,8 +1074,7 @@ run_target() {
     return 1
   fi
   log_step "启动 ${host_label}，监听 127.0.0.1:${port}"
-  CPA_KEY_BILLING_CATALOG_CACHE="$runtime_dir/catalog.json" \
-    "$host_binary" -config "$runtime_dir/config.yaml" -local-model >"$runtime_dir/host.log" 2>&1 &
+  "$host_binary" -config "$runtime_dir/config.yaml" -local-model >"$runtime_dir/host.log" 2>&1 &
   active_pid=$!
   if ! wait_for_server "$port"; then
     tail -n 80 "$runtime_dir/host.log" >&2 || true
@@ -1020,13 +1090,15 @@ run_target() {
   fi
   log_step "插件已注册并启用"
 
-  # One wildcard makes every test model deterministic without registering five
-  # identical overrides or consulting the external reference catalog.
-  management_call PUT "$port" "/v0/management/plugins/cpa-key-billing/prices" \
-    -H "Content-Type: application/json" \
-    --data '{"pattern":"*","input_per_1m":1,"output_per_1m":2,"cache_read_per_1m":0.1,"cache_write_per_1m":1.25}' \
-    >"$runtime_dir/price.json"
-  log_step "测试价格已配置"
+  assert_headless_price_admission "$port" "$runtime_dir"
+  account_call "$port" "/v1/models" >"$runtime_dir/models.json"
+  jq -er '.data[].id' "$runtime_dir/models.json" >"$runtime_dir/model-ids.txt"
+  while IFS= read -r model_id; do
+    jq -n --arg model "$model_id" '{model_id:$model,input_per_1m:1,output_per_1m:2,cache_read_per_1m:0.1,cache_write_per_1m:1.25}' >"$runtime_dir/model-price.json"
+    management_call PUT "$port" "/v0/management/plugins/cpa-key-billing/prices" \
+      -H "Content-Type: application/json" --data-binary "@$runtime_dir/model-price.json" >"$runtime_dir/price.json"
+  done <"$runtime_dir/model-ids.txt"
+  log_step "所有测试模型的自定义价已配置"
 
   prompt="Reply with exactly OK."
   request_index=0
@@ -1139,7 +1211,7 @@ run_target() {
         .source == $source and
         .failed == false and
         .accounting_quality == "complete" and
-        .price_source == "override" and
+        .price_source == "custom" and
         (.latency_ms // 0) > 0 and
         (.ttft_ms // 0) > 0 and
         .ttft_ms <= .latency_ms
@@ -1245,7 +1317,7 @@ run_target() {
   account_prices_file="$runtime_dir/account-prices.json"
   account_events_file="$runtime_dir/account-events.json"
   account_call "$port" "/v0/resource/plugins/cpa-key-billing/access" >"$account_access_file"
-  account_call "$port" "/v0/resource/plugins/cpa-key-billing/prices" >"$account_prices_file"
+  account_call "$port" "/v0/resource/plugins/cpa-key-billing/prices?model=gpt-5.6-sol" >"$account_prices_file"
   account_call "$port" "/v0/resource/plugins/cpa-key-billing/events?limit=100" >"$account_events_file"
   if ! jq -e '
       .tracked == true and
@@ -1255,7 +1327,7 @@ run_target() {
       (has("keys") | not) and (has("plans") | not) and (has("prices") | not) and
       (has("routing") | not) and (has("bindings") | not)
     ' "$account_access_file" >/dev/null ||
-    ! jq -e 'length > 0 and all(.[]; has("pattern") and has("source") and (has("operation") | not))' \
+    ! jq -e 'length > 0 and all(.[]; has("model_id") and has("source") and (has("operation") | not))' \
       "$account_prices_file" >/dev/null ||
     ! jq -e --argjson expected "$expected_requests" '
       .total == $expected and (.entries | length) == $expected and
@@ -1300,11 +1372,12 @@ run_target() {
     return 1
   fi
   log_step "插件启动事件已验证"
+  assert_reference_price_billing "$port" "$runtime_dir"
 
   kill "$active_pid" >/dev/null 2>&1 || true
   wait "$active_pid" >/dev/null 2>&1 || true
   active_pid=""
-  log_ok "${host_label}：41 个上游请求，1 次并发拦截，3 次模型拦截，2 次凭证路由，1 次凭证拦截，4 次额度拦截"
+  log_ok "${host_label}：45 个上游请求（含 4 个参考价请求），1 次并发拦截，3 次模型拦截，2 次凭证路由，1 次凭证拦截，4 次额度拦截"
 }
 
 log_stage "启动 dummy provider"

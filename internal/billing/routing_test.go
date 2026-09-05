@@ -115,7 +115,7 @@ func TestCreateRouteRollsBackForUnknownKey(t *testing.T) {
 func TestRoutingUsesTheBillingModelIdentity(t *testing.T) {
 	store := newStore(t)
 	store.ReplaceAll(func(state *State) {
-		state.Prices = []PriceRule{{Pattern: "chat/fast"}, {Pattern: "chat/slow"}}
+		state.Prices = map[string]CustomPrice{"chat/fast": {ModelID: "chat/fast"}, "chat/slow": {ModelID: "chat/slow"}}
 		state.Routes = []Route{{ID: "fast", Name: "Fast", Rule: RouteRule{Models: []string{"CHAT/Fast"}}}}
 		state.Keys["scope-a"] = &KeyState{RouteBindings: RouteBindings{RouteIDs: []string{"fast"}}}
 	})
@@ -147,7 +147,7 @@ func TestRoutingUsesTheBillingModelIdentity(t *testing.T) {
 func TestRoutingSeparatesConfiguredSuffixedModels(t *testing.T) {
 	store := newStore(t)
 	store.ReplaceAll(func(state *State) {
-		state.Prices = []PriceRule{{Pattern: "chat/fast"}, {Pattern: "chat/fast(high)"}}
+		state.Prices = map[string]CustomPrice{"chat/fast": {ModelID: "chat/fast"}, "chat/fast(high)": {ModelID: "chat/fast(high)"}}
 		state.Keys["scope-a"] = &KeyState{RouteBindings: RouteBindings{Models: []string{"chat/fast"}}}
 	})
 	if decision := store.ResolveRouting("scope-a", "chat/fast", "chat/fast(high)"); decision.AllowsModel() {

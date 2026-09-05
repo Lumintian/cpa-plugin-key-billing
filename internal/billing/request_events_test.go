@@ -18,7 +18,7 @@ func TestRecordUsagePersistsComputedRequestEvent(t *testing.T) {
 	if entry.Scope != "scope-a" || entry.ExecutorType != "CodexExecutor" ||
 		entry.ReasoningEffort != "high" || entry.ServiceTier != "auto" ||
 		entry.UpstreamModel != "gpt-5.5" || entry.BillingModel != "gpt-5.5" ||
-		entry.PriceSource != PriceSourceOverride || entry.Failed || entry.AccountingQuality != TokenAccountingComplete {
+		entry.PriceSource != PriceSourceCustom || entry.Failed || entry.AccountingQuality != TokenAccountingComplete {
 		t.Fatalf("entry = %+v", entry)
 	}
 	if entry.Cost.UncachedInputTokens != 500 || entry.Cost.CacheReadTokens != 400 ||

@@ -53,14 +53,6 @@ func (a *App) routeResource(req ManagementRequest, suffix string) ManagementResp
 	return handler(a, req, access)
 }
 
-func (a *App) listPrices(access viewAccess) ManagementResponse {
-	if _, errCatalog := billing.EnsureBuiltinCatalog(); errCatalog != nil {
-		return viewErrorResponse(access, errCatalog)
-	}
-	prices := a.store.PriceRows()
-	return viewJSON(access, http.StatusOK, prices)
-}
-
 func (a *App) listRequestEvents(req ManagementRequest, access viewAccess) ManagementResponse {
 	if access.APIKey && !access.Tracked {
 		return viewJSON(access, http.StatusOK, billing.RequestEventView{Entries: []billing.RequestEventRow{}})

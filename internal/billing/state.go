@@ -6,7 +6,8 @@ import "time"
 // request path has to consult without touching disk. Request and error events
 // grow with traffic and are queried directly from the repository.
 type State struct {
-	Prices []PriceRule
+	// Prices is keyed by NormalizeModelID; each value retains its stored spelling.
+	Prices map[string]CustomPrice
 	Plans  []Plan
 	Keys   map[string]*KeyState
 	Routes []Route
@@ -17,23 +18,11 @@ type State struct {
 }
 
 func NewState() *State {
-	return &State{Keys: make(map[string]*KeyState), Credentials: make(map[string]Credential)}
-}
-
-// All prices are USD per 1,000,000 tokens.
-//
-// The cache prices are pointers so "not specified" and "explicitly free" stay
-// distinguishable. Unspecified falls back to the input price, because a
-// Claude-style request can be almost entirely cache reads and silently billing
-// those at zero would under-charge by an order of magnitude. Set them to 0 to
-// really mean free.
-type PriceRule struct {
-	Pattern         string            `json:"pattern"`
-	InputPer1M      float64           `json:"input_per_1m"`
-	OutputPer1M     float64           `json:"output_per_1m"`
-	CacheReadPer1M  *float64          `json:"cache_read_per_1m,omitempty"`
-	CacheWritePer1M *float64          `json:"cache_write_per_1m,omitempty"`
-	LongContext     *LongContextPrice `json:"long_context,omitempty"`
+	return &State{
+		Prices:      make(map[string]CustomPrice),
+		Keys:        make(map[string]*KeyState),
+		Credentials: make(map[string]Credential),
+	}
 }
 
 // LongContextPrice replaces the whole request's rates when total normalized

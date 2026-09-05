@@ -3,8 +3,11 @@ package billing
 import "time"
 
 type Repository interface {
+	OpenReferencePrices() (ReferencePriceRepository, error)
 	Load(requestEventCutoff, pluginLogCutoff time.Time) (Snapshot, error)
 	Save(state *State, changes Changes) error
+	UpsertPrice(price CustomPrice) error
+	DeletePrice(modelID string) error
 
 	RequestEvents(query RequestEventQuery, since time.Time) (RequestEventView, error)
 	RequestErrors(query RequestErrorQuery, since time.Time) (RequestErrorView, error)
@@ -24,7 +27,7 @@ type Snapshot struct {
 }
 
 // Changes names the rows one mutation touched, so a save writes those and no
-// others. Plans, prices, routes, and credentials are replaced whole because
+// others. Plans, routes, and credentials are replaced whole because
 // an operator changes them a few rows at a time and there are never many; keys
 // are named individually because usage accounting runs on every proxied request
 // and must touch a single row.
@@ -35,7 +38,6 @@ type Changes struct {
 	AllKeys bool
 
 	Plans       bool
-	Prices      bool
 	Routes      bool
 	Credentials bool
 
@@ -47,7 +49,7 @@ type Changes struct {
 const maxPendingRequestRecords = 1000
 
 func (c Changes) empty() bool {
-	return len(c.Keys) == 0 && !c.AllKeys && !c.Plans && !c.Prices && !c.Routes && !c.Credentials &&
+	return len(c.Keys) == 0 && !c.AllKeys && !c.Plans && !c.Routes && !c.Credentials &&
 		len(c.NormalRequestEvents) == 0 && len(c.RequestErrorEvents) == 0 && c.RequestEventCutoff.IsZero()
 }
 
@@ -61,7 +63,6 @@ func (c Changes) merge(next Changes) Changes {
 	merged := Changes{
 		AllKeys:             c.AllKeys || next.AllKeys,
 		Plans:               c.Plans || next.Plans,
-		Prices:              c.Prices || next.Prices,
 		Routes:              c.Routes || next.Routes,
 		Credentials:         c.Credentials || next.Credentials,
 		NormalRequestEvents: append(append([]RequestEvent(nil), c.NormalRequestEvents...), next.NormalRequestEvents...),

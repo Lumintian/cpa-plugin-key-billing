@@ -16,13 +16,13 @@ func assertClose(t *testing.T, label string, got, want float64) {
 
 func floatPtr(v float64) *float64 { return &v }
 
-func TestPriceRuleRejectsNonFiniteRates(t *testing.T) {
+func TestCustomPriceRejectsNonFiniteRates(t *testing.T) {
 	infinite := math.Inf(1)
-	for _, rule := range []PriceRule{
-		{Pattern: "m", InputPer1M: math.NaN()},
-		{Pattern: "m", OutputPer1M: infinite},
-		{Pattern: "m", CacheReadPer1M: &infinite},
-		{Pattern: "m", LongContext: &LongContextPrice{ThresholdInputTokens: 1, InputPer1M: infinite}},
+	for _, rule := range []CustomPrice{
+		{ModelID: "m", PriceRates: PriceRates{InputPer1M: math.NaN()}},
+		{ModelID: "m", PriceRates: PriceRates{OutputPer1M: infinite}},
+		{ModelID: "m", PriceRates: PriceRates{CacheReadPer1M: &infinite}},
+		{ModelID: "m", PriceRates: PriceRates{LongContext: &LongContextPrice{ThresholdInputTokens: 1, InputPer1M: infinite}}},
 	} {
 		if rule.Validate() == nil {
 			t.Fatalf("invalid price accepted: %+v", rule)
@@ -65,83 +65,6 @@ func TestCanonicalBreakdownValidation(t *testing.T) {
 	}
 	if !unclassified.Valid() || unclassified.Billable() {
 		t.Fatalf("unclassified breakdown state is wrong: %+v", unclassified)
-	}
-}
-
-func TestGlobMatch(t *testing.T) {
-	tests := []struct {
-		pattern string
-		value   string
-		want    bool
-	}{
-		{pattern: "gpt-5*", value: "gpt-5.5", want: true},
-		{pattern: "gpt-5*", value: "gpt-4.1", want: false},
-		{pattern: "*claude*", value: "anthropic/claude-sonnet-4", want: true},
-		{pattern: "claude-?-opus", value: "claude-4-opus", want: true},
-		{pattern: "claude-?-opus", value: "claude-45-opus", want: false},
-		{pattern: "GPT-5*", value: "gpt-5.5", want: true},
-	}
-	for _, test := range tests {
-		t.Run(test.pattern+"|"+test.value, func(t *testing.T) {
-			if got := globMatch(test.pattern, test.value); got != test.want {
-				t.Fatalf("globMatch(%q, %q) = %v, want %v", test.pattern, test.value, got, test.want)
-			}
-		})
-	}
-}
-
-func TestResolvePricePrecedenceAndCacheFallback(t *testing.T) {
-	state := NewState()
-	state.Prices = []PriceRule{
-		{Pattern: "gpt-*", InputPer1M: 9},
-		{Pattern: "gpt-5.5", InputPer1M: 1, OutputPer1M: 2},
-		{Pattern: "team/gpt-5.5", InputPer1M: 5},
-	}
-	price := state.ResolvePrice("gpt-5.5", "team/gpt-5.5")
-	if price.InputPer1M != 5 || price.CacheReadPer1M != 5 || price.CacheWritePer1M != 5 {
-		t.Fatalf("billing model rule or cache fallback is wrong: %+v", price)
-	}
-	price = state.ResolvePrice("gpt-5.5", "unknown")
-	if price.InputPer1M != 1 {
-		t.Fatalf("upstream model fallback is wrong: %+v", price)
-	}
-	price = state.ResolvePrice("gpt-5.5(high)", "unknown")
-	if price.InputPer1M != 1 {
-		t.Fatalf("upstream model suffix handling is wrong: %+v", price)
-	}
-	price = state.ResolvePrice("gpt-4.1", "unknown")
-	if price.InputPer1M != 9 {
-		t.Fatalf("glob fallback did not apply: %+v", price)
-	}
-}
-
-func TestResolveBillingModel(t *testing.T) {
-	state := NewState()
-	state.Prices = []PriceRule{
-		{Pattern: "grok-4.5"},
-		{Pattern: "claude/deepseek-flash"},
-		{Pattern: "configured(low)"},
-	}
-	tests := []struct {
-		name     string
-		upstream string
-		route    string
-		want     string
-	}{
-		{name: "model", upstream: "grok-4.5", route: "grok-4.5", want: "grok-4.5"},
-		{name: "thinking", upstream: "grok-4.5", route: "grok-4.5(high)", want: "grok-4.5"},
-		{name: "route", upstream: "deepseek-v4-flash", route: "claude/deepseek-flash", want: "claude/deepseek-flash"},
-		{name: "route thinking", upstream: "deepseek-v4-flash", route: "claude/deepseek-flash(high)", want: "claude/deepseek-flash"},
-		{name: "configured suffix", upstream: "upstream-low", route: "configured(low)", want: "configured(low)"},
-		{name: "request suffix", upstream: "upstream-high", route: "configured(high)", want: "configured"},
-		{name: "auto", upstream: "gpt-5.5", route: "auto(high)", want: "gpt-5.5"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if got := state.ResolveBillingModel(test.upstream, test.route); got != test.want {
-				t.Fatalf("ResolveBillingModel(%q, %q) = %q, want %q", test.upstream, test.route, got, test.want)
-			}
-		})
 	}
 }
 

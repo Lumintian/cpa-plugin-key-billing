@@ -25,7 +25,6 @@
 - Do not bump the SQLite schema version for an idempotent repair or code cleanup. A real format change requires an explicit migration and review.
 - Preserve historical data during SQLite and legacy JSON migrations, including failed or all-zero usage rows. If a legacy schema is incompatible, fail and roll back instead of dropping or silently hiding its table.
 - Never persist or log plaintext downstream or upstream API keys. Mask API-key credentials, omit uncertain account values, and use dummy credentials in tests; do not copy real credentials into the workspace.
-- Perform catalog downloads and parsing outside the billing store lock and the request-admission path. Request admission must never block on network I/O.
 
 ## Changelog
 

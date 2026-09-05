@@ -13,6 +13,8 @@ import (
 type App struct {
 	store                 *billing.Store
 	hostCaller            HostCaller
+	admissionsMu          sync.Mutex
+	admissions            map[string]*requestAdmission
 	routingMu             sync.Mutex
 	credentials           map[string]credentialView
 	credentialsByRawID    map[string]string
@@ -28,8 +30,13 @@ func (a *App) SetHostCaller(caller HostCaller) {
 }
 
 func NewApp() *App {
+	return newApp(billing.NewStore(openRepository, nil))
+}
+
+func newApp(store *billing.Store) *App {
 	return &App{
-		store:                 billing.NewStore(openRepository),
+		store:                 store,
+		admissions:            make(map[string]*requestAdmission),
 		credentials:           make(map[string]credentialView),
 		credentialsByRawID:    make(map[string]string),
 		credentialRefsByIndex: make(map[string]string),
@@ -106,9 +113,8 @@ func (a *App) configure(raw []byte) error {
 	if errConfigure := a.store.Configure(cfg); errConfigure != nil {
 		return errConfigure
 	}
-	if _, errCatalog := billing.EnsureBuiltinCatalog(); errCatalog != nil {
-		a.store.AddPluginLog(billing.PluginLogError, "加载 models.dev 参考价目录失败：%v", errCatalog)
-	}
+	// Refresh records its result; a download failure does not disable custom prices.
+	_, _ = a.store.EnsureReferencePrices()
 	return nil
 }
 

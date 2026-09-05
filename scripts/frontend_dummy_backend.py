@@ -497,7 +497,7 @@ LIVE_KEYS = KEYS
 
 PRICES = [
     {
-        "pattern": "gpt-5.6-sol",
+        "model_id": "gpt-5.6-sol",
         "input_per_1m": 4,
         "output_per_1m": 20,
         "cache_read_per_1m": 0.4,
@@ -510,7 +510,7 @@ PRICES = [
         },
     },
     {
-        "pattern": "gpt-5.5",
+        "model_id": "gpt-5.5",
         "input_per_1m": 5,
         "output_per_1m": 30,
         "cache_read_per_1m": 0.5,
@@ -523,35 +523,35 @@ PRICES = [
         },
     },
     {
-        "pattern": "gpt-5.6-luna",
+        "model_id": "gpt-5.6-luna",
         "input_per_1m": 0.2,
         "output_per_1m": 1.2,
         "cache_read_per_1m": 0.02,
         "source": "custom",
     },
     {
-        "pattern": "gpt-5.6-terra",
+        "model_id": "gpt-5.6-terra",
         "input_per_1m": 2,
         "output_per_1m": 12,
         "cache_read_per_1m": 0.2,
         "source": "custom",
     },
     {
-        "pattern": "gpt-image-2",
+        "model_id": "gpt-image-2",
         "input_per_1m": 5,
         "output_per_1m": 30,
         "cache_read_per_1m": 1.25,
         "source": "custom",
     },
     {
-        "pattern": "claude/deepseek-v4-pro",
+        "model_id": "claude/deepseek-v4-pro",
         "input_per_1m": 0.435,
         "output_per_1m": 0.87,
         "cache_read_per_1m": 0.003625,
         "source": "custom",
     },
     {
-        "pattern": "claude/deepseek-v4-flash",
+        "model_id": "claude/deepseek-v4-flash",
         "input_per_1m": 0.28,
         "output_per_1m": 0.42,
         "source": "custom",
@@ -617,7 +617,7 @@ def event_sample(
         "latency_ms": latency_ms,
         "ttft_ms": ttft_ms,
         "accounting_quality": "" if failed else "complete",
-        "price_source": "override",
+        "price_source": "custom",
         "cost": make_cost(
             uncached,
             cache_read,
@@ -1077,12 +1077,61 @@ def analysis_view(query, scope=""):
     }
 
 
+for price in PRICES:
+    price["in_models"] = True
+PRICES.extend([
+    {
+        "model_id": "demo-reference", "source": "reference",
+        "input_per_1m": 1.5, "output_per_1m": 3, "in_models": True,
+    },
+    {
+        "model_id": "demo-free", "source": "custom",
+        "input_per_1m": 0, "output_per_1m": 0, "in_models": True,
+    },
+    {
+        "model_id": "demo-unpriced", "source": "none",
+        "input_per_1m": 0, "output_per_1m": 0, "in_models": True,
+    },
+    {
+        "model_id": "demo-retired-custom", "source": "custom",
+        "input_per_1m": 1, "output_per_1m": 2, "in_models": False,
+    },
+])
+REFERENCE_PRICES = {
+    price["model_id"]: dict(price)
+    for price in PRICES if price["source"] == "reference"
+}
+
+
+def price_status():
+    return {
+        "metadata": {
+            "source_url": "https://models.dev/catalog.json",
+            "content_hash": "dummy-ui-reference-prices-hash",
+            "version": 1,
+            "model_count": len(REFERENCE_PRICES),
+            "fetched_at": "2026-09-05T00:00:00Z",
+            "usable": True,
+        },
+    }
+
+
+def model_prices(query, include_custom):
+    models = set(query.get("model", []))
+    rows = {row["model_id"]: row for row in PRICES}
+    names = models | ({row["model_id"] for row in PRICES if row["source"] == "custom"} if include_custom else set())
+    return [dict(rows.get(model, {"model_id": model, "source": "none", "input_per_1m": 0, "output_per_1m": 0}),
+                 in_models=model in models) for model in sorted(names)]
+
+
 def payload_for(path, query):
     if path == f"{API_BASE}/access":
         refresh_route_counts()
         return {"keys": KEYS, "plans": PLANS, "routes": ROUTES, "credentials": CREDENTIALS}
+    if path == f"{API_BASE}/prices/reference/status":
+        return price_status()
     if path == f"{API_BASE}/prices":
-        return PRICES
+        return model_prices(query, include_custom=query.get("include_custom", ["true"])[0] == "true")
     if path == f"{API_BASE}/events":
         return request_event_view(query)
     if path == f"{API_BASE}/errors":
@@ -1095,9 +1144,12 @@ def payload_for(path, query):
         return {"files": AUTH_FILES}
     if path == f"{API_BASE}/auth-files/quota":
         return auth_file_quota(query)
-    if path == f"{API_BASE}/prices/catalog":
+    if path == f"{API_BASE}/prices/reference":
         term = query.get("q", [""])[0].lower()
-        return {"models": [row for row in PRICES if term in row["pattern"].lower()]}
+        return {"prices": [
+            {**price, "provider_id": "demo", "model_id": model, "is_canonical": True}
+            for model, price in REFERENCE_PRICES.items() if term in model.lower()
+        ]}
     if path == "/v0/management/api-keys":
         return {"api-keys": [f"sk-demo-{index:04d}" for index in range(1, len(LIVE_KEYS) + 1)]}
     if path in {
@@ -1119,7 +1171,7 @@ def payload_for(path, query):
             "api-key-entries": [{"api-key": "sk-dummy-deepseek"}],
         }]}
     if path == "/v1/models":
-        return {"data": [{"id": row["pattern"]} for row in PRICES] + [
+        return {"data": [{"id": row["model_id"]} for row in PRICES if row.get("in_models")] + [
             {"id": "codex/deepseek-v4-flash-vision-exp"},
         ]}
     return None
@@ -1194,7 +1246,7 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path.endswith("/access"):
                 self.send_json(200, account_access(index))
             elif parsed.path.endswith("/prices"):
-                self.send_json(200, PRICES)
+                self.send_json(200, model_prices(parse_qs(parsed.query), include_custom=False))
             elif parsed.path.endswith("/analysis"):
                 self.send_json(200, analysis_view(parse_qs(parsed.query), LIVE_KEYS[index]["scope"]))
             elif parsed.path.endswith("/errors"):
@@ -1244,10 +1296,32 @@ class Handler(BaseHTTPRequestHandler):
             cleared = len(PLUGIN_LOGS)
             PLUGIN_LOGS.clear()
             self.send_json(200, {"cleared": cleared})
-        elif route == ("POST", f"{API_BASE}/prices/catalog/refresh"):
-            self.send_json(200, {"catalog": {"models": len(PRICES)}, "updated_models": 2})
-        elif route == ("POST", f"{API_BASE}/prices/reset"):
-            self.send_json(200, {"restored": len(PRICES)})
+        elif route == ("POST", f"{API_BASE}/prices/reference/refresh"):
+            self.send_json(200, {"metadata": price_status()["metadata"], "changed": False})
+        elif route == ("PUT", f"{API_BASE}/prices"):
+            body = json.loads(request_body or b"{}")
+            row = next((price for price in PRICES if price["model_id"] == body.get("model_id")), None)
+            if row is None:
+                row = {"in_models": False}
+                PRICES.append(row)
+            row.update(body)
+            row["source"] = "custom"
+            self.send_json(200, {"price": row})
+        elif route == ("DELETE", f"{API_BASE}/prices"):
+            model = parse_qs(parsed.query).get("model_id", [""])[0]
+            row = next((price for price in PRICES if price["model_id"] == model), None)
+            if row is None or row["source"] != "custom":
+                self.send_json(404, {"error": {"message": "自定义价不存在"}})
+                return
+            if not row["in_models"]:
+                PRICES.remove(row)
+            else:
+                row.update(REFERENCE_PRICES.get(model) or {
+                    "source": "none", "input_per_1m": 0, "output_per_1m": 0,
+                    "cache_read_per_1m": None, "cache_write_per_1m": None,
+                    "long_context": None,
+                })
+            self.send_json(200, {"deleted": model})
         elif route == ("POST", f"{API_BASE}/keys/reset"):
             scopes = json.loads(request_body or b"[]")
             self.send_json(200, {"reset": len(set(scopes))})
@@ -1280,8 +1354,6 @@ class Handler(BaseHTTPRequestHandler):
                     "unavailable": False,
                 })
             self.send_json(200, {"credentials": CREDENTIALS})
-        elif route == ("POST", f"{API_BASE}/prices/sync"):
-            self.send_json(200, {"added": 0, "removed": 0, "priced": len(PRICES)})
         elif route == ("DELETE", f"{API_BASE}/routes"):
             route_id = parse_qs(parsed.query).get("id", [""])[0]
             affected = 0
