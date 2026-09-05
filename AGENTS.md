@@ -2,6 +2,7 @@
 
 ## Required Checks
 
+- **Before committing:** Run `gofmt -l .` before every commit. If any files are listed, format them and rerun the check; commit only when the output is empty.
 - **Release tags:** Update `Version` in `internal/plugin/types.go` before creating a tag.
 - **Tag type:** Version tags must be annotated tags (`git tag -a` with a message); do not create lightweight tags.
 - **Tag version increments:** When creating a tag, increment the patch version unless the user explicitly requests a major or minor version change.
