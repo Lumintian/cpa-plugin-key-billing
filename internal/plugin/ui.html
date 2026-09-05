@@ -1511,6 +1511,8 @@
       .settings-entry-actions { flex: none; gap: 2px; white-space: nowrap; }
       .settings-entry-fields { display: grid; gap: 9px; }
       .settings-entry-field { align-items: flex-start; }
+      .key-bindings { display: grid; gap: 5px; min-width: 0; }
+      .key-picker label > .tag { flex: none; }
       .settings-entry-value { flex: 1; min-width: 0; color: var(--text-primary); }
       .settings-chip-list {
         display: flex;
@@ -2031,7 +2033,8 @@
           min-width: 0;
         }
         #tab-prices .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        #price-filter { grid-column: 1 / -1; }
+        #price-filter,
+        #tab-keys #key-filter { grid-column: 1 / -1; }
         #tab-plugin-logs .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
         #tab-plugin-logs .section-actions > *,
         #tab-plugin-logs .section-actions select {
@@ -2328,6 +2331,16 @@
         .cost-tooltip-summary { gap: 3px 8px; }
         .cost-tooltip-grid { grid-template-columns: minmax(62px, 1fr) auto auto; gap: 4px 6px; font-size: 11px; }
       }
+      #keys-body tr.key-deleted {
+        background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
+        color: var(--text-secondary);
+      }
+      #keys-body tr.key-deleted .usage {
+        opacity: 0.65;
+      }
+      #keys-body tr.key-deleted .quota-fill {
+        background: var(--text-tertiary);
+      }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script>
@@ -2541,6 +2554,12 @@
               <h2>API Key</h2>
               <div class="row section-actions">
                 <input id="key-filter" placeholder="搜索 API Key、备注或计划" class="wide-search" />
+                <label class="toggle-filter"
+                  ><input id="keys-include-deleted" type="checkbox" /><span
+                    class="toggle-track"
+                    aria-hidden="true"></span
+                  ><span>包含已删除</span></label
+                >
                 <button id="keys-reset-periodic" class="labeled-icon-button">
                   <span data-lucide-icon="party-popper" aria-hidden="true"></span>全员重置
                 </button>
@@ -3354,6 +3373,7 @@
 
       const detailLoads = {
         adminAccess: emptyLoadState(),
+        adminEventKeys: emptyLoadState(),
         adminPrices: emptyLoadState(),
         accountAccess: emptyLoadState(),
         accountPrices: emptyLoadState(),
@@ -3441,6 +3461,7 @@
         restoreChoice(role, prefix + "auth-provider", "");
         if (!account) {
           restoreChoice(role, "analysis-key", "");
+          restoreChoice(role, "keys-include-deleted", false);
           restoreChoice(role, "plugin-log-level", "all");
         }
         sharedTimeRanges[role] = storedTimeRange(role);
@@ -3470,6 +3491,7 @@
         $(prefix + "auth-search").value = "";
         if (!account) {
           $("key-filter").value = "";
+          $("keys-include-deleted").checked = false;
           $("price-filter").value = "";
           $("plugin-log-filter").value = "";
           $("plugin-logs-body").scrollTop = 0;
@@ -3487,6 +3509,7 @@
           ? ["accountAccess", "accountPrices", "accountAnalysis", "accountErrors", "accountAuthFiles"]
           : [
               "adminAccess",
+              "adminEventKeys",
               "adminPrices",
               "adminAnalysis",
               "adminErrors",
@@ -4018,7 +4041,6 @@
             state.plans = access.plans || [];
             state.routes = access.routes || [];
             state.credentials = access.credentials || [];
-            populateSharedKeyFilter();
           },
           () =>
             currentRole === "admin" &&
@@ -4166,9 +4188,8 @@
         return recentTimeRange(range.mode);
       }
 
-      function loadAnalysis(account) {
+      function loadAnalysis(account, range = selectedRange(account)) {
         const load = account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis;
-        const range = selectedRange(account);
         const params = new URLSearchParams(range);
         params.set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
         if (!account && $("analysis-key").value) {
@@ -4189,9 +4210,9 @@
         );
       }
 
-      function errorParams(account) {
+      function errorParams(account, range = selectedRange(account)) {
         const prefix = account ? "account-" : "";
-        const params = new URLSearchParams({ ...selectedRange(account), limit: "200" });
+        const params = new URLSearchParams({ ...range, limit: "200" });
         const fields = ["model", "source"];
         if (!account && $("analysis-key").value) params.set("api_key", $("analysis-key").value);
         for (const field of fields) {
@@ -4209,12 +4230,12 @@
         return params;
       }
 
-      function loadErrors(account, background = false) {
+      function loadErrors(account, background = false, range = selectedRange(account)) {
         const load = account ? detailLoads.accountErrors : detailLoads.adminErrors;
         return loadResource(
           load,
           () => {
-            const path = "/errors?" + errorParams(account);
+            const path = "/errors?" + errorParams(account, range);
             return account ? accountAPI(path) : plugin("GET", path);
           },
           (errors) => {
@@ -4287,9 +4308,9 @@
       const VIEW_DEPENDENCIES = {
         admin: {
           keys: ["access", "prices"],
-          analysis: ["access", "analysis"],
-          "request-events": ["access", "events"],
-          errors: ["access", "errors"],
+          analysis: ["analysis"],
+          "request-events": ["events"],
+          errors: ["errors"],
           "auth-files": ["authFiles"],
           settings: ["access", "prices", "logs"],
         },
@@ -4321,6 +4342,15 @@
             else resetLoadState(detailLoads[role + names[resource]]);
           }
         }
+        const range = selectedRange(account);
+        const refreshEventKeys = !background ||
+          (tab === "request-events" && canBackgroundRefreshRequestEvents(account)) ||
+          (tab === "errors" && canBackgroundRefreshErrors(account));
+        if (!account && refreshEventKeys && ["analysis", "request-events", "errors"].includes(tab)) {
+          const keyGeneration = detailLoads.adminEventKeys.generation;
+          await loadEventKeys(range);
+          if (generation !== sessionGeneration || keyGeneration !== detailLoads.adminEventKeys.generation) return;
+        }
         let syncError;
         const inventory =
           !account && !background && ["keys", "settings"].includes(tab)
@@ -4344,13 +4374,13 @@
             if (account) return loadAccountPrices(reason === "login" ? accountState.models : undefined);
             if (generation === sessionGeneration) return loadAdminPrices();
           },
-          analysis: () => (background ? undefined : loadAnalysis(account)),
+          analysis: () => (background ? undefined : loadAnalysis(account, range)),
           events: () =>
             !background || canBackgroundRefreshRequestEvents(account)
-              ? loadRequestEvents(false, account, { background })
+              ? loadRequestEvents(false, account, { background, range })
               : undefined,
           errors: () =>
-            !background || canBackgroundRefreshErrors(account) ? loadErrors(account, background) : undefined,
+            !background || canBackgroundRefreshErrors(account) ? loadErrors(account, background, range) : undefined,
           authFiles: () => loadAuthFiles(account),
           logs: () => (!background || canBackgroundRefreshPluginLogs() ? loadPluginLogs({ background }) : undefined),
         };
@@ -4686,7 +4716,7 @@
           data: {
             labels: rows.map((row) =>
               dimension === "api_keys" && row.key !== "other"
-                ? apiKeyIdentity(row, true).text
+                ? apiKeyIdentity(row).text
                 : row.label || row.key || "未知",
             ),
             datasets: [
@@ -5046,7 +5076,7 @@
               "div",
               { class: "usage-distribution-heading" },
               dimension === "api_keys" && row.key !== "other"
-                ? renderAPIKeyIdentity(row, { snapshot: true })
+                ? renderAPIKeyIdentity(row)
                 : el("b", {}, row.label || row.key || "未知"),
               el("b", { class: "mono" }, Number(row.percent || 0).toFixed(2) + "%"),
             ),
@@ -5727,19 +5757,18 @@
         }
       }
 
-      function apiKeyIdentity(view, snapshot = false) {
+      function apiKeyIdentity(view) {
         const scope = String(view.scope || view.key || "");
-        const accessKey = scope && !snapshot ? state.keys.find((key) => key.scope === scope) : null;
-        const preview = String(accessKey?.preview || view.preview || "");
-        const candidate = String(accessKey?.label || view.label || "");
+        const preview = String(view.preview || "");
+        const candidate = String(view.label || "");
         const label = candidate && candidate !== preview && candidate !== scope ? candidate : "";
-        const primary = label || preview || (scope ? scope.slice(0, 12) + "…" : "未归属");
+        const primary = label || preview || (scope ? "unknown" : "未归属");
         const secondary = label ? preview : "";
         return { primary, secondary, text: secondary ? primary + " · " + secondary : primary };
       }
 
       function renderAPIKeyIdentity(view, options = {}) {
-        const identity = apiKeyIdentity(view, options.snapshot);
+        const identity = apiKeyIdentity(view);
         const trailing = options.trailing || [];
         const line = (text, className, children = []) =>
           el("span", { class: "api-key-identity-line" + className }, el("span", { text }), children);
@@ -5820,6 +5849,7 @@
       function renderKeys() {
         const filter = $("key-filter").value.trim().toLowerCase();
         const rows = state.keys
+          .filter((key) => !key.deleted_at || $("keys-include-deleted").checked)
           .filter(
             (view) =>
               !filter ||
@@ -5830,6 +5860,7 @@
                 .includes(filter),
           )
           .map((view) => {
+            const deleted = !!view.deleted_at;
             const name = apiKeyIdentity(view).primary;
             const plan = state.plans.find((plan) => plan.id === view.plan_id);
             const cycleStatus = view.unlimited ? "—" : plan?.period_seconds === 0 ? "不重置" : "未开始";
@@ -5837,6 +5868,7 @@
               "select",
               {
                 name: "plan_id",
+                disabled: deleted,
                 "aria-label": name + " 的订阅计划",
                 onchange: (event) =>
                   guard(async () => {
@@ -5889,6 +5921,7 @@
               "select",
               {
                 "aria-label": name + " 的最大并发请求数",
+                disabled: deleted,
                 title: "最大并发请求数；0 表示不限制",
                 onchange: (event) =>
                   guard(async () => {
@@ -5926,27 +5959,28 @@
 
             return el(
               "tr",
-              {},
+              { class: deleted ? "key-deleted" : "" },
               el(
                 "td",
                 {},
                 renderAPIKeyIdentity(view, {
                   stacked: true,
                   trailing: [
-                    view.in_config
-                      ? el(
-                          "button",
-                          {
-                            class: "key-copy-button link",
-                            type: "button",
-                            title: "复制 API Key",
-                            "aria-label": "复制 API Key",
-                            onclick: (event) => guard(() => copyAPIKey(event.currentTarget, view)),
-                          },
-                          actionIcon("copy"),
-                        )
-                      : null,
-                    !view.in_config ? " · 不在 CLIProxyAPI Key 列表中" : null,
+                    el(
+                      "button",
+                      {
+                        class: "key-copy-button link",
+                        type: "button",
+                        disabled: deleted || !view.in_config,
+                        title: "复制 API Key",
+                        "aria-label": "复制 API Key",
+                        onclick: (event) => guard(() => copyAPIKey(event.currentTarget, view)),
+                      },
+                      actionIcon("copy"),
+                    ),
+                    deleted
+                      ? el("span", { class: "tag plain", text: "已删除" })
+                      : !view.in_config ? " · 仅用量记录" : null,
                   ],
                 }),
               ),
@@ -5962,7 +5996,13 @@
               el(
                 "td",
                 {},
-                view.blocked
+                deleted
+                  ? el("span", {
+                      class: "tag plain",
+                      text: "已删除",
+                      title: "从 CPA 配置中删除于 " + new Date(view.deleted_at).toLocaleString(),
+                    })
+                  : view.blocked
                   ? el("span", { class: "tag bad", text: "额度用尽" })
                   : el("span", {
                       class: "tag " + (view.unlimited ? "plain" : "ok"),
@@ -5975,7 +6015,7 @@
                 el("button", {
                   class: "link",
                   text: "重置",
-                  disabled: view.unlimited || undefined,
+                  disabled: deleted || view.unlimited || undefined,
                   onclick: () =>
                     guard(async () => {
                       if (!(await confirmAction("重置订阅额度？", "当前周期将结束，下一次请求会开启新周期。"))) return;
@@ -6081,6 +6121,7 @@
           "button",
           {
             class: "route-trigger" + (allRoutes ? " route-trigger-all" : ""),
+            disabled: !!view.deleted_at,
             title: names.map((entry) => entry.text + (entry.tag ? " · " + entry.tag : "")).join("、"),
             "aria-label": apiKeyIdentity(view).primary + " 的路由规则",
             onclick: (event) => openRoutePicker(view, event.currentTarget),
@@ -6420,12 +6461,24 @@
         );
       }
 
-      function keyChipItems(keys) {
-        return keys.map((key) => ({ text: apiKeyIdentity(key).text }));
+      function boundKeyField(keys) {
+        const chips = keys.map((key) => ({
+          text: apiKeyIdentity(key).text,
+          tag: key.deleted_at ? "已删除" : "",
+        }));
+        return settingsEntryField("已绑定 Key", el("div", { class: "key-bindings" },
+          el("div", { class: "small muted", text: bindingSummary(keys) }),
+          settingsChipList(chips, "—"),
+        ));
       }
 
       function modelChipItems(models) {
         return models.map((model) => ({ text: model }));
+      }
+
+      function bindingSummary(keys) {
+        const deleted = keys.filter((key) => key.deleted_at).length;
+        return keys.length + " 个 API Key" + (deleted ? "（其中 " + deleted + " 个已删除）" : "");
       }
 
       function renderPlans() {
@@ -6453,7 +6506,10 @@
                       if (
                         !(await confirmAction(
                           "删除订阅计划「" + name + "」？",
-                          boundKeys.length ? "已绑定的 " + boundKeys.length + " 个 API Key 将改为不限制。" : "",
+                          boundKeys.length
+                            ? "将解除 " + bindingSummary(boundKeys) + " 的套餐绑定。解除后不再限制套餐额度。" +
+                              (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
+                            : "",
                         ))
                       )
                         return;
@@ -6473,7 +6529,7 @@
                 settingsEntryField("额度", el("b", { class: "mono", text: usd(plan.amount_usd) })),
                 settingsEntryField("周期", periodLabel),
               ),
-              settingsEntryField("已绑定 Key", settingsChipList(keyChipItems(boundKeys), "—")),
+              boundKeyField(boundKeys),
             ),
           );
         });
@@ -6519,12 +6575,9 @@
                       if (
                         !(await confirmAction(
                           "删除路由规则「" + name + "」？",
-                          route.bound_key_count
-                            ? "该规则正被 " +
-                                route.bound_key_count +
-                                " 个 API Key 使用。删除后会从这些 API Key 中移除；其中 " +
-                                (route.fully_unrestricted_keys || 0) +
-                                " 个将可使用全部路由。此操作无法撤销。"
+                          boundKeys.length
+                            ? "将从 " + bindingSummary(boundKeys) + " 的绑定中解除此规则；其中 " +
+                              (route.fully_unrestricted_keys || 0) + " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
                             : "此操作无法撤销。",
                         ))
                       )
@@ -6541,7 +6594,7 @@
               { class: "settings-entry-fields" },
               settingsEntryField("模型范围", settingsChipList(modelChipItems(models), "全部模型")),
               settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
-              settingsEntryField("已绑定 Key", settingsChipList(keyChipItems(boundKeys), "—")),
+              boundKeyField(boundKeys),
             ),
           );
         });
@@ -6724,25 +6777,40 @@
 
       function renderRouteKeyList(routeID) {
         const list = $("route-key-list");
-        if (!state.keys.length) {
+        const keys = state.keys.filter(
+          (key) => !key.deleted_at || (routeID && key.route_bindings.route_ids.includes(routeID)),
+        );
+        if (!keys.length) {
           list.replaceChildren(el("div", { class: "empty", text: "暂无 API Key" }));
           return;
         }
         list.replaceChildren(
-          ...state.keys.map((key) => {
+          ...keys.map((key) => {
             const checked = !!routeID && key.route_bindings.route_ids.includes(routeID);
             return el(
               "label",
               {},
-              el("input", { type: "checkbox", value: key.scope, checked: checked || undefined }),
+              el("input", {
+                type: "checkbox",
+                value: key.scope,
+                checked: checked || undefined,
+              }),
               renderAPIKeyIdentity(key),
+              key.deleted_at ? el("span", {
+                class: "tag plain",
+                text: "已删除",
+                title: "可取消勾选以解除绑定",
+              }) : null,
             );
           }),
         );
       }
 
       function selectedRouteScopes() {
-        return [...$("route-key-list").querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
+        return Array.from(
+          $("route-key-list").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
+          (input) => input.value,
+        );
       }
 
       function resetRouteForm() {
@@ -6992,20 +7060,35 @@
         populateEventFilterSelect($(prefix + "-source"), "全部来源", filters.sources);
       }
 
-      function populateSharedKeyFilter() {
-        const select = $("analysis-key");
-        populateEventFilterSelect(
-          select,
-          "全部 API Key",
-          state.keys,
-          (item) => item.scope,
-          (item) => apiKeyIdentity(item).text,
+      function loadEventKeys(range) {
+        const load = detailLoads.adminEventKeys;
+        return loadResource(
+          load,
+          () => plugin("GET", "/events/keys?" + new URLSearchParams(range)),
+          (keys) => {
+            const select = $("analysis-key");
+            const selected = select.value;
+            select.replaceChildren(
+              el("option", { value: "", text: "全部 API Key" }),
+              ...keys.map((key) =>
+                el("option", {
+                  value: key.scope,
+                  text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
+                }),
+              ),
+            );
+            select.value = keys.some((key) => key.scope === selected) ? selected : "";
+            if (select.value !== selected) {
+              saveChoice("admin", "analysis-key");
+              resetLoadState(detailLoads.adminAnalysis);
+              resetLoadState(detailLoads.adminErrors);
+              resetRequestEventLoad(false);
+            }
+          },
+          () => {
+            $("analysis-key").disabled = !!load.promise;
+          },
         );
-        if (select.value && !state.keys.some((key) => key.scope === select.value)) {
-          const option = select.selectedOptions[0];
-          const label = option.textContent.replace(/（已不可用）$/, "");
-          option.textContent = label + "（已不可用）";
-        }
       }
 
       function requestEventPath(offset, limit, account, range = selectedRange(account)) {
@@ -7238,7 +7321,7 @@
           renderRequestEvents(account);
         const existing = append && owner.requestEvents ? owner.requestEvents.entries || [] : [];
         const offset = existing.length;
-        const range = append ? load.range : selectedRange(account);
+        const range = append ? load.range : { ...(options.range || selectedRange(account)) };
         if (!append) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
         const path = requestEventPath(offset, REQUEST_EVENT_BATCH_SIZE, account, range);
         const ticket = ++load.request;
@@ -7646,12 +7729,13 @@
       }
       function renderPlanKeyPicker(planID) {
         const picker = $("plan-key-picker");
-        if (!state.keys.length) {
+        const keys = state.keys.filter((key) => !key.deleted_at || (planID && key.plan_id === planID));
+        if (!keys.length) {
           picker.replaceChildren(el("div", { class: "empty", text: "暂无 API Key" }));
           return;
         }
         picker.replaceChildren(
-          ...state.keys.map((key) => {
+          ...keys.map((key) => {
             const ownedByOther = !!key.plan_id && key.plan_id !== planID;
             const owner = ownedByOther ? state.plans.find((plan) => plan.id === key.plan_id) : null;
             return el(
@@ -7661,9 +7745,14 @@
                 type: "checkbox",
                 value: key.scope,
                 checked: key.plan_id === planID && !!planID,
-                disabled: ownedByOther || undefined,
+                disabled: ownedByOther,
               }),
               renderAPIKeyIdentity(key),
+              key.deleted_at ? el("span", {
+                class: "tag plain",
+                text: "已删除",
+                title: "可取消勾选以解除绑定",
+              }) : null,
               owner ? el("span", { class: "muted small", text: "已绑定「" + (owner.name || owner.id) + "」" }) : null,
             );
           }),
@@ -7706,7 +7795,7 @@
           amount_usd: amount,
           period_seconds: seconds,
           scopes: Array.from(
-            $("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked'),
+            $("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
             (input) => input.value,
           ),
         };
@@ -7843,8 +7932,8 @@
           const list = await api("GET", "/v0/management/api-keys", null, { raw: true });
           keys = (list && list["api-keys"]) || [];
           const result = await plugin("POST", "/keys/sync", { keys, allow_empty: true });
-          if (result.added || result.removed) {
-            summaries.push("API Key 同步完成：新增 " + result.added + " 个，移除 " + result.removed + " 个");
+          if (result.added || result.deleted) {
+            summaries.push("API Key 同步完成：新增 " + result.added + " 个，删除 " + result.deleted + " 个");
           } else if (!keys.length) {
             summaries.push("CLIProxyAPI 尚未配置 API Key");
           }
@@ -8100,6 +8189,7 @@
       }
 
       function applySharedTimeRange(account) {
+        if (!account) resetLoadState(detailLoads.adminEventKeys);
         const owner = account ? accountState : state;
         owner.analysis = null;
         owner.errors = null;
@@ -8107,11 +8197,7 @@
         resetLoadState(account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis);
         resetLoadState(account ? detailLoads.accountErrors : detailLoads.adminErrors);
         resetRequestEventLoad(account);
-        const tab = account ? accountTab : activeAdminTab();
-        if (tab === "analysis") return loadAnalysis(account);
-        if (tab === "errors") return loadErrors(account);
-        if (tab === "request-events") return loadRequestEvents(false, account);
-        return Promise.resolve();
+        return loadView(account);
       }
 
       for (const account of [false, true]) {
@@ -8208,6 +8294,10 @@
         };
 
       $("key-filter").addEventListener("input", renderKeys);
+      $("keys-include-deleted").addEventListener("change", () => {
+        saveChoice("admin", "keys-include-deleted");
+        renderKeys();
+      });
       $("plan-period").replaceChildren(
         ...Array.from(PLAN_PERIOD_OPTIONS, ([value, label]) => el("option", { value, text: label })),
       );
@@ -8326,7 +8416,10 @@
                 route?.bound_key_count &&
                 !(await confirmAction(
                   "保存路由规则？",
-                  "保存后将立即影响 " + route.bound_key_count + " 个 API Key，请确认规则效果。",
+                  "保存后将更新所选 Key 的绑定及规则。" +
+                    (route.deleted_key_count
+                      ? "已删除 Key 也会按本次勾选结果保留或解除绑定；保留绑定的 Key 重新加入时使用更新后的规则。"
+                      : ""),
                 ))
               )
                 return;
@@ -8418,12 +8511,14 @@
           if (
             !(await confirmAction(
               "重置所有周期性额度？",
-              "绑定周期性计划的 API Key 会结束当前周期，下一次请求开启新周期；不重置的计划和累计用量不受影响。",
+              "未删除且绑定周期性计划的 API Key 会结束当前周期，下一次请求开启新周期；不重置的计划和累计用量不受影响。",
             ))
           )
             return;
           const periodicPlans = new Set(state.plans.filter((plan) => plan.period_seconds > 0).map((plan) => plan.id));
-          const scopes = state.keys.filter((key) => periodicPlans.has(key.plan_id)).map((key) => key.scope);
+          const scopes = state.keys
+            .filter((key) => !key.deleted_at && periodicPlans.has(key.plan_id))
+            .map((key) => key.scope);
           if (!scopes.length) {
             notify("没有需要重置的额度");
             return;

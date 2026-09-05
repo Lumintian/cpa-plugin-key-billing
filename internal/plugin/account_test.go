@@ -47,6 +47,37 @@ func configuredAccountApp(t *testing.T) *App {
 	return app
 }
 
+func TestUsageCreatesKeyIdentityBeforeAnyFrontendSync(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "failure"}[failed], func(t *testing.T) {
+			app, path := newAppWithPriceAndState(t, true)
+			const apiKey = "sk-0001"
+			publishUsageRecord(t, app, UsageRecord{
+				APIKey: apiKey, Model: "gpt-5.5", Alias: "gpt-5.5", Failed: failed,
+				RequestedAt: app.store.Now(), Detail: UsageDetail{InputTokens: 100, TotalTokens: 100},
+			})
+			app.Shutdown()
+			cfg := billing.DefaultConfig()
+			cfg.StateFile = path
+			if err := app.store.Configure(cfg); err != nil {
+				t.Fatal(err)
+			}
+			keys := app.store.KeyViews()
+			if len(keys) != 1 || keys[0].Scope != billing.CallerScope(apiKey) || keys[0].Preview != "*******" || keys[0].InConfig {
+				t.Fatalf("usage did not persist a complete key identity: %+v", keys)
+			}
+			result, err := app.store.SyncKeys([]string{apiKey}, false)
+			if err != nil || result.Added != 1 || len(app.store.KeyViews()) != 1 {
+				t.Fatalf("sync did not reuse the traffic-created key: %+v, %v", result, err)
+			}
+			events := requestEventEntries(t, app)
+			if len(events) != 1 || events[0].Preview != "*******" || events[0].Failed != failed {
+				t.Fatalf("sync changed usage history or lost its preview: %+v", events)
+			}
+		})
+	}
+}
+
 func TestAccountAccessAuthenticatesByAPIKeyScope(t *testing.T) {
 	app := configuredAccountApp(t)
 

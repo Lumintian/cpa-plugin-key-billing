@@ -54,11 +54,10 @@ type KeyState struct {
 	//	DeletedAt set    a key CPA held and no longer does
 	//	neither set      a principal only ever seen in traffic, which may belong
 	//	                 to another access provider and must therefore never be
-	//	                 retired by a CPA Key-list sync
+	//	                 marked deleted by a CPA Key-list sync
 	//
-	// A deleted key is marked rather than dropped because the record is what
-	// gives request history its identity: each event stores a scope and reads the
-	// masked key and remark from here.
+	// Key records are permanent: historical events resolve their scope to the
+	// preview and label here, even after the key leaves CPA's configuration.
 	InConfig         bool          `json:"in_config,omitempty"`
 	DeletedAt        time.Time     `json:"deleted_at,omitzero"`
 	PlanID           string        `json:"plan_id,omitempty"`

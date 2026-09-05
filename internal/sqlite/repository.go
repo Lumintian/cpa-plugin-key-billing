@@ -56,8 +56,10 @@ func (d *DB) Save(state *billing.State, changes billing.Changes) error {
 
 func saveStateTables(tx *sql.Tx, state *billing.State, changes billing.Changes) error {
 	if changes.AllKeys {
-		if err := replaceKeys(tx, state); err != nil {
-			return err
+		for scope, key := range state.Keys {
+			if err := saveKey(tx, scope, key); err != nil {
+				return err
+			}
 		}
 	} else {
 		for _, scope := range changes.Keys {

@@ -99,7 +99,7 @@ func TestManagementRegistrationExposesOnlyCurrentEndpoints(t *testing.T) {
 		"POST /keys/bind", "POST /keys/unbind", "POST /keys/reset",
 		"POST /keys/label", "POST /keys/concurrency", "POST /keys/sync",
 		"POST /credentials/sync",
-		"GET /analysis", "GET /events", "GET /errors",
+		"GET /analysis", "GET /events", "GET /events/keys", "GET /errors",
 		"GET /plugin-logs", "DELETE /plugin-logs", "GET /auth-files", "GET /auth-files/quota",
 	} {
 		wantRoutes[value] = false

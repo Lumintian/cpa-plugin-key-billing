@@ -14,6 +14,8 @@ import (
 // fixed host-generated vector covers it.
 const callerScopeSalt = "cli-proxy-api:caller-scope:v1\x00"
 
+const UnknownKeyPreview = "unknown"
+
 // Blank principals are not attributable and therefore have no scope.
 func CallerScope(value string) string {
 	value = strings.TrimSpace(value)

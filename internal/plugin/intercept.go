@@ -193,6 +193,7 @@ func (a *App) handleUsage(raw []byte) ([]byte, error) {
 	}
 	event := billing.UsageEvent{
 		Scope:           scope,
+		KeyPreview:      billing.PreviewKey(record.APIKey),
 		AuthIndex:       record.AuthIndex,
 		Provider:        record.Provider,
 		ExecutorType:    record.ExecutorType,

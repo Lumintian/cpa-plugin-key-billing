@@ -87,3 +87,17 @@ func (s *Store) RequestEvents(query RequestEventQuery) (RequestEventView, error)
 	}
 	return view, err
 }
+
+// EventKey identifies a key with at least one request or error in the time range.
+type EventKey struct {
+	Scope     string    `json:"scope"`
+	Preview   string    `json:"preview"`
+	Label     string    `json:"label,omitempty"`
+	DeletedAt time.Time `json:"deleted_at,omitzero"`
+}
+
+func (s *Store) EventKeys(from, to time.Time) ([]EventKey, error) {
+	return withRepository(s, func(repo Repository) ([]EventKey, error) {
+		return repo.EventKeys(from, to, s.Now().Add(-RequestEventRetention))
+	})
+}

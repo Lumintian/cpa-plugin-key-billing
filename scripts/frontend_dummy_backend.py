@@ -493,7 +493,12 @@ def make_key(index):
 
 
 KEYS = [make_key(index) for index in range(1, len(KEY_PROFILES) + 1)]
-LIVE_KEYS = KEYS
+KEYS[-2]["in_config"] = False
+KEYS[-2]["deleted_at"] = iso(NOW - timedelta(days=2))
+KEYS[-1]["in_config"] = False
+KEYS[-1]["deleted_at"] = iso(NOW - timedelta(days=1))
+KEYS[-1]["route_bindings"]["route_ids"] = ["economy"]
+LIVE_KEYS = [key for key in KEYS if not key.get("deleted_at")]
 
 PRICES = [
     {
@@ -660,7 +665,7 @@ EVENT_SAMPLES = SUCCESS_EVENT_SAMPLES * 2 + FAILURE_EVENT_SAMPLES
 def make_request_events():
     entries = []
     for index, sample in enumerate(EVENT_SAMPLES):
-        key = LIVE_KEYS[sample["key_index"]]
+        key = KEYS[sample["key_index"]]
         entries.append({
             "at": iso(NOW - timedelta(hours=index * 22, minutes=(index % 4) * 11)),
             "scope": key["scope"],
@@ -799,8 +804,10 @@ def refresh_route_counts():
     for route in ROUTES:
         bound = [key for key in KEYS if route["id"] in key["route_bindings"]["route_ids"]]
         route["bound_key_count"] = len(bound)
+        route["deleted_key_count"] = sum(bool(key.get("deleted_at")) for key in bound)
         route["fully_unrestricted_keys"] = sum(
-            len(key["route_bindings"]["route_ids"]) == 1
+            not key.get("deleted_at")
+            and len(key["route_bindings"]["route_ids"]) == 1
             and not key["route_bindings"]["models"]
             and not key["route_bindings"]["credential_ids"]
             and not key["route_bindings"]["credential_providers"]
@@ -1132,6 +1139,10 @@ def payload_for(path, query):
         return price_status()
     if path == f"{API_BASE}/prices":
         return model_prices(query, include_custom=query.get("include_custom", ["true"])[0] == "true")
+    if path == f"{API_BASE}/events/keys":
+        scopes = {event["scope"] for event in filter_event_time(REQUEST_EVENTS, query)}
+        return [{field: key[field] for field in ("scope", "preview", "label", "deleted_at") if field in key}
+                for key in KEYS if key["scope"] in scopes]
     if path == f"{API_BASE}/events":
         return request_event_view(query)
     if path == f"{API_BASE}/errors":
@@ -1333,7 +1344,7 @@ class Handler(BaseHTTPRequestHandler):
                     break
             self.send_json(200, {"ok": True})
         elif route == ("POST", f"{API_BASE}/keys/sync"):
-            self.send_json(200, {"added": 0, "removed": 0})
+            self.send_json(200, {"added": 0, "deleted": 0})
         elif route == ("POST", f"{API_BASE}/credentials/sync"):
             body = json.loads(request_body or b"{}")
             CREDENTIALS[:] = [
@@ -1358,14 +1369,16 @@ class Handler(BaseHTTPRequestHandler):
             route_id = parse_qs(parsed.query).get("id", [""])[0]
             affected = 0
             unrestricted = 0
+            deleted = 0
             ROUTES[:] = [item for item in ROUTES if item["id"] != route_id]
             for key in KEYS:
                 route_ids = key["route_bindings"]["route_ids"]
                 if route_id in route_ids:
                     key["route_bindings"]["route_ids"] = [item for item in route_ids if item != route_id]
                     affected += 1
-                    unrestricted += not any(key["route_bindings"].values())
-            self.send_json(200, {"deleted": route_id, "affected_keys": affected, "fully_unrestricted_keys": unrestricted})
+                    deleted += bool(key.get("deleted_at"))
+                    unrestricted += not key.get("deleted_at") and not any(key["route_bindings"].values())
+            self.send_json(200, {"deleted": route_id, "affected_keys": affected, "deleted_keys": deleted, "fully_unrestricted_keys": unrestricted})
         elif route == ("POST", f"{API_BASE}/routes"):
             body = json.loads(request_body or b"{}")
             route_id = f"route-dummy-{len(ROUTES)}"
@@ -1393,6 +1406,22 @@ class Handler(BaseHTTPRequestHandler):
                     key["route_bindings"]["route_ids"] = route_ids
             refresh_route_counts()
             self.send_json(200, {"route": stored})
+        elif route == ("PATCH", f"{API_BASE}/plans"):
+            body = json.loads(request_body or b"{}")
+            plan_id = body.get("id", "")
+            stored = next((item for item in PLANS if item["id"] == plan_id), None)
+            if stored is None:
+                self.send_json(404, {"error": {"message": "dummy backend: plan not found"}})
+                return
+            stored.update({key: body[key] for key in ("name", "amount_usd", "period_seconds") if key in body})
+            if "scopes" in body:
+                scopes = set(body["scopes"])
+                for key in KEYS:
+                    if key["scope"] in scopes:
+                        key["plan_id"] = plan_id
+                    elif key["plan_id"] == plan_id:
+                        key["plan_id"] = ""
+            self.send_json(200, {"plan": stored})
         elif route == ("PUT", f"{API_BASE}/keys/routes"):
             body = json.loads(request_body or b"{}")
             bindings = body.get("bindings", {})
@@ -1412,7 +1441,6 @@ class Handler(BaseHTTPRequestHandler):
             ("POST", f"{API_BASE}/keys/unbind"),
             ("POST", f"{API_BASE}/keys/label"),
             ("POST", f"{API_BASE}/plans"),
-            ("PATCH", f"{API_BASE}/plans"),
             ("DELETE", f"{API_BASE}/plans"),
             ("PUT", f"{API_BASE}/prices"),
         }:

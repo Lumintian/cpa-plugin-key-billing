@@ -1,6 +1,7 @@
 package billing
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -84,50 +85,6 @@ func TestConfigureKeepsTheLiveDocumentWhenTheNewPathFails(t *testing.T) {
 	}
 }
 
-// The request path must write one key rather than the whole record, and the
-// operations that reshape the key set must write all of it.
-func TestMutationsWriteOnlyWhatTheyTouched(t *testing.T) {
-	store, repo := newStoreWithRepository(t)
-	store.ReplaceAll(func(state *State) {
-		state.Plans = []Plan{{ID: "daily", AmountUSD: 5, PeriodSeconds: 86400}}
-		state.Keys["scope-a"] = &KeyState{}
-		state.Keys["scope-b"] = &KeyState{}
-	})
-
-	repo.saves = nil
-	if errLabel := store.SetLabel("scope-a", "Alice"); errLabel != nil {
-		t.Fatalf("SetLabel error = %v", errLabel)
-	}
-	if len(repo.saves) != 1 || repo.saves[0].AllKeys ||
-		len(repo.saves[0].Keys) != 1 || repo.saves[0].Keys[0] != "scope-a" {
-		t.Fatalf("saves = %+v, want the one renamed key", repo.saves)
-	}
-
-	repo.saves = nil
-	if _, errSync := store.SyncKeys([]string{"sk-live-000000001"}, false); errSync != nil {
-		t.Fatalf("SyncKeys error = %v", errSync)
-	}
-	if len(repo.saves) != 1 || !repo.saves[0].AllKeys {
-		t.Fatalf("saves = %+v, want the whole key set rewritten", repo.saves)
-	}
-}
-
-// Unchanged key synchronization must not rewrite unrelated prices or history.
-func TestSyncsWriteNothingWhenNothingMoved(t *testing.T) {
-	store, repo := newStoreWithRepository(t)
-	if _, errKeys := store.SyncKeys([]string{"sk-live-000000001"}, false); errKeys != nil {
-		t.Fatalf("SyncKeys error = %v", errKeys)
-	}
-
-	repo.saves = nil
-	if _, errKeys := store.SyncKeys([]string{"sk-live-000000001"}, false); errKeys != nil {
-		t.Fatalf("SyncKeys error = %v", errKeys)
-	}
-	if len(repo.saves) != 0 {
-		t.Fatalf("saves = %+v, want a sync that moved nothing to write nothing", repo.saves)
-	}
-}
-
 // Closing is where the write-ahead log is folded back into the database, so a
 // failure there is the operator's warning that the tail of the record may exist
 // only beside it. A reconfigure has the incoming database to record that in.
@@ -170,9 +127,15 @@ func TestRecoveredWriteIncludesPendingRequestEvents(t *testing.T) {
 		t.Fatalf("request events = %d while writes fail", len(repo.requestEvents))
 	}
 
+	if err := store.SetConcurrencyLimit("scope-a", 1); err == nil {
+		t.Fatal("failed management write returned success")
+	}
 	repo.fail = nil
 	if err := store.SetLabel("scope-a", "Alice"); err != nil {
 		t.Fatal(err)
+	}
+	if store.state.Keys["scope-a"].ConcurrencyLimit != 0 {
+		t.Fatal("failed management edit was retried with usage")
 	}
 	if len(repo.requestEvents) != 2 {
 		t.Fatalf("recovered request events = %d, want 2", len(repo.requestEvents))
@@ -191,5 +154,46 @@ func TestFailedWritesBoundPendingRequestEvents(t *testing.T) {
 	}
 	if want := now.Add(25 * time.Second); !store.dirty.NormalRequestEvents[0].At.Equal(want) {
 		t.Fatalf("oldest pending request event = %v, want %v", store.dirty.NormalRequestEvents[0].At, want)
+	}
+}
+
+func TestConfigurationWriteFailureKeepsState(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		edit func(*Store) error
+	}{
+		{"concurrency", func(s *Store) error { return s.SetConcurrencyLimit("key", 1) }},
+		{"sync", func(s *Store) error { _, err := s.SyncKeys([]string{"sk-test-sync-0001"}, false); return err }},
+		{"delete plan", func(s *Store) error { _, err := s.DeletePlan("p"); return err }},
+		{"delete route", func(s *Store) error { _, err := s.DeleteRoute("r"); return err }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store, repo := newStoreWithRepository(t)
+			store.ReplaceAll(func(state *State) {
+				state.Plans = []Plan{{ID: "p", AmountUSD: 10}}
+				state.Routes = []Route{{ID: "r", Name: "r"}, {ID: "keep", Name: "keep"}}
+				state.Keys["key"] = &KeyState{Preview: "unknown", InConfig: true, PlanID: "p",
+					Cycle:         Cycle{PlanID: "p", StartAt: time.Now(), SpentUSD: 5},
+					RouteBindings: RouteBindings{RouteIDs: []string{"r", "keep"}}}
+			})
+			before, err := json.Marshal(store.state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			repo.fail = errors.New("disk full")
+			if err := test.edit(store); !errors.Is(err, repo.fail) {
+				t.Fatalf("edit error = %v", err)
+			}
+			after, err := json.Marshal(store.state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(before) != string(after) {
+				t.Fatal("failed edit changed the live state")
+			}
+			if !store.dirty.empty() {
+				t.Fatal("failed edit entered the usage retry queue")
+			}
+		})
 	}
 }

@@ -265,9 +265,13 @@ func (a *App) resetKeys(req ManagementRequest) ManagementResponse {
 	if errDecode := decodeStrict(req.Body, &scopes); errDecode != nil {
 		return errorResponse(errDecode)
 	}
+	reset, err := a.store.ResetCycles(scopes)
+	if err != nil {
+		return errorResponse(err)
+	}
 	return JSONResponse(http.StatusOK, struct {
 		Reset int `json:"reset"`
-	}{Reset: a.store.ResetCycles(scopes)})
+	}{Reset: reset})
 }
 
 func (a *App) labelKey(req ManagementRequest) ManagementResponse {
@@ -311,13 +315,15 @@ func (a *App) syncKeys(req ManagementRequest) ManagementResponse {
 	if errSync != nil {
 		return errorResponse(errSync)
 	}
-	if result.Added > 0 || result.Removed > 0 {
-		a.store.AddPluginLog(billing.PluginLogInfo, "CLIProxyAPI API Key 已同步：新增 %d 个，移除 %d 个",
-			result.Added, result.Removed)
+	if result.Added > 0 || result.Deleted > 0 {
+		a.store.AddPluginLog(billing.PluginLogInfo, "CLIProxyAPI API Key 已同步：新增 %d 个，删除 %d 个",
+			result.Added, result.Deleted)
 	}
 	live := make(map[string]struct{})
 	for _, key := range a.store.KeyViews() {
-		live[key.Scope] = struct{}{}
+		if key.DeletedAt.IsZero() {
+			live[key.Scope] = struct{}{}
+		}
 	}
 	a.scheduler.prune(live)
 	return JSONResponse(http.StatusOK, result)

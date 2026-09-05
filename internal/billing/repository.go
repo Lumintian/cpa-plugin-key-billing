@@ -9,10 +9,10 @@ type Repository interface {
 	UpsertPrice(price CustomPrice) error
 	DeletePrice(modelID string) error
 
+	EventKeys(from, to, since time.Time) ([]EventKey, error)
 	RequestEvents(query RequestEventQuery, since time.Time) (RequestEventView, error)
 	RequestErrors(query RequestErrorQuery, since time.Time) (RequestErrorView, error)
 	Analysis(query RequestEventQuery, since time.Time) (AnalysisView, error)
-	RequestEventScopes(since time.Time) (map[string]struct{}, error)
 
 	AppendPluginLog(entry PluginLog, cutoff time.Time) error
 	PluginLogsPage(query PluginLogQuery) (PluginLogPage, error)
@@ -32,8 +32,7 @@ type Snapshot struct {
 // are named individually because usage accounting runs on every proxied request
 // and must touch a single row.
 type Changes struct {
-	// Keys lists the scopes to write. AllKeys instead replaces the entire key
-	// set, dropping the records the state no longer holds.
+	// Keys lists the scopes to upsert. AllKeys upserts every key in State.
 	Keys    []string
 	AllKeys bool
 

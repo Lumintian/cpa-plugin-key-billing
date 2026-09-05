@@ -7,6 +7,7 @@ import (
 
 type UsageEvent struct {
 	Scope           string
+	KeyPreview      string
 	AuthIndex       string
 	Provider        string
 	ExecutorType    string
@@ -78,8 +79,7 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 			ReasoningTokens:   event.Breakdown.Output.ReasoningTokens,
 		}
 		var changedKeys []string
-		if scope != "" {
-			key := state.ensureKey(scope)
+		if key := state.ensureKey(scope, event.KeyPreview); key != nil {
 			if !failed || usageBreakdownPresent(event.Breakdown) {
 				chargeCycle(key, event, cost.TotalUSD)
 			}
@@ -128,18 +128,6 @@ func chargeCycle(key *KeyState, event UsageEvent, costUSD float64) {
 		return
 	}
 	key.Cycle.SpentUSD += costUSD
-}
-
-func (s *State) ensureKey(scope string) *KeyState {
-	if s.Keys == nil {
-		s.Keys = make(map[string]*KeyState)
-	}
-	key := s.Keys[scope]
-	if key == nil {
-		key = &KeyState{}
-		s.Keys[scope] = key
-	}
-	return key
 }
 
 func usageBreakdownPresent(value TokenBreakdown) bool {

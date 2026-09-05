@@ -85,8 +85,8 @@ func TestRepositoryRoundTrip(t *testing.T) {
 func TestSaveWritesOnlyNamedKeys(t *testing.T) {
 	database := openTestDB(t)
 	state := billing.NewState()
-	state.Keys["scope-a"] = &billing.KeyState{Label: "A"}
-	state.Keys["scope-b"] = &billing.KeyState{Label: "B"}
+	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", Label: "A"}
+	state.Keys["scope-b"] = &billing.KeyState{Preview: "sk-tes…0002", Label: "B"}
 	mustSave(t, database, state, billing.Changes{AllKeys: true})
 	state.Keys["scope-a"].Label = "A2"
 	state.Keys["scope-b"].Label = "B2"
@@ -101,8 +101,8 @@ func TestKeyGrantIsRewrittenWithTheKey(t *testing.T) {
 	database := openTestDB(t)
 	state := billing.NewState()
 	state.Routes = []billing.Route{{ID: "fast", Name: "Fast", Rule: billing.RouteRule{Models: []string{"gpt-5.5"}, CredentialIDs: []string{}, CredentialProviders: []billing.CredentialProviderSelector{}}}}
-	state.Keys["scope-a"] = &billing.KeyState{RouteBindings: billing.RouteBindings{RouteIDs: []string{"fast"}, Models: []string{"claude"}}}
-	state.Keys["scope-b"] = &billing.KeyState{RouteBindings: billing.RouteBindings{RouteIDs: []string{"fast"}}}
+	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", RouteBindings: billing.RouteBindings{RouteIDs: []string{"fast"}, Models: []string{"claude"}}}
+	state.Keys["scope-b"] = &billing.KeyState{Preview: "sk-tes…0002", RouteBindings: billing.RouteBindings{RouteIDs: []string{"fast"}}}
 	mustSave(t, database, state, billing.Changes{AllKeys: true, Routes: true})
 	state.Keys["scope-a"].RouteBindings = billing.RouteBindings{Models: []string{"other"}}
 	mustSave(t, database, state, billing.Changes{Keys: []string{"scope-a"}})

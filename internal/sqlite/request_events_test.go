@@ -186,15 +186,41 @@ func TestLoadDropsEntriesPastRetention(t *testing.T) {
 	}
 }
 
-func TestRequestEventScopes(t *testing.T) {
-	database, _ := requestEventDatabase(t)
-
-	scopes, errScopes := database.RequestEventScopes(eventStart.Add(-billing.RequestEventRetention))
-	if errScopes != nil {
-		t.Fatalf("RequestEventScopes error = %v", errScopes)
+func TestEventKeysFollowTimeRangeAndRetainDeletedIdentities(t *testing.T) {
+	database := openTestDB(t)
+	state := billing.NewState()
+	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	state.Keys["active"] = &billing.KeyState{Preview: "sk-tes…0001", InConfig: true}
+	state.Keys["deleted"] = &billing.KeyState{Preview: "sk-tes…0002", Label: "Deleted", DeletedAt: start}
+	state.Keys["idle"] = &billing.KeyState{Preview: "sk-tes…0003"}
+	mustSave(t, database, state, billing.Changes{AllKeys: true,
+		NormalRequestEvents: []billing.RequestEvent{
+			requestEvent("active", start), requestEvent("active", start.Add(time.Minute)),
+			requestEvent("outside", start.Add(-time.Nanosecond)),
+			requestEvent("end", start.Add(time.Hour)), requestEvent("", start),
+		},
+		RequestErrorEvents: []billing.RequestErrorEvent{{Event: requestEvent("deleted", start.Add(2*time.Minute)), Error: billing.RequestError{StatusCode: 502}}},
+	})
+	keys, err := database.EventKeys(start, start.Add(time.Hour), start.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(scopes) != 2 {
-		t.Fatalf("scopes = %+v, want both keys the events still name", scopes)
+	if len(keys) != 2 {
+		t.Fatalf("keys = %+v, want distinct normal and error identities only", keys)
 	}
-
+	found := map[string]billing.EventKey{}
+	for _, key := range keys {
+		found[key.Scope] = key
+	}
+	if found["active"].Preview != "sk-tes…0001" || found["deleted"].Label != "Deleted" || !found["deleted"].DeletedAt.Equal(start) {
+		t.Fatalf("lost key identity or status: %+v", keys)
+	}
+	keys, err = database.EventKeys(start, start.Add(time.Hour), start.Add(2*time.Minute))
+	if err != nil || len(keys) != 1 || keys[0].Scope != "deleted" {
+		t.Fatalf("retention cutoff ignored: %+v, %v", keys, err)
+	}
+	keys, err = database.EventKeys(start.Add(3*time.Minute), start.Add(time.Hour), start)
+	if err != nil || keys == nil || len(keys) != 0 {
+		t.Fatalf("empty range = %+v, %v", keys, err)
+	}
 }

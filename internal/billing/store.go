@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// Locking: cfgMu serializes Configure/Close against each other; mu guards the
-// working set, the active config and the repository. A save runs under mu so
-// that memory and disk can never disagree about what was committed.
+// cfgMu serializes Configure/Close. mu guards state, config and repository
+// access, including mutations and their database writes.
 //
 // Work must finish synchronously within host calls: background activity in this
 // embedded Go runtime can conflict with CLIProxyAPI's runtime.
@@ -91,9 +91,7 @@ func (s *Store) Configure(cfg Config) error {
 		return nil
 	}
 
-	// Open and read the incoming database before touching anything, so a switch
-	// to an unusable path leaves the current one live. Nothing has to be written
-	// on the way out: every change is already committed.
+	// Load the incoming database before replacing the active one.
 	repo, errOpen := s.open(path)
 	if errOpen != nil {
 		return errOpen
@@ -128,8 +126,7 @@ func (s *Store) Configure(cfg Config) error {
 	return nil
 }
 
-// Close releases the database. The host calls it through the C ABI shutdown
-// hook. There is nothing left to write by then.
+// Close releases the database when the host shuts down the plugin.
 func (s *Store) Close() {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()
@@ -168,15 +165,8 @@ func (s *Store) read(fn func(*State)) {
 	fn(s.state)
 }
 
-// updateResult applies one mutation and writes the rows it reports touching.
-// The save happens under the same lock as the mutation. A failed change stays
-// live in memory and is merged into the next write, including append-only log
-// entries. Holding the lock across the write
-// also holds up the request path for as long as the write takes — the database
-// serves a single connection, so a save already waits behind any query in
-// flight, and _busy_timeout bounds what a writer outside this process can add.
-// A mutation that panics still releases the lock, because the plugin log the
-// panic is reported through is behind the same one.
+// Usage and cycle settlement stay live when persistence fails; their pending
+// changes are retried on the next write. Management edits use editConfiguration.
 func updateResult[T any](s *Store, fn func(*State) (T, Changes)) T {
 	var (
 		value   T
@@ -212,6 +202,61 @@ func updateResult[T any](s *Store, fn func(*State) (T, Changes)) T {
 	return value
 }
 
+// Management edits publish keys, plans and routes only after saving succeeds.
+// Failed edits must not enter the retry queue for already-recorded usage.
+func editConfiguration[T any](s *Store, fn func(*State) (T, Changes, error)) (T, error) {
+	var value T
+	var errSave error
+	written := false
+	err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		next := *s.state
+		next.Plans = slices.Clone(s.state.Plans)
+		next.Routes = make([]Route, len(s.state.Routes))
+		for i, route := range s.state.Routes {
+			next.Routes[i] = cloneRoute(route)
+		}
+		next.Keys = make(map[string]*KeyState, len(s.state.Keys))
+		for scope, key := range s.state.Keys {
+			if key == nil {
+				next.Keys[scope] = nil
+				continue
+			}
+			copyKey := *key
+			copyKey.RouteBindings.RouteIDs = slices.Clone(key.RouteBindings.RouteIDs)
+			copyKey.RouteBindings.Models = slices.Clone(key.RouteBindings.Models)
+			copyKey.RouteBindings.CredentialIDs = slices.Clone(key.RouteBindings.CredentialIDs)
+			copyKey.RouteBindings.CredentialProviders = slices.Clone(key.RouteBindings.CredentialProviders)
+			next.Keys[scope] = &copyKey
+		}
+
+		result, changes, err := fn(&next)
+		if err != nil {
+			return err
+		}
+		changes = s.dirty.merge(changes)
+		written = s.repo != nil && !changes.empty()
+		if written {
+			errSave = s.repo.Save(&next, changes)
+			if errSave != nil {
+				return fmt.Errorf("保存配置失败：%w", errSave)
+			}
+			s.dirty = Changes{}
+		}
+		s.state = &next
+		value = result
+		return nil
+	}()
+	if errSave != nil {
+		s.recordWriteError(errSave)
+	} else if written {
+		s.recordWriteSuccess()
+	}
+	return value, err
+}
+
 func (s *Store) recordWriteSuccess() {
 	s.errMu.Lock()
 	recovered := s.lastError != ""
@@ -235,13 +280,7 @@ func (s *Store) recordWriteError(err error) {
 	}
 }
 
-// withRepository runs fn against the active repository, holding the read lock
-// for the whole call so that a reconfigure cannot close the database out from
-// under a query in flight: Configure swaps the repository under the write lock
-// and only closes the old one afterwards, which a reader holding the lock has
-// already finished with. Costing the write path anything is unlikely — the
-// database serves a single connection, so a save waits behind the query either
-// way. A store the host has not configured yet has nothing to read.
+// Hold the read lock until the query ends so Configure cannot close its database.
 func withRepository[T any](s *Store, fn func(Repository) (T, error)) (T, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

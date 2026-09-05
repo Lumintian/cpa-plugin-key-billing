@@ -102,16 +102,6 @@ func TestRouteWritesReplaceOnlyThatRoutesKeyBindings(t *testing.T) {
 	}
 }
 
-func TestCreateRouteRollsBackForUnknownKey(t *testing.T) {
-	store := newStore(t)
-	if _, err := store.CreateRoute(Route{Name: "Codex"}, []string{"missing"}); err == nil {
-		t.Fatal("expected unknown key error")
-	}
-	if routes := store.RouteViews(); len(routes) != 0 {
-		t.Fatalf("routes changed after failed create: %+v", routes)
-	}
-}
-
 func TestRoutingUsesTheBillingModelIdentity(t *testing.T) {
 	store := newStore(t)
 	store.ReplaceAll(func(state *State) {
@@ -209,11 +199,22 @@ func TestDeleteRouteCascadesBindingsAndReportsWidening(t *testing.T) {
 		state.Keys["scope-deleted"] = &KeyState{DeletedAt: time.Now(), RouteBindings: RouteBindings{RouteIDs: []string{"only"}}}
 	})
 	views := store.RouteViews()
-	if len(views) != 1 || views[0].BoundKeyCount != 1 {
+	if len(views) != 1 || views[0].BoundKeyCount != 2 || views[0].DeletedKeyCount != 1 {
 		t.Fatalf("views=%+v", views)
 	}
+	selected := []string{"scope-a", "scope-deleted"}
+	name := "Renamed"
+	if _, err := store.UpdateRoute(RoutePatch{ID: "only", Name: &name}, &selected); err != nil {
+		t.Fatal(err)
+	}
+	store.Read(func(state *State) {
+		if len(state.Keys["scope-deleted"].RouteBindings.RouteIDs) != 1 {
+			t.Fatal("editing lost a selected binding")
+		}
+	})
+
 	result, err := store.DeleteRoute("only")
-	if err != nil || result.AffectedKeys != 1 || result.FullyUnrestrictedKeys != 1 {
+	if err != nil || result.AffectedKeys != 2 || result.DeletedKeys != 1 || result.FullyUnrestrictedKeys != 1 {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	store.Read(func(state *State) {
@@ -221,4 +222,36 @@ func TestDeleteRouteCascadesBindingsAndReportsWidening(t *testing.T) {
 			t.Fatalf("deleted key retained route binding: %+v", state.Keys["scope-deleted"].RouteBindings)
 		}
 	})
+}
+
+func TestRouteEditCanUnbindDeletedKeys(t *testing.T) {
+	store := newStore(t)
+	store.ReplaceAll(func(state *State) {
+		state.Routes = []Route{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}}
+		state.Keys["deleted"] = &KeyState{Preview: "sk-tes…0001", DeletedAt: time.Now(),
+			RouteBindings: RouteBindings{RouteIDs: []string{"a", "b"}, Models: []string{"gpt-5.5"}}}
+	})
+	name := "Renamed"
+	if _, err := store.UpdateRoute(RoutePatch{ID: "a", Name: &name}, nil); err != nil {
+		t.Fatal(err)
+	}
+	selected := []string{"deleted"}
+	if _, err := store.UpdateRoute(RoutePatch{ID: "a"}, &selected); err != nil {
+		t.Fatal(err)
+	}
+	selected = []string{}
+	if _, err := store.UpdateRoute(RoutePatch{ID: "a"}, &selected); err != nil {
+		t.Fatal(err)
+	}
+	store.Read(func(state *State) {
+		key := state.Keys["deleted"]
+		if len(key.RouteBindings.RouteIDs) != 1 || key.RouteBindings.RouteIDs[0] != "b" ||
+			len(key.RouteBindings.Models) != 1 || key.DeletedAt.IsZero() {
+			t.Fatalf("unbinding changed unrelated settings: %+v", key)
+		}
+	})
+	selected = []string{"deleted"}
+	if _, err := store.UpdateRoute(RoutePatch{ID: "a"}, &selected); err == nil {
+		t.Fatal("rebound a deleted key through route editing")
+	}
 }

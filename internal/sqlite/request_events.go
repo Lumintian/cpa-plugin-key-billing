@@ -251,22 +251,31 @@ func scanRequestEventRow(rows *sql.Rows) (billing.RequestEventRow, error) {
 	return row, nil
 }
 
-func (d *DB) RequestEventScopes(since time.Time) (map[string]struct{}, error) {
-	rows, errQuery := d.db.Query("SELECT DISTINCT scope FROM request_events WHERE at >= ?", nanos(since))
-	if errQuery != nil {
-		return nil, fmt.Errorf("读取请求事件涉及的 API Key：%w", errQuery)
+func (d *DB) EventKeys(from, to, since time.Time) ([]billing.EventKey, error) {
+	// Error records also have a request_events row.
+	where, args := eventTimeFilter("FROM request_events r WHERE r.at >= ?", from, to, since)
+	rows, err := d.db.Query(`SELECT scopes.scope, coalesce(NULLIF(k.preview, ''), ?),
+        coalesce(k.label, ''), coalesce(k.deleted_at, 0)
+        FROM (SELECT DISTINCT r.scope `+where+` AND r.scope != '') scopes
+        LEFT JOIN api_keys k ON k.scope = scopes.scope
+        ORDER BY coalesce(NULLIF(k.label, ''), k.preview, '') COLLATE NOCASE, scopes.scope`,
+		append([]any{billing.UnknownKeyPreview}, args...)...)
+	if err != nil {
+		return nil, fmt.Errorf("读取事件 API Key 筛选项：%w", err)
 	}
 	defer rows.Close()
-	scopes := make(map[string]struct{})
+	keys := []billing.EventKey{}
 	for rows.Next() {
-		var scope string
-		if errScan := rows.Scan(&scope); errScan != nil {
-			return nil, fmt.Errorf("读取请求事件涉及的 API Key：%w", errScan)
+		var key billing.EventKey
+		var deletedAt int64
+		if err := rows.Scan(&key.Scope, &key.Preview, &key.Label, &deletedAt); err != nil {
+			return nil, fmt.Errorf("读取事件 API Key 筛选项：%w", err)
 		}
-		scopes[scope] = struct{}{}
+		key.DeletedAt = timeAt(deletedAt)
+		keys = append(keys, key)
 	}
-	if errRows := rows.Err(); errRows != nil {
-		return nil, fmt.Errorf("读取请求事件涉及的 API Key：%w", errRows)
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("读取事件 API Key 筛选项：%w", err)
 	}
-	return scopes, nil
+	return keys, nil
 }

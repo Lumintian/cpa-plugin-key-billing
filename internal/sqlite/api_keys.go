@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"cpa-key-billing/internal/billing"
 )
@@ -23,10 +24,10 @@ ON CONFLICT(scope) DO UPDATE SET
 
 func saveKey(tx *sql.Tx, scope string, key *billing.KeyState) error {
 	if key == nil {
-		if _, errDelete := tx.Exec("DELETE FROM api_keys WHERE scope = ?", scope); errDelete != nil {
-			return fmt.Errorf("删除 API Key %s：%w", scope, errDelete)
-		}
-		return nil
+		return fmt.Errorf("API Key 记录不能为空")
+	}
+	if strings.TrimSpace(scope) == "" || strings.TrimSpace(key.Preview) == "" {
+		return fmt.Errorf("API Key 的标识和掩码不能为空")
 	}
 	bindings, errJSON := json.Marshal(key.RouteBindings)
 	if errJSON != nil {
@@ -41,19 +42,12 @@ func saveKey(tx *sql.Tx, scope string, key *billing.KeyState) error {
 	return nil
 }
 
-func replaceKeys(tx *sql.Tx, state *billing.State) error {
-	if _, errClear := tx.Exec("DELETE FROM api_keys"); errClear != nil {
-		return fmt.Errorf("保存 API Key 列表：%w", errClear)
-	}
-	for scope, key := range state.Keys {
-		if errKey := saveKey(tx, scope, key); errKey != nil {
-			return errKey
-		}
-	}
-	return nil
-}
-
 func (d *DB) loadKeys(state *billing.State) error {
+	// Older traffic-created keys have no recoverable mask. Keep their identity
+	// and bindings until usage or a key-list sync supplies the real preview.
+	if _, err := d.db.Exec("UPDATE api_keys SET preview = ? WHERE trim(preview) = ''", billing.UnknownKeyPreview); err != nil {
+		return fmt.Errorf("补齐 API Key 显示名称：%w", err)
+	}
 	rows, errQuery := d.db.Query(`
 		SELECT scope, preview, label, in_config, deleted_at, plan_id, concurrency_limit,
 			cycle_plan_id, cycle_start_at, cycle_end_at, cycle_spent_usd, route_bindings_json
@@ -72,6 +66,9 @@ func (d *DB) loadKeys(state *billing.State) error {
 		if errScan := rows.Scan(&scope, &key.Preview, &key.Label, &key.InConfig, &deletedAt, &key.PlanID, &key.ConcurrencyLimit,
 			&key.Cycle.PlanID, &cycleStart, &cycleEnd, &key.Cycle.SpentUSD, &bindingsJSON); errScan != nil {
 			return fmt.Errorf("读取 API Key 列表：%w", errScan)
+		}
+		if strings.TrimSpace(scope) == "" || strings.TrimSpace(key.Preview) == "" {
+			return fmt.Errorf("API Key 的标识和掩码不能为空")
 		}
 		key.DeletedAt = timeAt(deletedAt)
 		key.Cycle.StartAt = timeAt(cycleStart)

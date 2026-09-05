@@ -7,10 +7,11 @@ import (
 )
 
 type KeyView struct {
-	Scope    string `json:"scope"`
-	Preview  string `json:"preview,omitempty"`
-	Label    string `json:"label,omitempty"`
-	InConfig bool   `json:"in_config"`
+	Scope     string    `json:"scope"`
+	Preview   string    `json:"preview,omitempty"`
+	Label     string    `json:"label,omitempty"`
+	InConfig  bool      `json:"in_config"`
+	DeletedAt time.Time `json:"deleted_at,omitzero"`
 
 	PlanID             string        `json:"plan_id,omitempty"`
 	PlanName           string        `json:"plan_name,omitempty"`
@@ -26,9 +27,7 @@ type KeyView struct {
 	CycleEndAt  time.Time `json:"cycle_end_at,omitzero"`
 }
 
-// Listing rolls expired windows first, so what an operator reads is exactly
-// what the next request would be judged against — a key whose budget reset an
-// hour ago must not still be displayed as blocked.
+// Settle expired cycles before displaying quota status for active keys.
 func (s *Store) KeyViews() []KeyView {
 	now := s.Now()
 	return updateResult(s, func(state *State) ([]KeyView, Changes) {
@@ -39,10 +38,10 @@ func (s *Store) KeyViews() []KeyView {
 		}
 		views := make([]KeyView, 0, len(state.Keys))
 		for scope, key := range state.Keys {
-			if key == nil || !key.DeletedAt.IsZero() {
+			if key == nil {
 				continue
 			}
-			if settleKeyPlan(key, plans, now) {
+			if key.DeletedAt.IsZero() && settleKeyPlan(key, plans, now) {
 				settled = append(settled, scope)
 			}
 			views = append(views, keyView(scope, key, plans, s.activeByScope[scope]))
@@ -58,6 +57,7 @@ func keyView(scope string, key *KeyState, plans map[string]Plan, currentConcurre
 		Preview:            key.Preview,
 		Label:              key.Label,
 		InConfig:           key.InConfig,
+		DeletedAt:          key.DeletedAt,
 		PlanID:             key.PlanID,
 		ConcurrencyLimit:   key.ConcurrencyLimit,
 		CurrentConcurrency: currentConcurrency,
@@ -100,9 +100,7 @@ func settleKeyPlan(key *KeyState, plans map[string]Plan, now time.Time) bool {
 	return true
 }
 
-// KeyViewForScope returns one active principal without materializing every
-// other key. It applies the same expired-cycle settlement as KeyViews so the
-// account page and the next admission decision agree.
+// KeyViewForScope settles and returns one active key.
 func (s *Store) KeyViewForScope(scope string) (KeyView, bool) {
 	scope = normalizeScope(scope)
 	if scope == "" {
@@ -151,26 +149,23 @@ func (s *Store) BindKey(scope, planID string) error {
 	if scope == "" || planID == "" {
 		return invalidf("API Key 标识和订阅计划 ID 不能为空")
 	}
-	var errApply error
-	updateResult(s, func(state *State) (struct{}, Changes) {
+	_, err := editConfiguration(s, func(state *State) (struct{}, Changes, error) {
 		plan, exists := state.FindPlan(planID)
 		if !exists {
-			errApply = notFoundf("订阅计划 %q 不存在", planID)
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, notFoundf("订阅计划 %q 不存在", planID)
 		}
 		key := state.liveKey(scope)
 		if key == nil {
-			errApply = notFoundf("API Key %q 不存在", scope)
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, notFoundf("API Key %q 不存在", scope)
 		}
 		if key.PlanID == plan.ID {
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, nil
 		}
 		key.Cycle = Cycle{}
 		key.PlanID = plan.ID
-		return struct{}{}, Changes{Keys: []string{scope}}
+		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
-	return errApply
+	return err
 }
 
 func (s *Store) UnbindKey(scope string) error {
@@ -178,22 +173,22 @@ func (s *Store) UnbindKey(scope string) error {
 	if scope == "" {
 		return invalidf("API Key 标识不能为空")
 	}
-	updateResult(s, func(state *State) (struct{}, Changes) {
+	_, err := editConfiguration(s, func(state *State) (struct{}, Changes, error) {
 		key := state.liveKey(scope)
 		if key == nil || key.PlanID == "" {
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, nil
 		}
 		key.PlanID = ""
 		key.Cycle = Cycle{}
-		return struct{}{}, Changes{Keys: []string{scope}}
+		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
-	return nil
+	return err
 }
 
 // The next request starts a fresh period after a reset.
-func (s *Store) ResetCycles(scopes []string) int {
+func (s *Store) ResetCycles(scopes []string) (int, error) {
 	scopes = normalizeScopes(scopes)
-	return updateResult(s, func(state *State) (int, Changes) {
+	return editConfiguration(s, func(state *State) (int, Changes, error) {
 		reset := make([]string, 0, len(scopes))
 		for _, scope := range scopes {
 			key := state.liveKey(scope)
@@ -203,7 +198,7 @@ func (s *Store) ResetCycles(scopes []string) int {
 			key.Cycle = Cycle{}
 			reset = append(reset, scope)
 		}
-		return len(reset), Changes{Keys: reset}
+		return len(reset), Changes{Keys: reset}, nil
 	})
 }
 
@@ -214,21 +209,18 @@ func (s *Store) SetLabel(scope, label string) error {
 	}
 	label = strings.TrimSpace(label)
 
-	var errApply error
-	updateResult(s, func(state *State) (struct{}, Changes) {
-		key := state.liveKey(scope)
+	_, err := editConfiguration(s, func(state *State) (struct{}, Changes, error) {
+		key := state.Keys[scope]
 		if key == nil {
-			errApply = notFoundf("API Key %q 不存在", scope)
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, notFoundf("API Key %q 不存在", scope)
 		}
 		key.Label = label
-		return struct{}{}, Changes{Keys: []string{scope}}
+		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
-	return errApply
+	return err
 }
 
-// Management addresses the keys CPA holds. A deleted key keeps its record for
-// its history alone, so it is neither bindable nor renameable.
+// Deleted keys retain their settings but cannot be rebound or reset.
 func (s *State) liveKey(scope string) *KeyState {
 	key := s.Keys[scope]
 	if key == nil || !key.DeletedAt.IsZero() {
@@ -239,7 +231,25 @@ func (s *State) liveKey(scope string) *KeyState {
 
 type SyncResult struct {
 	Added   int `json:"added"`
-	Removed int `json:"removed"`
+	Deleted int `json:"deleted"`
+}
+
+func (s *State) ensureKey(scope, preview string) *KeyState {
+	if scope == "" {
+		return nil
+	}
+	preview = strings.TrimSpace(preview)
+	if preview == "" {
+		preview = UnknownKeyPreview
+	}
+	key := s.Keys[scope]
+	if key == nil {
+		key = &KeyState{Preview: preview}
+		s.Keys[scope] = key
+	} else if key.Preview == "" || key.Preview == UnknownKeyPreview {
+		key.Preview = preview
+	}
+	return key
 }
 
 // SyncKeys reconciles the tracked keys with the list CPA currently holds.
@@ -247,13 +257,11 @@ type SyncResult struct {
 // Plaintext keys are discarded after producing a scope hash and masked preview.
 // A key missing from the list is marked deleted rather than dropped, and only if
 // an earlier sync saw it, so principals from other access providers survive.
-// allowEmpty prevents an accidental empty push from retiring every synchronized
-// record.
+// allowEmpty prevents an accidental empty push from marking every synchronized
+// record deleted.
 //
-// Deletion keeps the plan binding, which is what makes an accidental retirement
-// recoverable: re-adding the same key restores enforcement rather than silently
-// leaving it unlimited. Only the period is dropped, and only on the way back, so
-// that a window already exhausted cannot block a key the moment it returns.
+// Restoring a key preserves its bindings and spent quota. Normal cycle expiry
+// and explicit resets still apply.
 func (s *Store) SyncKeys(keys []string, allowEmpty bool) (SyncResult, error) {
 	scopes := make(map[string]string, len(keys))
 	for _, key := range keys {
@@ -268,34 +276,21 @@ func (s *Store) SyncKeys(keys []string, allowEmpty bool) (SyncResult, error) {
 	}
 
 	now := s.Now()
-	// Request events decide which retired records may finally go, and they are read
-	// before the mutation, which takes the same lock exclusively.
-	referenced, errScopes := withRepository(s, func(repo Repository) (map[string]struct{}, error) {
-		return repo.RequestEventScopes(now.Add(-RequestEventRetention))
-	})
-	if errScopes != nil {
-		return SyncResult{}, errScopes
-	}
 
-	var result SyncResult
-	updateResult(s, func(state *State) (struct{}, Changes) {
+	return editConfiguration(s, func(state *State) (SyncResult, Changes, error) {
+		var result SyncResult
 		changed := false
 		for scope, preview := range scopes {
-			if state.Keys[scope] == nil {
+			if key := state.Keys[scope]; key == nil || key.Preview != preview {
 				changed = true
 			}
-			key := state.ensureKey(scope)
-			// The live key list is authoritative for its masked preview.
-			if key.Preview != preview {
-				key.Preview = preview
-				changed = true
-			}
+			key := state.ensureKey(scope, preview)
+			key.Preview = preview
 			if !key.InConfig {
 				result.Added++
 			}
 			if !key.DeletedAt.IsZero() {
 				key.DeletedAt = time.Time{}
-				key.Cycle = Cycle{}
 				changed = true
 			}
 			if !key.InConfig {
@@ -310,41 +305,15 @@ func (s *Store) SyncKeys(keys []string, allowEmpty bool) (SyncResult, error) {
 			if key.InConfig {
 				key.InConfig = false
 				key.DeletedAt = now
-				result.Removed++
+				result.Deleted++
 				changed = true
 			}
 		}
-		purged := purgeDeletedKeys(state, referenced, now)
-		if len(purged) > 0 {
-			s.blocked.forget(purged...)
-			changed = true
-		}
 		if !changed {
-			return struct{}{}, Changes{}
+			return result, Changes{}, nil
 		}
-		return struct{}{}, Changes{AllKeys: true}
+		return result, Changes{AllKeys: true}, nil
 	})
-	return result, nil
-}
-
-// A deleted key is kept for exactly as long as it can still be read: its own
-// request history. Once no request event names it, the record is finally
-// dropped, which bounds what an operator who rotates keys accumulates on disk.
-// The count says whether the sync that called this has anything to write.
-func purgeDeletedKeys(state *State, referenced map[string]struct{}, now time.Time) []string {
-	cutoff := now.Add(-RequestEventRetention)
-	var purged []string
-	for scope, key := range state.Keys {
-		if key == nil || key.DeletedAt.IsZero() || key.DeletedAt.After(cutoff) {
-			continue
-		}
-		if _, exists := referenced[scope]; exists {
-			continue
-		}
-		delete(state.Keys, scope)
-		purged = append(purged, scope)
-	}
-	return purged
 }
 
 // Scopes are hex digests, so case folding is safe for hand-typed input.

@@ -28,7 +28,7 @@ func newAccountStoreWithRepository(t *testing.T, now time.Time) (*Store, *memory
 
 func subsetEvent(scope string, at time.Time) UsageEvent {
 	return UsageEvent{
-		Scope: scope, AuthIndex: "auth-codex", ExecutorType: "CodexExecutor",
+		Scope: scope, KeyPreview: "sk-tes…0001", AuthIndex: "auth-codex", ExecutorType: "CodexExecutor",
 		ReasoningEffort: "high", ServiceTier: "auto", At: at,
 		UpstreamModel: "gpt-5.5", RouteModel: "gpt-5.5",
 		Breakdown: completeBreakdown(500, 400, 100, 500, 200),
@@ -167,8 +167,8 @@ func TestCompletionDoesNotOpenCycleAfterAdministrativeChange(t *testing.T) {
 		planID string
 	}{
 		{"reset", func(store *Store) error {
-			store.ResetCycles([]string{"scope-a"})
-			return nil
+			_, err := store.ResetCycles([]string{"scope-a"})
+			return err
 		}, "daily"},
 		{"rebind", func(store *Store) error { return store.BindKey("scope-a", "weekly") }, "weekly"},
 	} {

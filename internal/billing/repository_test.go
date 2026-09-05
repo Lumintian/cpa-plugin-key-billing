@@ -8,27 +8,14 @@ import (
 	"time"
 )
 
-// memoryRepository stands in for storage while this package is under test: what
-// billing charges is a different question from how SQL keeps it, and the SQL
-// answer is exercised against a real database in internal/sqlite.
-//
-// It shares the state document with the store rather than copying it, so a
-// mutation is visible here as soon as it is saved.
 type memoryRepository struct {
 	referencePrices *memoryReferencePriceRepository
 	state           *State
 	requestEvents   []RequestEvent
 	requestErrors   []RequestErrorEvent
 	pluginLogs      []PluginLog
-	// saves records the write set of every mutation, which is how a test asks
-	// what a store operation actually persisted.
-	saves []Changes
-	// fail, when set, is returned by every save. The plugin log has a write
-	// path of its own, and keeps working, so a test can still read what the
-	// store reported about the failure.
-	fail error
-	// closeFail, when set, is returned by Close.
-	closeFail error
+	fail            error
+	closeFail       error
 }
 
 func (r *memoryRepository) Load(requestCutoff, pluginCutoff time.Time) (Snapshot, error) {
@@ -107,7 +94,6 @@ func (r *memoryRepository) Save(state *State, changes Changes) error {
 		return r.fail
 	}
 	r.state = state
-	r.saves = append(r.saves, changes)
 	r.requestEvents = append(r.requestEvents, changes.NormalRequestEvents...)
 	r.requestErrors = append(r.requestErrors, changes.RequestErrorEvents...)
 	if changes.RequestEventCutoff.IsZero() {
@@ -179,21 +165,6 @@ func (r *memoryRepository) Analysis(query RequestEventQuery, since time.Time) (A
 	return AnalysisView{}, nil
 }
 
-func (r *memoryRepository) RequestEventScopes(since time.Time) (map[string]struct{}, error) {
-	scopes := make(map[string]struct{})
-	for _, event := range r.requestEvents {
-		if !event.At.Before(since) {
-			scopes[event.Scope] = struct{}{}
-		}
-	}
-	for _, event := range r.requestErrors {
-		if !event.Event.At.Before(since) {
-			scopes[event.Event.Scope] = struct{}{}
-		}
-	}
-	return scopes, nil
-}
-
 func (r *memoryRepository) Close() error { return r.closeFail }
 
 func newStore(t *testing.T) *Store {
@@ -238,4 +209,28 @@ func testConfig(t *testing.T) Config {
 	cfg.Enabled = true
 	cfg.StateFile = filepath.Join(t.TempDir(), "state.db")
 	return cfg
+}
+
+func (r *memoryRepository) EventKeys(from, to, since time.Time) ([]EventKey, error) {
+	if from.Before(since) {
+		from = since
+	}
+	keys := []EventKey{}
+	seen := map[string]bool{}
+	events := append([]RequestEvent{}, r.requestEvents...)
+	for _, failure := range r.requestErrors {
+		events = append(events, failure.Event)
+	}
+	for _, event := range events {
+		if event.Scope == "" || seen[event.Scope] || event.At.Before(from) || !to.IsZero() && !event.At.Before(to) {
+			continue
+		}
+		seen[event.Scope] = true
+		key := EventKey{Scope: event.Scope, Preview: UnknownKeyPreview}
+		if stored := r.state.Keys[event.Scope]; stored != nil {
+			key.Preview, key.Label, key.DeletedAt = stored.Preview, stored.Label, stored.DeletedAt
+		}
+		keys = append(keys, key)
+	}
+	return keys, nil
 }

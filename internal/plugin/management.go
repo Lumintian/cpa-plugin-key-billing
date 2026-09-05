@@ -36,6 +36,7 @@ const (
 	routeKeysSync               = "/keys/sync"
 	routeCredentialsSync        = "/credentials/sync"
 	routeEvents                 = "/events"
+	routeEventKeys              = "/events/keys"
 	routeErrors                 = "/errors"
 	routeAnalysis               = "/analysis"
 	routePluginLogs             = "/plugin-logs"
@@ -61,7 +62,7 @@ var managementEndpoints = []managementEndpoint{
 	{http.MethodDelete, routePlans, "删除订阅计划并解除 API Key 绑定", (*App).deletePlan},
 	{http.MethodPost, routeRoutes, "新建路由规则", (*App).createRoute},
 	{http.MethodPatch, routeRoutes, "更新路由规则", (*App).updateRoute},
-	{http.MethodDelete, routeRoutes, "删除路由规则并移除相关绑定", (*App).deleteRoute},
+	{http.MethodDelete, routeRoutes, "删除路由规则并解除相关绑定", (*App).deleteRoute},
 	{http.MethodPut, routeKeysRoutes, "更新 API Key 路由绑定", (*App).setKeyRoutes},
 	{http.MethodPost, routeKeysBind, "将 API Key 绑定到订阅计划", (*App).bindKey},
 	{http.MethodPost, routeKeysUnbind, "解除 API Key 与订阅计划的绑定", (*App).unbindKey},
@@ -70,6 +71,7 @@ var managementEndpoints = []managementEndpoint{
 	{http.MethodPost, routeKeysConcurrency, "设置 API Key 最大并发请求数", (*App).setKeyConcurrency},
 	{http.MethodPost, routeKeysSync, "同步 CLIProxyAPI 中的 API Key 列表", (*App).syncKeys},
 	{http.MethodPost, routeCredentialsSync, "同步配置凭证", (*App).syncConfiguredCredentials},
+	{http.MethodGet, routeEventKeys, "查看事件范围内的 API Key", (*App).eventKeys},
 	{http.MethodGet, routeEvents, "分页查看请求事件", func(a *App, req ManagementRequest) ManagementResponse {
 		return a.listRequestEvents(req, viewAccess{})
 	}},

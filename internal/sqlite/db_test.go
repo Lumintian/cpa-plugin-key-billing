@@ -66,7 +66,7 @@ func TestOpenAcceptsRelativePathWithDSNCharacters(t *testing.T) {
 	}
 	database := openDatabase(t, path)
 	state := billing.NewState()
-	state.Keys["scope-a"] = &billing.KeyState{Label: "Alice"}
+	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", Label: "Alice"}
 	mustSave(t, database, state, billing.Changes{AllKeys: true})
 
 	if _, errStat := os.Stat(path); errStat != nil {

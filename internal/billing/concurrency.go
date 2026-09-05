@@ -89,18 +89,16 @@ func (s *Store) SetConcurrencyLimit(scope string, limit int) error {
 		return invalidf("并发限制必须为 0 到 %d 的整数", MaxConcurrencyLimit)
 	}
 
-	var errApply error
-	updateResult(s, func(state *State) (struct{}, Changes) {
+	_, err := editConfiguration(s, func(state *State) (struct{}, Changes, error) {
 		key := state.liveKey(scope)
 		if key == nil {
-			errApply = notFoundf("API Key %q 不存在", scope)
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, notFoundf("API Key %q 不存在", scope)
 		}
 		if key.ConcurrencyLimit == limit {
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, nil
 		}
 		key.ConcurrencyLimit = limit
-		return struct{}{}, Changes{Keys: []string{scope}}
+		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
-	return errApply
+	return err
 }

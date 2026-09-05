@@ -14,7 +14,6 @@ const (
 	CredentialSourceAIProviders = "ai-providers"
 
 	maxRouteNameBytes  = 128
-	maxRouteEntries    = 1024
 	maxRouteValueBytes = 512
 )
 
@@ -79,12 +78,14 @@ func (d RoutingDecision) RestrictsCredentials() bool {
 type RouteDeleteResult struct {
 	Deleted               string `json:"deleted"`
 	AffectedKeys          int    `json:"affected_keys"`
+	DeletedKeys           int    `json:"deleted_keys"`
 	FullyUnrestrictedKeys int    `json:"fully_unrestricted_keys"`
 }
 
 type RouteView struct {
 	Route
 	BoundKeyCount         int `json:"bound_key_count"`
+	DeletedKeyCount       int `json:"deleted_key_count"`
 	FullyUnrestrictedKeys int `json:"fully_unrestricted_keys"`
 }
 
@@ -133,9 +134,6 @@ func NormalizeRouteRule(rule RouteRule) (RouteRule, error) {
 }
 
 func normalizeCredentialProviders(values []CredentialProviderSelector) ([]CredentialProviderSelector, error) {
-	if len(values) > maxRouteEntries {
-		return nil, invalidf("每条路由规则最多选择 %d 个供应商", maxRouteEntries)
-	}
 	result := make([]CredentialProviderSelector, 0, len(values))
 	seen := make(map[CredentialProviderSelector]struct{}, len(values))
 	for _, item := range values {
@@ -153,9 +151,6 @@ func normalizeCredentialProviders(values []CredentialProviderSelector) ([]Creden
 }
 
 func normalizeRouteStrings(values []string) ([]string, error) {
-	if len(values) > maxRouteEntries {
-		return nil, invalidf("每条路由规则的每类选择最多 %d 项", maxRouteEntries)
-	}
 	result := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
@@ -187,9 +182,6 @@ func normalizeCredentialIDs(values []string) ([]string, error) {
 }
 
 func NormalizeRouteBindings(bindings RouteBindings) (RouteBindings, error) {
-	if len(bindings.RouteIDs)+len(bindings.Models)+len(bindings.CredentialIDs)+len(bindings.CredentialProviders) > maxRouteEntries {
-		return RouteBindings{}, invalidf("每个 API Key 最多绑定 %d 项", maxRouteEntries)
-	}
 	var err error
 	bindings.RouteIDs, err = normalizeRouteStrings(bindings.RouteIDs)
 	if err != nil {
@@ -247,10 +239,14 @@ func (s *Store) RouteViews() []RouteView {
 		for _, route := range state.Routes {
 			view := RouteView{Route: cloneRoute(route)}
 			for _, key := range state.Keys {
-				if key == nil || !key.DeletedAt.IsZero() || !slices.Contains(key.RouteBindings.RouteIDs, route.ID) {
+				if key == nil || !slices.Contains(key.RouteBindings.RouteIDs, route.ID) {
 					continue
 				}
 				view.BoundKeyCount++
+				if !key.DeletedAt.IsZero() {
+					view.DeletedKeyCount++
+					continue
+				}
 				copyKey := *key
 				copyKey.RouteBindings.RouteIDs = slices.DeleteFunc(slices.Clone(key.RouteBindings.RouteIDs), func(id string) bool { return id == route.ID })
 				if !routingRestricted(state, &copyKey) {
@@ -285,12 +281,10 @@ func NormalizeRoute(route Route) (Route, error) {
 
 func (s *Store) CreateRoute(route Route, scopes []string) (Route, error) {
 	scopes = normalizeScopes(scopes)
-	var errApply error
-	stored := updateResult(s, func(state *State) (Route, Changes) {
+	return editConfiguration(s, func(state *State) (Route, Changes, error) {
 		for _, scope := range scopes {
 			if state.liveKey(scope) == nil {
-				errApply = notFoundf("API Key %q 不存在", scope)
-				return Route{}, Changes{}
+				return Route{}, Changes{}, notFoundf("API Key %q 不存在", scope)
 			}
 		}
 		if strings.TrimSpace(route.ID) == "" {
@@ -301,21 +295,18 @@ func (s *Store) CreateRoute(route Route, scopes []string) (Route, error) {
 		}
 		validated, err := NormalizeRoute(route)
 		if err != nil {
-			errApply = err
-			return Route{}, Changes{}
+			return Route{}, Changes{}, err
 		}
 		route = validated
 		if _, ok := state.findRoute(route.ID); ok {
-			errApply = conflictf("路由规则 %q 已存在", route.ID)
-			return Route{}, Changes{}
+			return Route{}, Changes{}, conflictf("路由规则 %q 已存在", route.ID)
 		}
 		state.Routes = append(state.Routes, route)
 		for _, scope := range scopes {
 			state.Keys[scope].RouteBindings.RouteIDs = append(state.Keys[scope].RouteBindings.RouteIDs, route.ID)
 		}
-		return cloneRoute(route), Changes{Routes: true, Keys: scopes}
+		return cloneRoute(route), Changes{Routes: true, Keys: scopes}, nil
 	})
-	return stored, errApply
 }
 
 func (s *Store) UpdateRoute(patch RoutePatch, scopes *[]string) (Route, error) {
@@ -323,13 +314,11 @@ func (s *Store) UpdateRoute(patch RoutePatch, scopes *[]string) (Route, error) {
 	if patch.ID == "" {
 		return Route{}, invalidf("路由规则 ID 不能为空")
 	}
-	var errApply error
-	stored := updateResult(s, func(state *State) (Route, Changes) {
+	return editConfiguration(s, func(state *State) (Route, Changes, error) {
 		var changed []string
 		i := state.findRouteIndex(patch.ID)
 		if i < 0 {
-			errApply = notFoundf("路由规则 %q 不存在", patch.ID)
-			return Route{}, Changes{}
+			return Route{}, Changes{}, notFoundf("路由规则 %q 不存在", patch.ID)
 		}
 		updated := state.Routes[i]
 		if patch.Name != nil {
@@ -340,17 +329,16 @@ func (s *Store) UpdateRoute(patch RoutePatch, scopes *[]string) (Route, error) {
 		}
 		validated, err := NormalizeRoute(updated)
 		if err != nil {
-			errApply = err
-			return Route{}, Changes{}
+			return Route{}, Changes{}, err
 		}
 		var selected map[string]struct{}
 		if scopes != nil {
 			normalized := normalizeScopes(*scopes)
 			selected = make(map[string]struct{}, len(normalized))
 			for _, scope := range normalized {
-				if state.liveKey(scope) == nil {
-					errApply = notFoundf("API Key %q 不存在", scope)
-					return Route{}, Changes{}
+				key := state.Keys[scope]
+				if key == nil || !key.DeletedAt.IsZero() && !slices.Contains(key.RouteBindings.RouteIDs, patch.ID) {
+					return Route{}, Changes{}, notFoundf("API Key %q 不存在", scope)
 				}
 				selected[scope] = struct{}{}
 			}
@@ -359,7 +347,7 @@ func (s *Store) UpdateRoute(patch RoutePatch, scopes *[]string) (Route, error) {
 		state.Routes[i] = updated
 		if scopes != nil {
 			for scope, key := range state.Keys {
-				if key == nil || !key.DeletedAt.IsZero() {
+				if key == nil {
 					continue
 				}
 				hasBinding := slices.Contains(key.RouteBindings.RouteIDs, patch.ID)
@@ -373,9 +361,8 @@ func (s *Store) UpdateRoute(patch RoutePatch, scopes *[]string) (Route, error) {
 				}
 			}
 		}
-		return cloneRoute(updated), Changes{Routes: true, Keys: changed}
+		return cloneRoute(updated), Changes{Routes: true, Keys: changed}, nil
 	})
-	return stored, errApply
 }
 
 func (s *Store) SetKeyRoutes(scope string, bindings RouteBindings) error {
@@ -387,23 +374,20 @@ func (s *Store) SetKeyRoutes(scope string, bindings RouteBindings) error {
 	if err != nil {
 		return err
 	}
-	var errApply error
-	updateResult(s, func(state *State) (struct{}, Changes) {
+	_, err = editConfiguration(s, func(state *State) (struct{}, Changes, error) {
 		key := state.liveKey(scope)
 		if key == nil {
-			errApply = notFoundf("API Key %q 不存在", scope)
-			return struct{}{}, Changes{}
+			return struct{}{}, Changes{}, notFoundf("API Key %q 不存在", scope)
 		}
 		for _, id := range bindings.RouteIDs {
 			if _, ok := state.findRoute(id); !ok {
-				errApply = notFoundf("路由规则 %q 不存在", id)
-				return struct{}{}, Changes{}
+				return struct{}{}, Changes{}, notFoundf("路由规则 %q 不存在", id)
 			}
 		}
 		key.RouteBindings = bindings
-		return struct{}{}, Changes{Keys: []string{scope}}
+		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
-	return errApply
+	return err
 }
 
 func (s *Store) DeleteRoute(id string) (RouteDeleteResult, error) {
@@ -411,13 +395,11 @@ func (s *Store) DeleteRoute(id string) (RouteDeleteResult, error) {
 	if id == "" {
 		return RouteDeleteResult{}, invalidf("路由规则 ID 不能为空")
 	}
-	var errApply error
-	result := updateResult(s, func(state *State) (RouteDeleteResult, Changes) {
+	return editConfiguration(s, func(state *State) (RouteDeleteResult, Changes, error) {
 		var changed []string
 		i := state.findRouteIndex(id)
 		if i < 0 {
-			errApply = notFoundf("路由规则 %q 不存在", id)
-			return RouteDeleteResult{}, Changes{}
+			return RouteDeleteResult{}, Changes{}, notFoundf("路由规则 %q 不存在", id)
 		}
 		out := RouteDeleteResult{Deleted: id}
 		for scope, key := range state.Keys {
@@ -430,18 +412,18 @@ func (s *Store) DeleteRoute(id string) (RouteDeleteResult, error) {
 				continue
 			}
 			changed = append(changed, scope)
+			out.AffectedKeys++
 			if !key.DeletedAt.IsZero() {
+				out.DeletedKeys++
 				continue
 			}
-			out.AffectedKeys++
 			if !routingRestricted(state, key) {
 				out.FullyUnrestrictedKeys++
 			}
 		}
 		state.Routes = slices.Delete(state.Routes, i, i+1)
-		return out, Changes{Routes: true, Keys: changed}
+		return out, Changes{Routes: true, Keys: changed}, nil
 	})
-	return result, errApply
 }
 
 func routingRestricted(state *State, key *KeyState) bool {

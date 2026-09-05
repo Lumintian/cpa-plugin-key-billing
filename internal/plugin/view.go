@@ -238,3 +238,21 @@ func viewErrorResponse(access viewAccess, err error) ManagementResponse {
 	}
 	return response
 }
+
+func (a *App) eventKeys(req ManagementRequest) ManagementResponse {
+	var from, to time.Time
+	if err := timeParam(req.Query, "from", &from); err != nil {
+		return errorResponse(err)
+	}
+	if err := timeParam(req.Query, "to", &to); err != nil {
+		return errorResponse(err)
+	}
+	if !from.IsZero() && !to.IsZero() && !from.Before(to) {
+		return JSONError(http.StatusBadRequest, "invalid", "开始时间必须早于结束时间")
+	}
+	keys, err := a.store.EventKeys(from, to)
+	if err != nil {
+		return errorResponse(err)
+	}
+	return JSONResponse(http.StatusOK, keys)
+}

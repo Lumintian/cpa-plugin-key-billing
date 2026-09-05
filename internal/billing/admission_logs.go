@@ -67,14 +67,6 @@ func (b *blockedKeys) onset(scope string, cycleStart time.Time) bool {
 	return true
 }
 
-func (b *blockedKeys) forget(scopes ...string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, scope := range scopes {
-		delete(b.cycles, scope)
-	}
-}
-
 // describeKey names a key the way the panel does: the operator's remark beside
 // the masked preview, either one alone when that is all there is, and the head
 // of the scope for a key no synchronization has ever named.

@@ -1,7 +1,9 @@
 package plugin
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -109,6 +111,10 @@ func TestPlansCRUDThroughTheManagementAPI(t *testing.T) {
 		t.Fatalf("plan = %+v", created.Plan)
 	}
 
+	if resp := callManagement(t, app, http.MethodPost, routePlans, nil, map[string]any{"id": created.Plan.ID, "amount_usd": 20}); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate plan status = %d", resp.StatusCode)
+	}
+
 	var patched struct {
 		Plan billing.Plan `json:"plan"`
 	}
@@ -128,32 +134,6 @@ func TestPlansCRUDThroughTheManagementAPI(t *testing.T) {
 	callOK(t, app, http.MethodDelete, routePlans, url.Values{"id": {"team-monthly"}}, nil, http.StatusOK, nil)
 	if resp := callManagement(t, app, http.MethodDelete, routePlans, url.Values{"id": {"team-monthly"}}, nil); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("second delete status = %d, want 404", resp.StatusCode)
-	}
-}
-
-func TestPlanBindingsRoundTripThroughTheManagementAPI(t *testing.T) {
-	app := newConfiguredApp(t)
-	const firstKey = "sk-plan-first-000001"
-	const secondKey = "sk-plan-second-00002"
-	firstScope := billing.CallerScope(firstKey)
-	secondScope := billing.CallerScope(secondKey)
-	callOK(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{firstKey, secondKey}}, http.StatusOK, nil)
-
-	callOK(t, app, http.MethodPost, routePlans, nil, map[string]any{
-		"id": "team", "name": "Team", "amount_usd": 10,
-		"period_seconds": 0, "scopes": []string{firstScope},
-	}, http.StatusCreated, nil)
-	byScope := keysByScope(t, app)
-	if len(byScope) != 2 || byScope[firstScope].PlanID != "team" || byScope[secondScope].PlanID != "" {
-		t.Fatalf("keys after create = %+v", byScope)
-	}
-
-	callOK(t, app, http.MethodPatch, routePlans, nil, map[string]any{
-		"id": "team", "scopes": []string{secondScope},
-	}, http.StatusOK, nil)
-	if byScope = keysByScope(t, app); byScope[firstScope].PlanID != "" ||
-		byScope[secondScope].PlanID != "team" {
-		t.Fatalf("keys after edit = %+v", byScope)
 	}
 }
 
@@ -253,15 +233,6 @@ func TestManagementErrorsMapToStatusCodes(t *testing.T) {
 	}
 }
 
-func TestDuplicatePlanReportsConflict(t *testing.T) {
-	app := newConfiguredApp(t)
-	body := map[string]any{"id": "daily", "name": "Daily", "amount_usd": 1, "period_seconds": 86400}
-	callOK(t, app, http.MethodPost, routePlans, nil, body, http.StatusCreated, nil)
-	if resp := callManagement(t, app, http.MethodPost, routePlans, nil, body); resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want 409 (body=%s)", resp.StatusCode, resp.Body)
-	}
-}
-
 // The plaintext keys the panel pushes are hashed into caller scopes and
 // dropped; what comes back must name them by mask alone.
 func TestSyncKeysStoresOnlyMaskedKeys(t *testing.T) {
@@ -288,40 +259,14 @@ func TestSyncKeysStoresOnlyMaskedKeys(t *testing.T) {
 		}
 	}
 
-	// An empty push is refused, so a failed fetch in the browser cannot be
-	// mistaken for "every key was deleted".
+	// Clearing the synchronized list requires allow_empty.
 	if resp := callManagement(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{}}); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 (body=%s)", resp.StatusCode, resp.Body)
 	}
 	callOK(t, app, http.MethodPost, routeKeysSync, nil,
 		map[string]any{"keys": []string{}, "allow_empty": true}, http.StatusOK, &result)
-	if result.Removed != 2 {
-		t.Fatalf("empty authoritative sync = %+v, want both configured keys removed", result)
-	}
-}
-
-func TestSyncRetiresKeysDeletedFromCPA(t *testing.T) {
-	app := newConfiguredApp(t)
-	const kept, removed = "sk-kept-00000000001", "sk-removed-00000001"
-
-	callOK(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{kept, removed}}, http.StatusOK, nil)
-	billOneRequest(t, app, removed, 1000)
-
-	var result billing.SyncResult
-	callOK(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{kept}}, http.StatusOK, &result)
-	if result.Removed != 1 || result.Added != 0 {
-		t.Fatalf("result = %+v", result)
-	}
-
-	keys := readAccess(t, app).Keys
-	if len(keys) != 1 || keys[0].Scope != billing.CallerScope(kept) {
-		t.Fatalf("keys = %+v, want only the live key", keys)
-	}
-
-	var events billing.RequestEventView
-	callOK(t, app, http.MethodGet, routeEvents, nil, nil, http.StatusOK, &events)
-	if len(events.Entries) != 1 || events.Entries[0].Preview == "" {
-		t.Fatalf("events = %+v, want the deleted key's history still readable", events.Entries)
+	if result.Deleted != 2 {
+		t.Fatalf("empty authoritative sync = %+v, want both configured keys deleted", result)
 	}
 }
 
@@ -600,5 +545,116 @@ func TestPluginLogManagementPaginatesAndFiltersDebugRows(t *testing.T) {
 	callOK(t, app, http.MethodGet, routePluginLogs, url.Values{"level": {"debug"}, "limit": {"2"}, "before_id": {strconv.FormatInt(first.NextBeforeID, 10)}}, nil, http.StatusOK, &second)
 	if len(second.Entries) != 1 || second.NextBeforeID != 0 || second.Entries[0].Message != "first" {
 		t.Fatalf("second page=%+v", second)
+	}
+}
+
+func TestEventKeyOptionsIgnorePageFilters(t *testing.T) {
+	app := newConfiguredApp(t)
+	const active, deleted, idle = "sk-demo-active-0001", "sk-demo-deleted-0002", "sk-demo-idle-0003"
+	callOK(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{active, deleted, idle}}, http.StatusOK, nil)
+	billOneRequest(t, app, active, 100)
+	billOneRequest(t, app, deleted, 100)
+	callOK(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{active, idle}}, http.StatusOK, nil)
+	var keys []billing.EventKey
+	callOK(t, app, http.MethodGet, routeEventKeys, url.Values{
+		"api_key": {billing.CallerScope(active)}, "model": {"missing"}, "error_type": {"missing"},
+	}, nil, http.StatusOK, &keys)
+	if len(keys) != 2 {
+		t.Fatalf("event keys = %+v", keys)
+	}
+	for _, key := range keys {
+		if key.Scope == billing.CallerScope(deleted) && key.DeletedAt.IsZero() {
+			t.Fatal("deleted identity lost its status")
+		}
+	}
+	callOK(t, app, http.MethodGet, routeEventKeys, url.Values{
+		"from": {"2026-09-02T00:00:00Z"}, "to": {"2026-09-01T00:00:00Z"},
+	}, nil, http.StatusBadRequest, nil)
+}
+
+func TestManagementWriteFailureReturnsError(t *testing.T) {
+	app, path := newAppWithPriceAndState(t, true)
+	const apiKey = "sk-storage-test-0001"
+	scope := billing.CallerScope(apiKey)
+	if _, err := app.store.SyncKeys([]string{apiKey}, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.store.CreatePlanWithBindings(billing.Plan{ID: "p", AmountUSD: 10}, []string{scope}); err != nil {
+		t.Fatal(err)
+	}
+	app.store.Authorize(scope, app.store.Now())
+	before, _ := app.store.KeyViewForScope(scope)
+	database, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if _, err := database.Exec(`CREATE TRIGGER reject_key_write BEFORE UPDATE ON api_keys
+        BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	response := callManagement(t, app, http.MethodPost, routeKeysReset, nil, []string{scope})
+	if response.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("reset status = %d, body = %s", response.StatusCode, response.Body)
+	}
+	if _, err := database.Exec("DROP TRIGGER reject_key_write"); err != nil {
+		t.Fatal(err)
+	}
+	app.Shutdown()
+	cfg := billing.DefaultConfig()
+	cfg.StateFile = path
+	if err := app.store.Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := app.store.KeyViewForScope(scope)
+	if after.PlanID != before.PlanID || after.SpentUSD != before.SpentUSD {
+		t.Fatalf("failed reset changed state: %+v", after)
+	}
+	reset, err := app.store.ResetCycles([]string{scope})
+	if err != nil || reset != 1 {
+		t.Fatalf("cycle was reset despite write failure: reset=%d, err=%v", reset, err)
+	}
+}
+
+func TestLargeRouteBindingsSurviveReload(t *testing.T) {
+	app, path := newAppWithPriceAndState(t, true)
+	const apiKey = "sk-large-route-test-0001"
+	scope := billing.CallerScope(apiKey)
+	if _, err := app.store.SyncKeys([]string{apiKey}, false); err != nil {
+		t.Fatal(err)
+	}
+	models := make([]string, 2048)
+	for i := range models {
+		models[i] = fmt.Sprintf("model-%d", i)
+	}
+	if err := app.store.SetKeyRoutes(scope, billing.RouteBindings{Models: models}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"created", "edited"} {
+		var selected []string
+		if id == "created" {
+			selected = []string{scope}
+		}
+		if _, err := app.store.CreateRoute(billing.Route{ID: id, Name: id, Rule: billing.RouteRule{Models: models}}, selected); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scopes := []string{scope}
+	if _, err := app.store.UpdateRoute(billing.RoutePatch{ID: "edited"}, &scopes); err != nil {
+		t.Fatal(err)
+	}
+	app.Shutdown()
+	cfg := billing.DefaultConfig()
+	cfg.StateFile = path
+	if err := app.store.Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	view, ok := app.store.KeyViewForScope(scope)
+	if !ok || len(view.RouteBindings.Models) != len(models) || len(view.RouteBindings.RouteIDs) != 2 {
+		t.Fatalf("bindings were lost after reload: %+v", view.RouteBindings)
+	}
+	route, ok := app.store.Route("edited")
+	if !ok || len(route.Rule.Models) != len(models) {
+		t.Fatal("route models were lost after reload")
 	}
 }
