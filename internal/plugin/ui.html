@@ -2057,8 +2057,6 @@
           width: 100%;
           min-width: 0;
         }
-        .usage-distribution-layout { grid-template-columns: 1fr; }
-        .usage-distribution-chart { width: min(220px, 72vw); }
         .event-card-actions > .link { justify-self: start; }
         .shared-time-filter .time-range-popover {
           position: fixed;
@@ -2248,7 +2246,8 @@
         background: var(--legend-color);
       }
       .usage-trend-chart { position: relative; height: 360px; min-width: 0; }
-      .usage-distribution-header { align-items: center; margin-bottom: 18px; }
+      .usage-distribution-header { margin-bottom: 18px; }
+      .usage-distribution-controls { gap: 12px; }
       .usage-distribution-tabs { display: flex; gap: 8px; flex-wrap: nowrap; }
       .usage-distribution-tabs button.active {
         border-color: var(--primary-color);
@@ -2294,6 +2293,12 @@
         color: var(--text-secondary);
         font-size: 12px;
         font-variant-numeric: tabular-nums;
+      }
+      .usage-distribution-metrics span.active {
+        color: var(--text-primary);
+        background: color-mix(in srgb, var(--primary-color) 16%, transparent);
+        border-color: color-mix(in srgb, var(--primary-color) 65%, var(--border-color));
+        font-weight: 600;
       }
       .event-card-actions select { min-width: 132px; }
       @media (max-width: 1100px) {
@@ -3469,6 +3474,8 @@
         const dimension = viewPreference(role, "analysis-dimension", defaultDimension);
         const allowedDimensions = account ? ["models", "sources"] : ["api_keys", "models", "sources"];
         analysisDimensions[role] = allowedDimensions.includes(dimension) ? dimension : defaultDimension;
+        const metric = viewPreference(role, "analysis-metric", "total_tokens");
+        analysisMetrics[role] = Object.hasOwn(DISTRIBUTION_METRICS, metric) ? metric : "total_tokens";
         updateSharedTimeControl(account);
         updateFilterClearButton($(prefix + "request-events-filter-clear"));
         updateFilterClearButton($(prefix + "errors-filter-clear"));
@@ -4657,6 +4664,12 @@
         "--analysis-color-6",
       ];
       const analysisDimensions = { admin: "api_keys", account: "models" };
+      const analysisMetrics = { admin: "total_tokens", account: "total_tokens" };
+      const DISTRIBUTION_METRICS = {
+        total_tokens: { label: "Token 总数", option: "Token 占比", format: (row) => tokens(row.total_tokens) },
+        requests: { label: "请求数", option: "请求数占比", format: (row) => int(row.requests) },
+        cost_usd: { label: "总成本", option: "成本占比", format: (row) => usd(row.cost_usd) },
+      };
       const analysisCharts = {
         admin: { trend: null, distribution: null },
         account: { trend: null, distribution: null },
@@ -4684,9 +4697,11 @@
         return ANALYSIS_COLOR_PROPERTIES.map((property, index) => themeColor(property, fallbacks[index]));
       }
 
-      function compactDistribution(rows) {
-        const visible = rows.slice(0, 5).map((row) => ({ ...row }));
-        const rest = rows.slice(5);
+      function compactDistribution(rows, metric) {
+        const sorted = [...rows].sort((a, b) => Number(b[metric] || 0) - Number(a[metric] || 0));
+        const total = rows.reduce((sum, row) => sum + Number(row[metric] || 0), 0);
+        const visible = sorted.slice(0, 5).map((row) => ({ ...row }));
+        const rest = sorted.slice(5);
         if (rest.length) {
           visible.push({
             key: "other",
@@ -4694,19 +4709,25 @@
             total_tokens: rest.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0),
             requests: rest.reduce((sum, row) => sum + Number(row.requests || 0), 0),
             cost_usd: rest.reduce((sum, row) => sum + Number(row.cost_usd || 0), 0),
-            cost_available: rest.every((row) => row.cost_available !== false),
-            percent: rest.reduce((sum, row) => sum + Number(row.percent || 0), 0),
           });
+        }
+        for (const row of visible) {
+          row.percent = total > 0 ? Number(row[metric] || 0) * 100 / total : 0;
         }
         return visible;
       }
 
-      function renderUsageDistributionChart(account, rows, dimension, dimensionLabel, colors) {
+      function renderUsageDistributionChart(account, rows, dimension, dimensionLabel, metric, colors) {
         const role = account ? "account" : "admin";
         analysisCharts[role].distribution?.destroy();
         analysisCharts[role].distribution = null;
         const canvas = $(account ? "account-usage-chart" : "usage-chart");
         if (!canvas || !rows.length) return;
+        if (!rows.some((row) => row.percent > 0)) {
+          const text = "当前范围内：" + DISTRIBUTION_METRICS[metric].label + "为 0";
+          canvas.parentElement.replaceChildren(el("div", { class: "empty", text }));
+          return;
+        }
         if (typeof Chart === "undefined") {
           canvas.parentElement.replaceChildren(el("div", { class: "empty", text: "图表加载失败" }));
           return;
@@ -4721,7 +4742,7 @@
             ),
             datasets: [
               {
-                data: rows.map((row) => Number(row.percent || 0)),
+                data: rows.map((row) => row.percent),
                 backgroundColor: rows.map((_, index) => colors[index % colors.length]),
                 borderColor: themeColor("--analysis-segment-border", "#f0eee8"),
                 borderWidth: 3,
@@ -4749,10 +4770,8 @@
                   label: (context) => {
                     const row = rows[context.dataIndex];
                     return [
-                      "占比 " + Number(row.percent || 0).toFixed(2) + "%",
-                      "Token 总数 " + tokens(row.total_tokens),
-                      "请求数 " + int(row.requests),
-                      "总成本 " + (row.cost_available ? usd(row.cost_usd) : "—"),
+                      DISTRIBUTION_METRICS[metric].option + " " + row.percent.toFixed(2) + "%",
+                      ...Object.values(DISTRIBUTION_METRICS).map((item) => item.label + " " + item.format(row)),
                     ];
                   },
                 },
@@ -5054,7 +5073,22 @@
           analysisDimensions[role] = dimension;
           saveViewPreference(role, "analysis-dimension", dimension);
         }
-        const rows = compactDistribution(analysis.usage_distribution[dimension]);
+        const metric = analysisMetrics[role];
+        const rows = compactDistribution(analysis.usage_distribution[dimension], metric);
+        const metricSelect = el(
+          "select",
+          {
+            "aria-label": "用量分布统计方式",
+            onchange: (event) => {
+              analysisMetrics[role] = event.target.value;
+              saveViewPreference(role, "analysis-metric", event.target.value);
+              renderAnalysisDistribution(account);
+            },
+          },
+          Object.entries(DISTRIBUTION_METRICS).map(([key, item]) =>
+            el("option", { value: key, text: item.option, selected: key === metric }),
+          ),
+        );
         const tabs = Object.entries(labels).map(([key, label]) =>
           el("button", {
             type: "button",
@@ -5067,9 +5101,8 @@
             },
           }),
         );
-        const list = rows.map((row, index) => {
-          const metric = (label, value) => el("span", {}, label + " " + value);
-          return el(
+        const list = rows.map((row, index) =>
+          el(
             "div",
             { class: "usage-distribution-row", style: "--distribution-color:" + colors[index % colors.length] },
             el(
@@ -5078,28 +5111,33 @@
               dimension === "api_keys" && row.key !== "other"
                 ? renderAPIKeyIdentity(row)
                 : el("b", {}, row.label || row.key || "未知"),
-              el("b", { class: "mono" }, Number(row.percent || 0).toFixed(2) + "%"),
+              el("b", { class: "mono" }, row.percent.toFixed(2) + "%"),
             ),
             el(
               "div",
               { class: "usage-distribution-track" },
-              el("i", { style: "width:" + Math.max(0, Number(row.percent || 0)) + "%" }),
+              el("i", { style: "width:" + row.percent + "%" }),
             ),
             el(
               "div",
               { class: "usage-distribution-metrics" },
-              metric("Token 总数", tokens(row.total_tokens)),
-              metric("请求数", int(row.requests)),
-              metric("总成本", row.cost_available ? usd(row.cost_usd) : "—"),
+              Object.entries(DISTRIBUTION_METRICS).map(([key, item]) =>
+                el("span", { class: key === metric ? "active" : "" }, item.label + " " + item.format(row)),
+              ),
             ),
-          );
-        });
+          ),
+        );
         target.replaceChildren(
           el(
             "div",
             { class: "row spread usage-distribution-header" },
             el("h2", {}, "用量分布"),
-            el("div", { class: "usage-distribution-tabs" }, tabs),
+            el(
+              "div",
+              { class: "row usage-distribution-controls" },
+              el("div", { class: "usage-distribution-tabs" }, tabs),
+              el("span", { class: "native-select" }, metricSelect),
+            ),
           ),
           rows.length
             ? el(
@@ -5111,14 +5149,14 @@
                   el("canvas", {
                     id: account ? "account-usage-chart" : "usage-chart",
                     role: "img",
-                    "aria-label": labels[dimension] + "用量占比环形图",
+                    "aria-label": labels[dimension] + DISTRIBUTION_METRICS[metric].option + "环形图",
                   }),
                 ),
                 el("div", { class: "usage-distribution-list" }, list),
               )
             : el("div", { class: "empty", text: "当前时间范围内暂无请求事件" }),
         );
-        renderUsageDistributionChart(account, rows, dimension, labels[dimension], colors);
+        renderUsageDistributionChart(account, rows, dimension, labels[dimension], metric, colors);
       }
 
       function renderAnalysis(account) {
@@ -5978,9 +6016,7 @@
                       },
                       actionIcon("copy"),
                     ),
-                    deleted
-                      ? el("span", { class: "tag plain", text: "已删除" })
-                      : !view.in_config ? " · 仅用量记录" : null,
+                    !deleted && !view.in_config ? " · 仅用量记录" : null,
                   ],
                 }),
               ),
