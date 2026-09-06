@@ -317,13 +317,7 @@
       }
       button.danger { color: var(--error-color); }
       button.danger:hover:not(:disabled) { border-color: var(--error-color); }
-      button.link {
-        min-height: 0;
-        border: none;
-        background: none;
-        padding: 2px 4px;
-        color: var(--primary-active);
-      }
+      button.link { min-height: 0; border: none; background: none; padding: 2px 4px; color: var(--primary-active); }
       button.link:hover:not(:disabled) { background: none; color: var(--text-primary); text-decoration: underline; }
       button.link.danger:hover:not(:disabled) { color: var(--error-color); }
       input,
@@ -341,10 +335,7 @@
           border-color 0.15s,
           box-shadow 0.15s;
       }
-      input:not([type="checkbox"]):not([type="radio"]),
-      select {
-        min-height: 35px;
-      }
+      input:not([type="checkbox"]):not([type="radio"]), select { min-height: 35px; }
       input:focus,
       select:focus,
       textarea:focus {
@@ -388,10 +379,7 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      label.field > .native-select,
-      label.field > .native-select > select {
-        width: 100%;
-      }
+      label.field > .native-select, label.field > .native-select > select { width: 100%; }
       label.field {
         display: flex;
         flex-direction: column;
@@ -421,11 +409,7 @@
         vertical-align: middle;
       }
       th { font-size: 12px; color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
-      td.num,
-      th.num {
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-      }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       tbody tr:hover { background: var(--bg-hover); }
       .table-scroll .muted { color: var(--text-secondary); }
       /* Leave room for CPAMC's action bar over the iframe. */
@@ -561,10 +545,7 @@
         background: linear-gradient(to left, var(--tabs-fade-surface) 20%, transparent);
         box-shadow: inset -4px 0 var(--tabs-fade-surface);
       }
-      .tabs-scroll.can-scroll-left::before,
-      .tabs-scroll.can-scroll-right::after {
-        opacity: 1;
-      }
+      .tabs-scroll.can-scroll-left::before, .tabs-scroll.can-scroll-right::after { opacity: 1; }
       .tag {
         display: inline-flex;
         align-items: center;
@@ -771,11 +752,7 @@
         }
       }
       .concurrency-editor { display: flex; align-items: center; gap: 7px; min-width: 172px; }
-      .concurrency-editor .native-select,
-      .concurrency-editor select {
-        width: 96px;
-        min-width: 96px;
-      }
+      .concurrency-editor .native-select, .concurrency-editor select { width: 96px; min-width: 96px; }
       .concurrency-editor .small { white-space: nowrap; }
       .key-plan-select { width: 150px; max-width: 150px; }
       .key-plan-select > select { width: 100%; }
@@ -816,11 +793,7 @@
         opacity: 1;
       }
       button.key-copy-button.link:hover { text-decoration: none; }
-      button.key-copy-button.copied,
-      button.key-copy-button.copied:hover {
-        color: var(--primary-color);
-        opacity: 1;
-      }
+      button.key-copy-button.copied, button.key-copy-button.copied:hover { color: var(--primary-color); opacity: 1; }
       :root[data-cpamp-plugin-host="true"] button.key-copy-button { min-height: 22px; padding: 0; }
       .key-copy-button .lucide-icon { width: 12px; height: 12px; }
       .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
@@ -918,21 +891,9 @@
         cursor: pointer;
       }
       .remember-row input { width: auto; }
-      .gate-submit {
-        width: 100%;
-        min-height: 42px;
-        margin-top: 4px;
-        font-size: 14px;
-        font-weight: 600;
-      }
+      .gate-submit { width: 100%; min-height: 42px; margin-top: 4px; font-size: 14px; font-weight: 600; }
       .app-header { justify-content: space-between; padding-right: 0; }
-      .app-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 0;
-        flex-wrap: wrap;
-      }
+      .app-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
       .standalone-actions {
         display: inline-flex;
         align-items: center;
@@ -992,14 +953,26 @@
       .quota-windows { display: grid; gap: 6px; min-width: 0; }
       .quota-window { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
       .quota-windows .bar { height: 4px; }
-      .quota-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+      .quota-heading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
       .quota-heading > :first-child { overflow: hidden; text-overflow: ellipsis; }
       .quota-heading .blocked { color: var(--quota-low-color); }
       #keys-body .quota-windows { width: 240px; }
       .settings-dialog.plan-dialog { width: min(800px, calc(100vw - 32px)); }
       .plan-windows-heading { margin-top: 20px; }
       #plan-windows { display: grid; gap: 14px; margin-top: 12px; }
-      .plan-window { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) minmax(0, 1.2fr) auto; gap: 12px; align-items: start; }
+      .plan-window {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1.2fr) auto;
+        gap: 12px;
+        align-items: start;
+      }
       .plan-window input, .plan-dialog > .field input { width: 100%; min-width: 0; }
       .period-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
       .window-delete { margin-top: 24px; }
@@ -1008,7 +981,11 @@
       .plan-window [aria-invalid="true"] { border-color: var(--error-color); }
       #plan-form-error { margin-top: 12px; }
       @media (max-width: 640px) {
-        .plan-window { grid-template-columns: 1fr; padding-bottom: 14px; border-bottom: 1px solid var(--border-primary); }
+        .plan-window {
+          grid-template-columns: 1fr;
+          padding-bottom: 14px;
+          border-bottom: 1px solid var(--border-primary);
+        }
         .window-delete { margin-top: 0; justify-self: end; }
       }
       .account-models {
@@ -1031,13 +1008,7 @@
       }
       .account-access-chips { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
       .plugin-log-message summary::-webkit-details-marker { display: none; }
-      .details-summary {
-        display: flex;
-        align-items: flex-start;
-        gap: 7px;
-        list-style: none;
-        cursor: pointer;
-      }
+      .details-summary { display: flex; align-items: flex-start; gap: 7px; list-style: none; cursor: pointer; }
       .details-summary-icon { display: grid; place-items: center; flex: 0 0 14px; height: 1.55em; }
       .details-summary-icon .lucide-chevron-icon { margin: 0; }
       details[open] > .details-summary .lucide-chevron-icon,
@@ -1122,10 +1093,7 @@
         gap: 8px;
         min-width: 0;
       }
-      .auth-filter-bar .native-select,
-      .auth-filter-bar select {
-        min-width: 150px;
-      }
+      .auth-filter-bar .native-select, .auth-filter-bar select { min-width: 150px; }
       .auth-filter-bar input[type="search"] { flex: 0 1 240px; width: 240px; min-width: 140px; }
       .toggle-filter {
         display: inline-flex;
@@ -1161,7 +1129,10 @@
         transition: transform 0.15s;
       }
       .toggle-filter input:checked + .toggle-track { background: var(--primary-color); }
-      .toggle-filter input:checked + .toggle-track::after { transform: translateX(12px); background: var(--primary-contrast); }
+      .toggle-filter input:checked + .toggle-track::after {
+        transform: translateX(12px);
+        background: var(--primary-contrast);
+      }
       .toggle-filter:focus-within {
         border-color: var(--primary-color);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
@@ -1210,13 +1181,7 @@
         }
       }
       .auth-file-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-      .auth-file-main {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        min-width: 0;
-        flex: 1;
-      }
+      .auth-file-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
       .auth-file-identity { min-width: 0; flex: 1; }
       .auth-file-email-title {
         font-size: 13px;
@@ -1366,10 +1331,7 @@
         overscroll-behavior: contain;
       }
       dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
-      html:has(dialog[open]),
-      body:has(dialog[open]) {
-        overflow: hidden;
-      }
+      html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
       .settings-picker-section { display: grid; gap: 8px; margin-top: 20px; }
       .settings-picker-list { max-height: 340px; overflow: auto; }
       .settings-dialog {
@@ -1438,13 +1400,7 @@
       }
       .route-editor-section { display: grid; align-content: start; gap: 6px; min-width: 0; }
       .route-editor-section > .small { padding-inline: 2px; }
-      .route-editor-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        min-height: 16px;
-        padding-inline: 2px;
-      }
+      .route-editor-title { display: flex; align-items: center; gap: 12px; min-height: 16px; padding-inline: 2px; }
       .route-editor-title > .small { white-space: nowrap; }
       .dialog-input { width: 100%; }
       .dialog-actions { justify-content: flex-end; margin-top: 14px; }
@@ -1487,10 +1443,7 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .key-picker label:hover,
-      .route-picker-option:hover {
-        background: var(--bg-hover);
-      }
+      .key-picker label:hover, .route-picker-option:hover { background: var(--bg-hover); }
       .key-picker input[type="checkbox"],
       .route-picker-option input[type="checkbox"] {
         flex: none;
@@ -1499,10 +1452,7 @@
         min-height: 0;
       }
       .key-picker label.disabled { cursor: not-allowed; opacity: 0.55; }
-      .key-picker label.disabled:hover,
-      .route-picker-option.disabled:hover {
-        background: transparent;
-      }
+      .key-picker label.disabled:hover, .route-picker-option.disabled:hover { background: transparent; }
       .settings-card-list { padding-bottom: 0; }
       .settings-entry-header { align-items: flex-start; margin-bottom: 10px; }
       .settings-entry-title { min-width: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
@@ -1512,13 +1462,7 @@
       .key-bindings { display: grid; gap: 5px; min-width: 0; }
       .key-picker label > .tag { flex: none; }
       .settings-entry-value { flex: 1; min-width: 0; color: var(--text-primary); }
-      .settings-chip-list {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 5px;
-        min-width: 0;
-      }
+      .settings-chip-list { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
       .settings-item-chip { flex: none; }
       .lucide-icon { display: block; flex: none; width: 1em; height: 1em; }
       .lucide-chevron-icon {
@@ -1654,15 +1598,8 @@
         cursor: pointer;
       }
       .route-picker-option > span[title] { flex: 0 1 auto; white-space: normal; overflow-wrap: anywhere; }
-      .route-picker-option > .tag,
-      .route-picker-option > .count {
-        flex: none;
-      }
-      .route-picker-option > .lucide-icon,
-      .key-picker label > .lucide-icon {
-        width: 14px;
-        height: 14px;
-      }
+      .route-picker-option > .tag, .route-picker-option > .count { flex: none; }
+      .route-picker-option > .lucide-icon, .key-picker label > .lucide-icon { width: 14px; height: 14px; }
       .route-picker-option.model > span {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         font-size: 12px;
@@ -1692,15 +1629,8 @@
         .route-trigger { max-width: none; }
       }
       .wide-search { width: 360px; max-width: 100%; }
-      .section-toolbar,
-      .settings-section-header {
-        margin-bottom: 12px;
-      }
-      .section-toolbar h2,
-      .settings-section-header h2,
-      .account-plan h2 {
-        margin: 0;
-      }
+      .section-toolbar, .settings-section-header { margin-bottom: 12px; }
+      .section-toolbar h2, .settings-section-header h2, .account-plan h2 { margin: 0; }
       #price-filter { max-width: 220px; }
       .section-actions { min-width: 0; }
       .event-list-card {
@@ -1725,13 +1655,7 @@
         white-space: nowrap;
       }
       .time-range-icon { width: 15px; height: 15px; flex: none; color: var(--text-tertiary); }
-      .time-range-icon + span {
-        flex: 1;
-        min-width: 0;
-        text-align: left;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+      .time-range-icon + span { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
       .time-range-chevron {
         flex: none;
         width: 20px;
@@ -1766,33 +1690,106 @@
       .time-range-options button { min-width: 0; }
       .time-range-modes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
       :root .time-range-popover .time-range-modes button { padding-inline: 4px; white-space: nowrap; }
-      .time-range-custom { display: grid; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
-      .time-range-units, .time-range-endpoints, .time-range-hours { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      :root .time-range-popover .time-range-endpoints button { padding-block: 8px; display: grid; gap: 4px; text-align: left; overflow-wrap: anywhere; }
+      .time-range-custom {
+        display: grid;
+        gap: 12px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border-color);
+      }
+      .time-range-units,
+      .time-range-endpoints,
+      .time-range-hours {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      :root .time-range-popover .time-range-endpoints button {
+        padding-block: 8px;
+        display: grid;
+        gap: 4px;
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
       .time-range-endpoints button.active .muted { color: inherit; opacity: 0.8; }
       .time-range-endpoints.summary { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
-      .time-range-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px 0; text-align: center; }
+      .time-range-calendar {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 2px 0;
+        text-align: center;
+      }
       .time-range-calendar > span { padding-block: 6px; }
-      :root .time-range-popover .time-range-calendar button { padding: 8px 0; border-color: transparent; background: transparent; }
-      :root .time-range-popover .time-range-calendar button.in-range { background: var(--bg-tertiary); border-radius: 0; }
-      :root .time-range-popover .time-range-calendar button.range-start { border-radius: var(--radius-md) 0 0 var(--radius-md); }
-      :root .time-range-popover .time-range-calendar button.range-end { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+      :root .time-range-popover .time-range-calendar button {
+        padding: 8px 0;
+        border-color: transparent;
+        background: transparent;
+      }
+      :root .time-range-popover .time-range-calendar button.in-range {
+        background: var(--bg-tertiary);
+        border-radius: 0;
+      }
+      :root .time-range-popover .time-range-calendar button.range-start {
+        border-radius: var(--radius-md) 0 0 var(--radius-md);
+      }
+      :root .time-range-popover .time-range-calendar button.range-end {
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      }
       :root .time-range-popover .time-range-calendar button.range-start.range-end { border-radius: var(--radius-md); }
       :root .time-range-popover .time-range-calendar .outside-month { color: var(--text-tertiary); }
-      .time-range-hour-list { position: relative; display: grid; gap: 4px; max-height: 220px; overflow: auto; margin-top: 8px; overscroll-behavior: contain; }
-      .time-range-hour-list button { display: flex; align-items: center; justify-content: space-between; gap: 4px; text-align: left; }
+      .time-range-hour-list {
+        position: relative;
+        display: grid;
+        gap: 4px;
+        max-height: 220px;
+        overflow: auto;
+        margin-top: 8px;
+        overscroll-behavior: contain;
+      }
+      .time-range-hour-list button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        text-align: left;
+      }
       .time-range-actions { justify-content: flex-end; margin-left: auto; }
       .time-range-rolling { display: grid; gap: 8px; margin-top: 16px; }
       :root .range-control input.range-input[type="range"] {
-        --range-track: linear-gradient(to right, var(--primary-color) var(--range-progress), var(--border-color) var(--range-progress));
+        --range-track: linear-gradient(
+          to right,
+          var(--primary-color) var(--range-progress),
+          var(--border-color) var(--range-progress)
+        );
         appearance: none;
-        width: 100%; min-width: 0; height: 24px; min-height: 0; margin: 0; padding: 0;
-        border: 0; box-shadow: none; background: transparent;
+        width: 100%;
+        min-width: 0;
+        height: 24px;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        box-shadow: none;
+        background: transparent;
       }
       .range-input::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: var(--range-track); }
       .range-input::-moz-range-track { height: 6px; border-radius: 999px; background: var(--range-track); }
-      .range-input::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; margin-top: -5px; border: 0; border-radius: 50%; background: var(--primary-color); }
-      .range-input::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--primary-color); }
+      .range-input::-webkit-slider-thumb {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        margin-top: -5px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--primary-color);
+      }
+      .range-input::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--primary-color);
+      }
       .range-ticks { position: relative; height: 18px; margin-inline: 8px; }
       .range-ticks > span { position: absolute; transform: translateX(-50%); }
       .time-range-backdrop { display: none; }
@@ -1824,20 +1821,8 @@
         background: var(--event-entry-bg);
       }
       .event-entry.request-failure { border-left: 3px solid var(--event-error-rail); }
-      .event-entry-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        min-width: 0;
-      }
-      .event-entry-tags {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 5px;
-        flex-wrap: wrap;
-      }
+      .event-entry-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+      .event-entry-tags { display: flex; align-items: center; justify-content: flex-end; gap: 5px; flex-wrap: wrap; }
       .event-time {
         color: var(--text-secondary);
         font-size: 12px;
@@ -1864,13 +1849,7 @@
         overflow-wrap: anywhere;
       }
       .event-request-meta { display: flex; align-items: baseline; gap: 3px 12px; min-width: 0; }
-      .error-event-field {
-        display: flex;
-        flex: 0 0 auto;
-        align-items: baseline;
-        gap: 6px;
-        min-width: 0;
-      }
+      .error-event-field { display: flex; flex: 0 0 auto; align-items: baseline; gap: 6px; min-width: 0; }
       .error-event-field:last-child { flex: 1 1 auto; }
       .error-event-field-label { flex: none; color: var(--text-tertiary); font-size: 11px; font-weight: 500; }
       .error-event-field-value {
@@ -1914,13 +1893,7 @@
         background: var(--bg-primary);
         box-shadow: 0 1px 0 var(--border-color);
       }
-      .request-event-cell-line {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        min-height: 20px;
-        white-space: nowrap;
-      }
+      .request-event-cell-line { display: flex; align-items: center; gap: 4px; min-height: 20px; white-space: nowrap; }
       .request-event-source {
         min-height: 20px;
         max-width: 260px;
@@ -2003,21 +1976,11 @@
           flex: 1 1 100%;
           width: 100%;
         }
-        .section-actions .wide-search,
-        #price-filter {
-          width: 100%;
-          max-width: none;
-          min-width: 0;
-        }
+        .section-actions .wide-search, #price-filter { width: 100%; max-width: none; min-width: 0; }
         #tab-prices .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        #price-filter,
-        #tab-keys #key-filter { grid-column: 1 / -1; }
+        #price-filter, #tab-keys #key-filter { grid-column: 1 / -1; }
         #tab-plugin-logs .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
-        #tab-plugin-logs .section-actions > *,
-        #tab-plugin-logs .section-actions select {
-          width: 100%;
-          min-width: 0;
-        }
+        #tab-plugin-logs .section-actions > *, #tab-plugin-logs .section-actions select { width: 100%; min-width: 0; }
         .section-actions.auth-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .auth-filter-bar input[type="search"] { width: 100%; min-width: 0; }
         .auth-filter-bar .native-select,
@@ -2045,8 +2008,7 @@
           max-height: calc(100dvh - 24px);
           overflow: auto;
         }
-        html:has(.time-range-popover:not(.hidden)),
-        body:has(.time-range-popover:not(.hidden)) { overflow: hidden; }
+        html:has(.time-range-popover:not(.hidden)), body:has(.time-range-popover:not(.hidden)) { overflow: hidden; }
         .time-range-backdrop:not(.hidden) {
           display: block;
           position: fixed;
@@ -2093,10 +2055,7 @@
       }
       @media (max-width: 520px) {
         body:not(.embedded) #account-identity { display: none; }
-        body:not(.embedded) .app-header,
-        body:not(.embedded) .app-header .app-title {
-          gap: 7px;
-        }
+        body:not(.embedded) .app-header, body:not(.embedded) .app-header .app-title { gap: 7px; }
         body:not(.embedded) .standalone-actions .icon-action {
           width: 34px;
           height: 34px;
@@ -2309,10 +2268,7 @@
         .usage-trend-chart { height: 280px; }
         dialog { width: calc(100vw - 24px); max-width: none; padding: 16px; }
         .settings-dialog { padding: 18px; }
-        .route-form-toolbar,
-        .route-editor-grid {
-          grid-template-columns: 1fr;
-        }
+        .route-form-toolbar, .route-editor-grid { grid-template-columns: 1fr; }
         .settings-entry-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .account-access-summary { grid-template-columns: 1fr; }
         .price-fields { grid-template-columns: 1fr; }
@@ -2328,12 +2284,8 @@
         background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
         color: var(--text-secondary);
       }
-      #keys-body tr.key-deleted .quota-window {
-        opacity: 0.65;
-      }
-      #keys-body tr.key-deleted .quota-fill {
-        background: var(--text-tertiary);
-      }
+      #keys-body tr.key-deleted .quota-window { opacity: 0.65; }
+      #keys-body tr.key-deleted .quota-fill { background: var(--text-tertiary); }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script>
@@ -2461,11 +2413,14 @@
             autocomplete="username"
             value="admin" />
           <div id="gate-error" class="notice err"></div>
-          <label class="field"
-            ><span id="gate-key-label">管理密钥</span>
+          <label class="field">
+            <span id="gate-key-label">管理密钥</span>
             <input id="gate-key" type="password" autocomplete="current-password" placeholder="输入管理密钥" />
           </label>
-          <label class="remember-row"><input id="gate-remember" type="checkbox" />记住密钥</label>
+          <label class="remember-row">
+            <input id="gate-remember" type="checkbox" />
+            记住密钥
+          </label>
           <button id="gate-submit" type="submit" class="primary gate-submit">进入管理控制台</button>
         </form>
       </section>
@@ -2510,10 +2465,14 @@
                   aria-haspopup="dialog"
                   aria-expanded="false">
                   <span class="time-range-icon" data-lucide-icon="clock" aria-hidden="true"></span>
-                  <span id="shared-time-label">最近 30 天</span
-                  ><span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
+                  <span id="shared-time-label">最近 30 天</span>
+                  <span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
                 </button>
-                <div id="shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
+                <div
+                  id="shared-time-popover"
+                  class="time-range-popover hidden"
+                  role="dialog"
+                  aria-label="选择时间范围"></div>
               </div>
             </div>
             <button id="request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -2528,14 +2487,14 @@
               <h2>API Key</h2>
               <div class="row section-actions">
                 <input id="key-filter" placeholder="搜索 API Key、备注或计划" class="wide-search" />
-                <label class="toggle-filter"
-                  ><input id="keys-include-deleted" type="checkbox" /><span
-                    class="toggle-track"
-                    aria-hidden="true"></span
-                  ><span>包含已删除</span></label
-                >
+                <label class="toggle-filter">
+                  <input id="keys-include-deleted" type="checkbox" />
+                  <span class="toggle-track" aria-hidden="true"></span>
+                  <span>包含已删除</span>
+                </label>
                 <button id="keys-reset-all" class="labeled-icon-button">
-                  <span data-lucide-icon="party-popper" aria-hidden="true"></span>全员重置
+                  <span data-lucide-icon="party-popper" aria-hidden="true"></span>
+                  全员重置
                 </button>
               </div>
             </div>
@@ -2558,7 +2517,10 @@
           <dialog id="plan-dialog" class="settings-dialog plan-dialog">
             <h2 id="plan-form-title">新建订阅计划</h2>
             <input id="plan-id" type="hidden" />
-            <label class="field">计划名称<input id="plan-name" placeholder="团队额度" /></label>
+            <label class="field">
+              计划名称
+              <input id="plan-name" placeholder="团队额度" />
+            </label>
             <div class="row spread plan-windows-heading">
               <span class="small muted">额度窗口</span>
               <button id="plan-window-add" type="button" class="link small">添加窗口</button>
@@ -2588,29 +2550,40 @@
             <h2 id="route-form-title">新建路由规则</h2>
             <input id="route-id" type="hidden" />
             <div class="route-form-toolbar">
-              <label class="field">规则名称<input id="route-name" placeholder="Codex 认证文件" /></label>
-              <label class="field"
-                >筛选<input id="route-rule-search" type="search" placeholder="搜索模型或凭证"
-              /></label>
+              <label class="field">
+                规则名称
+                <input id="route-name" placeholder="Codex 认证文件" />
+              </label>
+              <label class="field">
+                筛选
+                <input id="route-rule-search" type="search" placeholder="搜索模型或凭证" />
+              </label>
               <div class="row">
-                <button id="route-rule-all" type="button" class="link">全选</button
-                ><button id="route-rule-none" type="button" class="link">清空</button>
+                <button id="route-rule-all" type="button" class="link">全选</button>
+                <button id="route-rule-none" type="button" class="link">清空</button>
               </div>
             </div>
             <div class="route-editor-grid">
               <div class="route-editor-section">
-                <span class="small muted">模型（<span id="route-model-count">全部</span>）</span>
+                <span class="small muted">
+                  模型（
+                  <span id="route-model-count">全部</span>
+                  ）
+                </span>
                 <div id="route-model-list" class="key-picker route-rule-list settings-picker-list"></div>
               </div>
               <div class="route-editor-section">
                 <div class="route-editor-title">
-                  <span class="small muted">凭证（<span id="route-credential-count">全部</span>）</span>
-                  <label class="toggle-filter compact-toggle"
-                    ><input id="route-credential-enabled-only" type="checkbox" checked /><span
-                      class="toggle-track"
-                      aria-hidden="true"></span
-                    ><span>仅启用</span></label
-                  >
+                  <span class="small muted">
+                    凭证（
+                    <span id="route-credential-count">全部</span>
+                    ）
+                  </span>
+                  <label class="toggle-filter compact-toggle">
+                    <input id="route-credential-enabled-only" type="checkbox" checked />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                    <span>仅启用</span>
+                  </label>
                 </div>
                 <div id="route-credential-list" class="key-picker route-rule-list settings-picker-list"></div>
               </div>
@@ -2646,23 +2619,23 @@
             <div class="row spread section-toolbar event-list-title-row">
               <h2>请求事件</h2>
               <div class="row section-actions event-card-actions">
-                <span class="native-select"
-                  ><select id="request-event-model" aria-label="按模型筛选">
+                <span class="native-select">
+                  <select id="request-event-model" aria-label="按模型筛选">
                     <option value="">全部模型</option>
-                  </select></span
-                >
-                <span class="native-select"
-                  ><select id="request-event-source" aria-label="按来源筛选">
+                  </select>
+                </span>
+                <span class="native-select">
+                  <select id="request-event-source" aria-label="按来源筛选">
                     <option value="">全部来源</option>
-                  </select></span
-                >
-                <span class="native-select"
-                  ><select id="request-event-status" aria-label="按状态筛选">
+                  </select>
+                </span>
+                <span class="native-select">
+                  <select id="request-event-status" aria-label="按状态筛选">
                     <option value="">全部状态</option>
                     <option value="false">正常</option>
                     <option value="true">失败</option>
-                  </select></span
-                >
+                  </select>
+                </span>
                 <button id="request-events-filter-clear" class="link" type="button" disabled>清除筛选</button>
               </div>
             </div>
@@ -2678,21 +2651,21 @@
             <div class="row spread section-toolbar">
               <h2>错误事件</h2>
               <div class="row section-actions event-card-actions">
-                <span class="native-select"
-                  ><select id="error-model" aria-label="按模型筛选">
+                <span class="native-select">
+                  <select id="error-model" aria-label="按模型筛选">
                     <option value="">全部模型</option>
-                  </select></span
-                >
-                <span class="native-select"
-                  ><select id="error-source" aria-label="按来源筛选">
+                  </select>
+                </span>
+                <span class="native-select">
+                  <select id="error-source" aria-label="按来源筛选">
                     <option value="">全部来源</option>
-                  </select></span
-                >
-                <span class="native-select"
-                  ><select id="error-type" aria-label="按错误类型筛选">
+                  </select>
+                </span>
+                <span class="native-select">
+                  <select id="error-type" aria-label="按错误类型筛选">
                     <option value="">全部错误类型</option>
-                  </select></span
-                >
+                  </select>
+                </span>
                 <button id="errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
               </div>
             </div>
@@ -2708,22 +2681,21 @@
             <div class="row spread section-toolbar">
               <h2>认证文件</h2>
               <div class="row section-actions auth-filter-bar">
-                <label class="toggle-filter"
-                  ><input id="auth-enabled-only" type="checkbox" checked /><span
-                    class="toggle-track"
-                    aria-hidden="true"></span
-                  ><span>仅启用</span></label
-                >
-                <span class="native-select"
-                  ><select id="auth-provider" aria-label="按认证文件类别筛选">
+                <label class="toggle-filter">
+                  <input id="auth-enabled-only" type="checkbox" checked />
+                  <span class="toggle-track" aria-hidden="true"></span>
+                  <span>仅启用</span>
+                </label>
+                <span class="native-select">
+                  <select id="auth-provider" aria-label="按认证文件类别筛选">
                     <option value="">全部类别</option>
                     <option value="claude">Claude</option>
                     <option value="antigravity">Antigravity</option>
                     <option value="codex">Codex</option>
                     <option value="xai">xAI</option>
                     <option value="kimi">Kimi</option>
-                  </select></span
-                >
+                  </select>
+                </span>
                 <input id="auth-search" type="search" placeholder="搜索认证文件" autocomplete="off" />
                 <button id="auth-refresh-filtered" class="labeled-icon-button" type="button">更新限额</button>
               </div>
@@ -2737,14 +2709,14 @@
             <div class="row spread section-toolbar">
               <h2>插件日志</h2>
               <div class="row section-actions">
-                <span class="native-select"
-                  ><select id="plugin-log-level" aria-label="按级别筛选">
+                <span class="native-select">
+                  <select id="plugin-log-level" aria-label="按级别筛选">
                     <option value="all">全部级别</option>
                     <option value="debug">调试</option>
                     <option value="info">信息</option>
                     <option value="error">错误</option>
-                  </select></span
-                >
+                  </select>
+                </span>
                 <input id="plugin-log-filter" placeholder="搜索日志内容" class="wide-search" />
                 <button id="plugin-logs-clear" class="danger">清空日志</button>
               </div>
@@ -2795,10 +2767,14 @@
                     aria-haspopup="dialog"
                     aria-expanded="false">
                     <span class="time-range-icon" data-lucide-icon="clock" aria-hidden="true"></span>
-                    <span id="account-shared-time-label">最近 30 天</span
-                    ><span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
+                    <span id="account-shared-time-label">最近 30 天</span>
+                    <span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
                   </button>
-                  <div id="account-shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
+                  <div
+                    id="account-shared-time-popover"
+                    class="time-range-popover hidden"
+                    role="dialog"
+                    aria-label="选择时间范围"></div>
                 </div>
               </div>
               <button id="account-request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -2838,23 +2814,23 @@
               <div class="row spread section-toolbar event-list-title-row">
                 <h2>请求事件</h2>
                 <div class="row section-actions event-card-actions">
-                  <span class="native-select"
-                    ><select id="account-request-event-model" aria-label="按模型筛选">
+                  <span class="native-select">
+                    <select id="account-request-event-model" aria-label="按模型筛选">
                       <option value="">全部模型</option>
-                    </select></span
-                  >
-                  <span class="native-select"
-                    ><select id="account-request-event-source" aria-label="按来源筛选">
+                    </select>
+                  </span>
+                  <span class="native-select">
+                    <select id="account-request-event-source" aria-label="按来源筛选">
                       <option value="">全部来源</option>
-                    </select></span
-                  >
-                  <span class="native-select"
-                    ><select id="account-request-event-status" aria-label="按状态筛选">
+                    </select>
+                  </span>
+                  <span class="native-select">
+                    <select id="account-request-event-status" aria-label="按状态筛选">
                       <option value="">全部状态</option>
                       <option value="false">正常</option>
                       <option value="true">失败</option>
-                    </select></span
-                  >
+                    </select>
+                  </span>
                   <button id="account-request-events-filter-clear" class="link" type="button" disabled>清除筛选</button>
                 </div>
               </div>
@@ -2869,21 +2845,21 @@
               <div class="row spread section-toolbar">
                 <h2>错误事件</h2>
                 <div class="row section-actions event-card-actions">
-                  <span class="native-select"
-                    ><select id="account-error-model">
+                  <span class="native-select">
+                    <select id="account-error-model">
                       <option value="">全部模型</option>
-                    </select></span
-                  >
-                  <span class="native-select"
-                    ><select id="account-error-source">
+                    </select>
+                  </span>
+                  <span class="native-select">
+                    <select id="account-error-source">
                       <option value="">全部来源</option>
-                    </select></span
-                  >
-                  <span class="native-select"
-                    ><select id="account-error-type" aria-label="按错误类型筛选">
+                    </select>
+                  </span>
+                  <span class="native-select">
+                    <select id="account-error-type" aria-label="按错误类型筛选">
                       <option value="">全部错误类型</option>
-                    </select></span
-                  >
+                    </select>
+                  </span>
                   <button id="account-errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
                 </div>
               </div>
@@ -2898,22 +2874,21 @@
               <div class="row spread section-toolbar">
                 <h2>认证文件</h2>
                 <div class="row section-actions auth-filter-bar">
-                  <label class="toggle-filter"
-                    ><input id="account-auth-enabled-only" type="checkbox" checked /><span
-                      class="toggle-track"
-                      aria-hidden="true"></span
-                    ><span>仅启用</span></label
-                  >
-                  <span class="native-select"
-                    ><select id="account-auth-provider" aria-label="按认证文件类别筛选">
+                  <label class="toggle-filter">
+                    <input id="account-auth-enabled-only" type="checkbox" checked />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                    <span>仅启用</span>
+                  </label>
+                  <span class="native-select">
+                    <select id="account-auth-provider" aria-label="按认证文件类别筛选">
                       <option value="">全部类别</option>
                       <option value="claude">Claude</option>
                       <option value="antigravity">Antigravity</option>
                       <option value="codex">Codex</option>
                       <option value="xai">xAI</option>
                       <option value="kimi">Kimi</option>
-                    </select></span
-                  >
+                    </select>
+                  </span>
                   <input id="account-auth-search" type="search" placeholder="搜索认证文件" autocomplete="off" />
                   <button id="account-auth-refresh-filtered" class="labeled-icon-button" type="button">更新限额</button>
                 </div>
@@ -2927,38 +2902,61 @@
 
     <dialog id="price-dlg" class="settings-dialog">
       <h2 id="price-dialog-title">编辑模型定价</h2>
-      <label class="field">模型 ID<input class="mono price-dialog-model" id="price-model" placeholder="模型 ID" maxlength="1024" /></label>
+      <label class="field">
+        模型 ID
+        <input class="mono price-dialog-model" id="price-model" placeholder="模型 ID" maxlength="1024" />
+      </label>
       <div class="price-reference">
-        <label class="field"
-          >选择参考价
+        <label class="field">
+          选择参考价
           <input id="price-reference-search" placeholder="搜索参考模型" autocomplete="off" />
         </label>
         <div id="price-reference-results" class="price-reference-results" aria-live="polite"></div>
       </div>
       <div class="price-fields">
-        <label class="field">输入 / 1M Token<input id="price-in" type="number" step="any" min="0" value="0" /></label>
-        <label class="field">输出 / 1M Token<input id="price-out" type="number" step="any" min="0" value="0" /></label>
-        <label class="field">缓存读 / 1M Token<input id="price-cr" type="number" step="any" min="0" /></label>
-        <label class="field">缓存写 / 1M Token<input id="price-cw" type="number" step="any" min="0" /></label>
+        <label class="field">
+          输入 / 1M Token
+          <input id="price-in" type="number" step="any" min="0" value="0" />
+        </label>
+        <label class="field">
+          输出 / 1M Token
+          <input id="price-out" type="number" step="any" min="0" value="0" />
+        </label>
+        <label class="field">
+          缓存读 / 1M Token
+          <input id="price-cr" type="number" step="any" min="0" />
+        </label>
+        <label class="field">
+          缓存写 / 1M Token
+          <input id="price-cw" type="number" step="any" min="0" />
+        </label>
       </div>
-      <label class="switch-field"><input id="price-tiered" type="checkbox" />启用长上下文阶梯计价</label>
+      <label class="switch-field">
+        <input id="price-tiered" type="checkbox" />
+        启用长上下文阶梯计价
+      </label>
       <div id="price-tier-fields" class="price-fields tier-fields hidden">
-        <label class="field"
-          >长上下文阈值（输入 Token）<input id="price-tier-threshold" type="number" step="1" min="1" value="272000"
-        /></label>
+        <label class="field">
+          长上下文阈值（输入 Token）
+          <input id="price-tier-threshold" type="number" step="1" min="1" value="272000" />
+        </label>
         <span></span>
-        <label class="field"
-          >长上下文输入 / 1M Token<input id="price-tier-in" type="number" step="any" min="0" value="0"
-        /></label>
-        <label class="field"
-          >长上下文输出 / 1M Token<input id="price-tier-out" type="number" step="any" min="0" value="0"
-        /></label>
-        <label class="field"
-          >长上下文缓存读 / 1M Token<input id="price-tier-cr" type="number" step="any" min="0"
-        /></label>
-        <label class="field"
-          >长上下文缓存写 / 1M Token<input id="price-tier-cw" type="number" step="any" min="0"
-        /></label>
+        <label class="field">
+          长上下文输入 / 1M Token
+          <input id="price-tier-in" type="number" step="any" min="0" value="0" />
+        </label>
+        <label class="field">
+          长上下文输出 / 1M Token
+          <input id="price-tier-out" type="number" step="any" min="0" value="0" />
+        </label>
+        <label class="field">
+          长上下文缓存读 / 1M Token
+          <input id="price-tier-cr" type="number" step="any" min="0" />
+        </label>
+        <label class="field">
+          长上下文缓存写 / 1M Token
+          <input id="price-tier-cw" type="number" step="any" min="0" />
+        </label>
       </div>
       <div class="row dialog-actions">
         <button id="price-cancel">取消</button>
@@ -3214,7 +3212,12 @@
 
       const CONCURRENCY_OPTIONS = [0, 1, 2, 3, 5, 10, 20, 50];
       const CUSTOM_CONCURRENCY = "__custom__";
-      const PERIOD_UNITS = [[86400, "天"], [3600, "小时"], [60, "分钟"], [1, "秒"]];
+      const PERIOD_UNITS = [
+        [86400, "天"],
+        [3600, "小时"],
+        [60, "分钟"],
+        [1, "秒"],
+      ];
       const REQUEST_EVENT_BATCH_SIZE = 50;
       const REQUEST_EVENT_EXPORT_BATCH_SIZE = 1000;
       const REQUEST_EVENT_LOAD_MORE_THRESHOLD_PX = 320;
@@ -3277,7 +3280,10 @@
       };
       const SHARED_TIME_LABELS = { hour: "小时", day: "天", today: "今天", yesterday: "昨天", custom: "自定义" };
       const sharedTimeDrafts = { admin: null, account: null };
-      const sharedTimeChoices = { admin: { hour: 8, day: 7, custom: null }, account: { hour: 8, day: 7, custom: null } };
+      const sharedTimeChoices = {
+        admin: { hour: 8, day: 7, custom: null },
+        account: { hour: 8, day: 7, custom: null },
+      };
       function emptyLoadState() {
         return { promise: null, error: "", generation: 0 };
       }
@@ -3359,7 +3365,8 @@
 
       function storedTimeRange(role) {
         const range = viewPreference(role, "time-range", { mode: "30d" });
-        if (!range || !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode))) return { mode: "30d" };
+        if (!range || !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode)))
+          return { mode: "30d" };
         if (range.mode !== "custom") return { mode: range.mode };
         const from = new Date(range.from);
         const to = new Date(range.to);
@@ -4039,14 +4046,12 @@
           },
           ({ models, prices, status, modelError }) => {
             if (!modelError) state.models = models;
-            state.prices = prices.map((price) => ({
-              ...price,
-              in_models: modelError ? undefined : price.in_models,
-            }));
+            state.prices = prices.map((price) => ({ ...price, in_models: modelError ? undefined : price.in_models }));
             state.priceModelError = modelError;
             renderReferencePriceStatus(status.metadata);
           },
-          () => currentRole === "admin" &&
+          () =>
+            currentRole === "admin" &&
             ["keys", "settings"].includes(activeAdminTab()) &&
             renderAdminTab(activeAdminTab(), true),
         );
@@ -4059,7 +4064,9 @@
             : "暂无参考价",
           metadata?.last_error,
           state.priceModelError,
-        ].filter(Boolean).join("；");
+        ]
+          .filter(Boolean)
+          .join("；");
       }
 
       function loadAccountAccess() {
@@ -4077,7 +4084,7 @@
         return loadResource(
           detailLoads.accountPrices,
           async () => {
-            const models = initialModels ?? await fetchPricingModels(true);
+            const models = initialModels ?? (await fetchPricingModels(true));
             const prices = await fetchModelPrices(models, true);
             return { models, prices };
           },
@@ -4273,7 +4280,8 @@
           }
         }
         const range = selectedRange(account);
-        const refreshEventKeys = !background ||
+        const refreshEventKeys =
+          !background ||
           (tab === "request-events" && canBackgroundRefreshRequestEvents(account)) ||
           (tab === "errors" && canBackgroundRefreshErrors(account));
         if (!account && refreshEventKeys && ["analysis", "request-events", "errors"].includes(tab)) {
@@ -4406,7 +4414,11 @@
         $("account-plan-name").textContent =
           subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
         $("account-plan-status").className = "tag " + (subscription.blocked ? "bad" : "plain");
-        $("account-plan-status").textContent = subscription.unlimited ? "不限制" : subscription.blocked ? "额度用尽" : "正常";
+        $("account-plan-status").textContent = subscription.unlimited
+          ? "不限制"
+          : subscription.blocked
+            ? "额度用尽"
+            : "正常";
         $("account-windows").replaceChildren(renderQuotaWindows(subscription, true));
 
         const routingValid = access.routing_valid !== false;
@@ -4611,7 +4623,7 @@
           });
         }
         for (const row of visible) {
-          row.percent = total > 0 ? Number(row[metric] || 0) * 100 / total : 0;
+          row.percent = total > 0 ? (Number(row[metric] || 0) * 100) / total : 0;
         }
         return visible;
       }
@@ -5016,11 +5028,7 @@
                 : el("b", {}, row.label || row.key || "未知"),
               el("b", { class: "mono" }, row.percent.toFixed(2) + "%"),
             ),
-            el(
-              "div",
-              { class: "usage-distribution-track" },
-              el("i", { style: "width:" + row.percent + "%" }),
-            ),
+            el("div", { class: "usage-distribution-track" }, el("i", { style: "width:" + row.percent + "%" })),
             el(
               "div",
               { class: "usage-distribution-metrics" },
@@ -5908,11 +5916,11 @@
                       title: "从 CPA 配置中删除于 " + new Date(view.deleted_at).toLocaleString(),
                     })
                   : view.blocked
-                  ? el("span", { class: "tag bad", text: "额度用尽" })
-                  : el("span", {
-                      class: "tag " + (view.unlimited ? "plain" : "ok"),
-                      text: view.unlimited ? "不限制" : "正常",
-                    }),
+                    ? el("span", { class: "tag bad", text: "额度用尽" })
+                    : el("span", {
+                        class: "tag " + (view.unlimited ? "plain" : "ok"),
+                        text: view.unlimited ? "不限制" : "正常",
+                      }),
               ),
               el(
                 "td",
@@ -5923,7 +5931,13 @@
                   disabled: deleted || view.unlimited || undefined,
                   onclick: () =>
                     guard(async () => {
-                      if (!(await confirmAction("重置订阅额度？", "所有额度周期将结束，下一次放行会开启新周期。请求事件及其统计不受影响。"))) return;
+                      if (
+                        !(await confirmAction(
+                          "重置订阅额度？",
+                          "所有额度周期将结束，下一次放行会开启新周期。请求事件及其统计不受影响。",
+                        ))
+                      )
+                        return;
                       await plugin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
                       notify("订阅额度已重置");
                       await refreshPage("foreground");
@@ -6367,10 +6381,7 @@
       }
 
       function boundKeyField(keys) {
-        const chips = keys.map((key) => ({
-          text: apiKeyIdentity(key).text,
-          tag: key.deleted_at ? "已删除" : "",
-        }));
+        const chips = keys.map((key) => ({ text: apiKeyIdentity(key).text, tag: key.deleted_at ? "已删除" : "" }));
         return settingsEntryField("已绑定 Key", settingsChipList(chips, "—"));
       }
 
@@ -6407,8 +6418,10 @@
                         !(await confirmAction(
                           "删除订阅计划「" + name + "」？",
                           boundKeys.length
-                            ? "将解除 " + bindingSummary(boundKeys) + " 的套餐绑定。解除后不再限制套餐额度。" +
-                              (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
+                            ? "将解除 " +
+                                bindingSummary(boundKeys) +
+                                " 的套餐绑定。解除后不再限制套餐额度。" +
+                                (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
                             : "",
                         ))
                       )
@@ -6423,12 +6436,14 @@
             el(
               "div",
               { class: "settings-entry-fields" },
-              plan.windows.map((quotaWindow) => el(
-                "div",
-                { class: "event-request-meta" },
-                settingsEntryField(quotaWindow.name, el("b", { class: "mono", text: usd(quotaWindow.amount_usd) })),
-                settingsEntryField("周期", periodLabel(quotaWindow.period_seconds)),
-              )),
+              plan.windows.map((quotaWindow) =>
+                el(
+                  "div",
+                  { class: "event-request-meta" },
+                  settingsEntryField(quotaWindow.name, el("b", { class: "mono", text: usd(quotaWindow.amount_usd) })),
+                  settingsEntryField("周期", periodLabel(quotaWindow.period_seconds)),
+                ),
+              ),
               boundKeyField(boundKeys),
             ),
           );
@@ -6475,8 +6490,11 @@
                         !(await confirmAction(
                           "删除路由规则「" + name + "」？",
                           boundKeys.length
-                            ? "将从 " + bindingSummary(boundKeys) + " 的绑定中解除此规则；其中 " +
-                              (route.fully_unrestricted_keys || 0) + " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
+                            ? "将从 " +
+                                bindingSummary(boundKeys) +
+                                " 的绑定中解除此规则；其中 " +
+                                (route.fully_unrestricted_keys || 0) +
+                                " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
                             : "此操作无法撤销。",
                         ))
                       )
@@ -6665,12 +6683,7 @@
         node.replaceChildren(
           ...(options.length
             ? options
-            : [
-                el("div", {
-                  class: "empty",
-                  text: currentModelIDs().length ? "没有匹配的模型" : "暂无可选模型",
-                }),
-              ]),
+            : [el("div", { class: "empty", text: currentModelIDs().length ? "没有匹配的模型" : "暂无可选模型" })]),
         );
       }
 
@@ -6689,17 +6702,9 @@
             return el(
               "label",
               {},
-              el("input", {
-                type: "checkbox",
-                value: key.scope,
-                checked: checked || undefined,
-              }),
+              el("input", { type: "checkbox", value: key.scope, checked: checked || undefined }),
               renderAPIKeyIdentity(key),
-              key.deleted_at ? el("span", {
-                class: "tag plain",
-                text: "已删除",
-                title: "可取消勾选以解除绑定",
-              }) : null,
+              key.deleted_at ? el("span", { class: "tag plain", text: "已删除", title: "可取消勾选以解除绑定" }) : null,
             );
           }),
         );
@@ -6773,12 +6778,7 @@
           "div",
           { class: "tier-price" },
           el("span", {}, priceValue(base)),
-          el(
-            "span",
-            { class: "muted small" },
-            ">" + threshold + " ",
-            priceValue(longValue),
-          ),
+          el("span", { class: "muted small" }, ">" + threshold + " ", priceValue(longValue)),
         );
       }
 
@@ -7081,17 +7081,22 @@
           const popover = $(sharedTimeID(account, "popover"));
           const focused = document.activeElement;
           const label = focused.getAttribute("aria-label") || focused.textContent;
-          const matchingButtons = () => Array.from(popover.querySelectorAll("button:not(:disabled)")).filter(
-            (button) => (button.getAttribute("aria-label") || button.textContent) === label,
-          );
+          const matchingButtons = () =>
+            Array.from(popover.querySelectorAll("button:not(:disabled)")).filter(
+              (button) => (button.getAttribute("aria-label") || button.textContent) === label,
+            );
           const index = matchingButtons().indexOf(focused);
           renderSharedTimePopover(account);
           const next = matchingButtons()[index];
           (next || popover.querySelector(".time-range-modes .active")).focus({ preventScroll: true });
         };
-        const format = (value) => new Date(value).toLocaleString("zh-CN", custom.unit === "day"
-          ? { year: "numeric", month: "short", day: "numeric" }
-          : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+        const format = (value) =>
+          new Date(value).toLocaleString(
+            "zh-CN",
+            custom.unit === "day"
+              ? { year: "numeric", month: "short", day: "numeric" }
+              : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false },
+          );
         const pickerCancel = () => {
           draft.custom = draft.snapshot;
           draft.view = "summary";
@@ -7099,43 +7104,81 @@
         };
         const apply = () => {
           const to = Math.min(Date.now(), custom.unit === "day" ? shiftLocalDay(custom.end, 1) : custom.end + 3600000);
-          guard(() => applyTimeRange(account, { mode: "custom", unit: custom.unit,
-            from: new Date(custom.start).toISOString(), to: new Date(to).toISOString() }));
+          guard(() =>
+            applyTimeRange(account, {
+              mode: "custom",
+              unit: custom.unit,
+              from: new Date(custom.start).toISOString(),
+              to: new Date(to).toISOString(),
+            }),
+          );
         };
         if (draft.view === "summary") {
-          content.append(el("div", { class: "time-range-options time-range-units", role: "group", "aria-label": "自定义单位" },
-            ["hour", "day"].map((unit) => el("button", { type: "button", class: unit === custom.unit ? "active" : "",
-              "aria-pressed": String(unit === custom.unit), text: unit === "hour" ? "小时" : "天", onclick: () => {
-                if (unit === custom.unit) return;
-                draft.custom = defaultCustomTimeRange(draft, unit);
-                redraw();
-              } })),
-          ));
+          content.append(
+            el(
+              "div",
+              { class: "time-range-options time-range-units", role: "group", "aria-label": "自定义单位" },
+              ["hour", "day"].map((unit) =>
+                el("button", {
+                  type: "button",
+                  class: unit === custom.unit ? "active" : "",
+                  "aria-pressed": String(unit === custom.unit),
+                  text: unit === "hour" ? "小时" : "天",
+                  onclick: () => {
+                    if (unit === custom.unit) return;
+                    draft.custom = defaultCustomTimeRange(draft, unit);
+                    redraw();
+                  },
+                }),
+              ),
+            ),
+          );
         } else {
-          content.append(el("div", { class: "row spread" },
-            el("button", { type: "button", class: "link small", text: "返回", onclick: pickerCancel }),
-            el("span", { class: "small", text: custom.unit === "day" ? "选择日期" : "选择小时" }),
-            el("span", { class: "small muted", text: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-          ));
+          content.append(
+            el(
+              "div",
+              { class: "row spread" },
+              el("button", { type: "button", class: "link small", text: "返回", onclick: pickerCancel }),
+              el("span", { class: "small", text: custom.unit === "day" ? "选择日期" : "选择小时" }),
+              el("span", { class: "small muted", text: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+            ),
+          );
         }
-        const endpoints = el("div", { class: "time-range-options time-range-endpoints" + (draft.view === "summary" ? " summary" : "") }, ["start", "end"].map((endpoint) =>
-          el("button", { type: "button", class: draft.view !== "summary" && draft.endpoint === endpoint ? "active" : "",
-            "aria-label": endpoint === "start" ? "选择开始时间" : "选择结束时间", onclick: () => {
-              if (draft.view === "summary") draft.snapshot = { ...custom };
-              draft.endpoint = endpoint;
-              draft.view = custom.unit;
-              draft.month = new Date(custom[endpoint]);
-              draft.month.setDate(1);
-              redraw();
-            } },
-            el("span", { class: "small muted", text: endpoint === "start" ? "开始时间" : "结束时间" }),
-            el("span", { text: format(custom[endpoint]) }),
-            draft.view === "summary" ? el("span", { class: "small muted", text: endpoint === "end" && custom.start === custom.end ? "与开始时间相同" : "点击修改" }) : null,
+        const endpoints = el(
+          "div",
+          { class: "time-range-options time-range-endpoints" + (draft.view === "summary" ? " summary" : "") },
+          ["start", "end"].map((endpoint) =>
+            el(
+              "button",
+              {
+                type: "button",
+                class: draft.view !== "summary" && draft.endpoint === endpoint ? "active" : "",
+                "aria-label": endpoint === "start" ? "选择开始时间" : "选择结束时间",
+                onclick: () => {
+                  if (draft.view === "summary") draft.snapshot = { ...custom };
+                  draft.endpoint = endpoint;
+                  draft.view = custom.unit;
+                  draft.month = new Date(custom[endpoint]);
+                  draft.month.setDate(1);
+                  redraw();
+                },
+              },
+              el("span", { class: "small muted", text: endpoint === "start" ? "开始时间" : "结束时间" }),
+              el("span", { text: format(custom[endpoint]) }),
+              draft.view === "summary"
+                ? el("span", {
+                    class: "small muted",
+                    text: endpoint === "end" && custom.start === custom.end ? "与开始时间相同" : "点击修改",
+                  })
+                : null,
+            ),
           ),
-        ));
-        if (draft.view === "summary") endpoints.insertBefore(el("span", { class: "muted", "aria-hidden": "true", text: "→" }), endpoints.lastChild);
+        );
+        if (draft.view === "summary")
+          endpoints.insertBefore(el("span", { class: "muted", "aria-hidden": "true", text: "→" }), endpoints.lastChild);
         content.append(endpoints);
-        if (custom.unit === "day") content.append(el("div", { class: "small muted", text: "可选择最近 365 天内的日期" }));
+        if (custom.unit === "day")
+          content.append(el("div", { class: "small muted", text: "可选择最近 365 天内的日期" }));
         if (draft.view === "day") {
           const month = draft.month;
           const monthStart = month.getTime();
@@ -7145,69 +7188,151 @@
             redraw();
           };
           const grid = el("div", { class: "time-range-calendar time-range-options" });
-          for (const name of ["日", "一", "二", "三", "四", "五", "六"]) grid.append(el("span", { class: "small muted", text: name }));
+          for (const name of ["日", "一", "二", "三", "四", "五", "六"])
+            grid.append(el("span", { class: "small muted", text: name }));
           const first = shiftLocalDay(monthStart, -month.getDay());
           for (let i = 0; i < 42; i++) {
             const day = shiftLocalDay(first, i);
             const selected = day === custom.start || day === custom.end;
-            grid.append(el("button", { type: "button", "data-range-day": String(day),
-              class: [selected ? "active" : "", day === custom.start ? "range-start" : "", day === custom.end ? "range-end" : "", day >= custom.start && day <= custom.end ? "in-range" : "",
-                new Date(day).getMonth() !== month.getMonth() ? "outside-month" : ""].filter(Boolean).join(" "),
-              disabled: day < draft.firstDay || day > draft.today,
-              "aria-label": new Date(day).toLocaleDateString("zh-CN"), "aria-pressed": String(selected),
-              text: String(new Date(day).getDate()), onclick: () => {
-                if (draft.endpoint === "start") {
-                  custom.start = day;
-                  custom.end = Math.max(custom.end, day);
-                  draft.endpoint = "end";
-                  draft.month = new Date(custom.end);
-                  draft.month.setDate(1);
-                } else {
-                  custom.end = day;
-                  custom.start = Math.min(custom.start, day);
-                }
-                redraw();
-              } }));
+            grid.append(
+              el("button", {
+                type: "button",
+                "data-range-day": String(day),
+                class: [
+                  selected ? "active" : "",
+                  day === custom.start ? "range-start" : "",
+                  day === custom.end ? "range-end" : "",
+                  day >= custom.start && day <= custom.end ? "in-range" : "",
+                  new Date(day).getMonth() !== month.getMonth() ? "outside-month" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+                disabled: day < draft.firstDay || day > draft.today,
+                "aria-label": new Date(day).toLocaleDateString("zh-CN"),
+                "aria-pressed": String(selected),
+                text: String(new Date(day).getDate()),
+                onclick: () => {
+                  if (draft.endpoint === "start") {
+                    custom.start = day;
+                    custom.end = Math.max(custom.end, day);
+                    draft.endpoint = "end";
+                    draft.month = new Date(custom.end);
+                    draft.month.setDate(1);
+                  } else {
+                    custom.end = day;
+                    custom.start = Math.min(custom.start, day);
+                  }
+                  redraw();
+                },
+              }),
+            );
           }
-          content.append(el("div", { class: "row spread" },
-            el("button", { type: "button", class: "link small", text: "上一月", disabled: monthStart <= draft.firstDay, onclick: () => moveMonth(-1) }),
-            el("span", { class: "small", text: month.toLocaleDateString("zh-CN", { year: "numeric", month: "long" }) }),
-            el("button", { type: "button", class: "link small", text: "下一月", disabled: nextMonth > draft.today, onclick: () => moveMonth(1) }),
-          ), grid);
-        } else if (draft.view === "hour") {
-          content.append(el("div", { class: "time-range-hours" }, ["start", "end"].map((endpoint) =>
-            el("div", {}, el("div", { class: "small muted", text: endpoint === "start" ? "开始时间" : "结束时间" }),
-              el("div", { class: "time-range-hour-list time-range-options" }, draft.hours.map((hour, index) =>
-                el("button", { type: "button", class: custom[endpoint] === hour ? "active" : "",
-                  "aria-pressed": String(custom[endpoint] === hour),
-                  disabled: endpoint === "start" ? index > 19 : hour < custom.start + 4 * 3600000,
-                  onclick: () => {
-                    custom[endpoint] = hour;
-                    if (endpoint === "start") custom.end = Math.max(custom.end, hour + 4 * 3600000);
-                    redraw();
-                  } },
-                  el("span", { text: new Date(hour).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) }),
-                  el("span", { text: endpoint === "end" && index === 23 ? "现在" : new Date(hour).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }) }),
-                ),
-              )),
+          content.append(
+            el(
+              "div",
+              { class: "row spread" },
+              el("button", {
+                type: "button",
+                class: "link small",
+                text: "上一月",
+                disabled: monthStart <= draft.firstDay,
+                onclick: () => moveMonth(-1),
+              }),
+              el("span", {
+                class: "small",
+                text: month.toLocaleDateString("zh-CN", { year: "numeric", month: "long" }),
+              }),
+              el("button", {
+                type: "button",
+                class: "link small",
+                text: "下一月",
+                disabled: nextMonth > draft.today,
+                onclick: () => moveMonth(1),
+              }),
             ),
-          )));
+            grid,
+          );
+        } else if (draft.view === "hour") {
+          content.append(
+            el(
+              "div",
+              { class: "time-range-hours" },
+              ["start", "end"].map((endpoint) =>
+                el(
+                  "div",
+                  {},
+                  el("div", { class: "small muted", text: endpoint === "start" ? "开始时间" : "结束时间" }),
+                  el(
+                    "div",
+                    { class: "time-range-hour-list time-range-options" },
+                    draft.hours.map((hour, index) =>
+                      el(
+                        "button",
+                        {
+                          type: "button",
+                          class: custom[endpoint] === hour ? "active" : "",
+                          "aria-pressed": String(custom[endpoint] === hour),
+                          disabled: endpoint === "start" ? index > 19 : hour < custom.start + 4 * 3600000,
+                          onclick: () => {
+                            custom[endpoint] = hour;
+                            if (endpoint === "start") custom.end = Math.max(custom.end, hour + 4 * 3600000);
+                            redraw();
+                          },
+                        },
+                        el("span", {
+                          text: new Date(hour).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }),
+                        }),
+                        el("span", {
+                          text:
+                            endpoint === "end" && index === 23
+                              ? "现在"
+                              : new Date(hour).toLocaleTimeString("zh-CN", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: false,
+                                }),
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
         }
-        const count = custom.unit === "hour" ? (custom.end - custom.start) / 3600000 + 1
-          : Math.round((custom.end - custom.start) / 86400000) + 1;
+        const count =
+          custom.unit === "hour"
+            ? (custom.end - custom.start) / 3600000 + 1
+            : Math.round((custom.end - custom.start) / 86400000) + 1;
         if (draft.view === "summary") {
-          content.append(el("div", { class: "row spread small muted" },
-            el("span", { text: "共 " + count + (custom.unit === "hour" ? " 小时" : " 天") }),
-            el("span", { text: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-          ));
+          content.append(
+            el(
+              "div",
+              { class: "row spread small muted" },
+              el("span", { text: "共 " + count + (custom.unit === "hour" ? " 小时" : " 天") }),
+              el("span", { text: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+            ),
+          );
         }
-        content.append(el("div", { class: "row spread" },
-          draft.view === "summary" ? null : el("span", { class: "small muted", text: format(custom.start) + " – " + format(custom.end) }),
-          el("div", { class: "row time-range-actions" },
-            el("button", { type: "button", text: "取消", onclick: draft.view === "summary" ? () => closeSharedTimePopover(account, true) : pickerCancel }),
-            el("button", { type: "button", class: "primary", text: "应用", onclick: apply }),
+        content.append(
+          el(
+            "div",
+            { class: "row spread" },
+            draft.view === "summary"
+              ? null
+              : el("span", { class: "small muted", text: format(custom.start) + " – " + format(custom.end) }),
+            el(
+              "div",
+              { class: "row time-range-actions" },
+              el("button", {
+                type: "button",
+                text: "取消",
+                onclick: draft.view === "summary" ? () => closeSharedTimePopover(account, true) : pickerCancel,
+              }),
+              el("button", { type: "button", class: "primary", text: "应用", onclick: apply }),
+            ),
           ),
-        ));
+        );
         return content;
       }
 
@@ -7215,47 +7340,82 @@
         const role = account ? "account" : "admin";
         const draft = sharedTimeDrafts[role];
         const popover = $(sharedTimeID(account, "popover"));
-        popover.replaceChildren(el("div", { class: "row spread time-range-heading" },
-          el("span", { text: "时间范围" }),
-          el("span", { class: "time-range-current", text: timeRangeLabel(sharedTimeRanges[role]) }),
-        ), el("div", { class: "time-range-options time-range-modes", role: "group", "aria-label": "时间范围模式" },
-          Object.entries(SHARED_TIME_LABELS).map(([mode, label]) => el("button", { type: "button", text: label,
-            "aria-pressed": String(mode === draft.mode), class: mode === draft.mode ? "active" : "", onclick: () => {
-              if (mode === "custom") resetCustomTimeDraft(account, draft);
-              draft.mode = mode;
-              draft.view = "summary";
-              renderSharedTimePopover(account);
-              popover.querySelector(".time-range-modes .active").focus();
-              if (mode !== "custom") guard(() => applyTimeRange(account, { mode: mode === "hour" || mode === "day"
-                ? draft[mode] + (mode === "hour" ? "h" : "d") : mode }, false));
-            } })),
-        ));
+        popover.replaceChildren(
+          el(
+            "div",
+            { class: "row spread time-range-heading" },
+            el("span", { text: "时间范围" }),
+            el("span", { class: "time-range-current", text: timeRangeLabel(sharedTimeRanges[role]) }),
+          ),
+          el(
+            "div",
+            { class: "time-range-options time-range-modes", role: "group", "aria-label": "时间范围模式" },
+            Object.entries(SHARED_TIME_LABELS).map(([mode, label]) =>
+              el("button", {
+                type: "button",
+                text: label,
+                "aria-pressed": String(mode === draft.mode),
+                class: mode === draft.mode ? "active" : "",
+                onclick: () => {
+                  if (mode === "custom") resetCustomTimeDraft(account, draft);
+                  draft.mode = mode;
+                  draft.view = "summary";
+                  renderSharedTimePopover(account);
+                  popover.querySelector(".time-range-modes .active").focus();
+                  if (mode !== "custom")
+                    guard(() =>
+                      applyTimeRange(
+                        account,
+                        {
+                          mode: mode === "hour" || mode === "day" ? draft[mode] + (mode === "hour" ? "h" : "d") : mode,
+                        },
+                        false,
+                      ),
+                    );
+                },
+              }),
+            ),
+          ),
+        );
         if (draft.mode === "custom") {
           popover.append(renderCustomTimeRange(account, draft));
           for (const list of popover.querySelectorAll(".time-range-hour-list")) {
             const selected = list.querySelector(".active");
-            if (selected) list.scrollTop = Math.max(0, selected.offsetTop - (list.clientHeight - selected.clientHeight) / 2);
+            if (selected)
+              list.scrollTop = Math.max(0, selected.offsetTop - (list.clientHeight - selected.clientHeight) / 2);
           }
         } else if (draft.mode === "hour" || draft.mode === "day") {
           const unit = draft.mode;
-          const min = unit === "hour" ? 5 : 1, max = unit === "hour" ? 24 : 30;
+          const min = unit === "hour" ? 5 : 1,
+            max = unit === "hour" ? 24 : 30;
           const label = unit === "hour" ? " 小时" : " 天";
           const value = el("b", { text: draft[unit] + label });
           let activePointer = null;
           const commit = () => {
             activePointer = null;
-            if (sharedTimeDrafts[role] === draft && draft.mode === unit) guard(() => applyTimeRange(account, { mode: draft[unit] + (unit === "hour" ? "h" : "d") }, false));
+            if (sharedTimeDrafts[role] === draft && draft.mode === unit)
+              guard(() => applyTimeRange(account, { mode: draft[unit] + (unit === "hour" ? "h" : "d") }, false));
           };
           const finishPointer = (event) => {
             if (activePointer === event.pointerId) commit();
           };
-          const slider = el("input", { type: "range", class: "range-input", min, max, step: 1, value: draft[unit],
-            style: "--range-progress:" + ((draft[unit] - min) / (max - min) * 100) + "%", "aria-label": "最近" + label.trim(),
+          const slider = el("input", {
+            type: "range",
+            class: "range-input",
+            min,
+            max,
+            step: 1,
+            value: draft[unit],
+            style: "--range-progress:" + ((draft[unit] - min) / (max - min)) * 100 + "%",
+            "aria-label": "最近" + label.trim(),
             oninput: (event) => {
               draft[unit] = Number(event.target.value);
               value.textContent = draft[unit] + label;
               updateSharedTimeControl(account, { mode: draft[unit] + (unit === "hour" ? "h" : "d") });
-              event.currentTarget.style.setProperty("--range-progress", ((draft[unit] - min) / (max - min) * 100) + "%");
+              event.currentTarget.style.setProperty(
+                "--range-progress",
+                ((draft[unit] - min) / (max - min)) * 100 + "%",
+              );
             },
             onpointerdown: (event) => {
               if (activePointer !== null && activePointer !== event.pointerId) return event.preventDefault();
@@ -7270,17 +7430,34 @@
             onblur: commit,
           });
           const ticks = unit === "hour" ? [5, 8, 12, 18, 24] : [1, 7, 14, 21, 30];
-          popover.append(el("div", { class: "time-range-rolling" },
-            el("div", { class: "row spread small" }, el("span", { class: "muted", text: "最近时间范围" }), value),
-            el("div", { class: "range-control" }, slider,
-              el("div", { class: "range-ticks small muted", "aria-hidden": "true" },
-                ticks.map((tick) => el("span", { text: String(tick), style: "left:" + ((tick - min) / (max - min) * 100) + "%" })))),
-          ));
+          popover.append(
+            el(
+              "div",
+              { class: "time-range-rolling" },
+              el("div", { class: "row spread small" }, el("span", { class: "muted", text: "最近时间范围" }), value),
+              el(
+                "div",
+                { class: "range-control" },
+                slider,
+                el(
+                  "div",
+                  { class: "range-ticks small muted", "aria-hidden": "true" },
+                  ticks.map((tick) =>
+                    el("span", { text: String(tick), style: "left:" + ((tick - min) / (max - min)) * 100 + "%" }),
+                  ),
+                ),
+              ),
+            ),
+          );
         } else {
-          popover.append(el("div", { class: "time-range-rolling" },
-            el("span", { class: "small", text: SHARED_TIME_LABELS[draft.mode] }),
-            el("span", { class: "small muted", text: draft.mode === "today" ? "00:00 → 现在" : "00:00 → 24:00" }),
-          ));
+          popover.append(
+            el(
+              "div",
+              { class: "time-range-rolling" },
+              el("span", { class: "small", text: SHARED_TIME_LABELS[draft.mode] }),
+              el("span", { class: "small muted", text: draft.mode === "today" ? "00:00 → 现在" : "00:00 → 24:00" }),
+            ),
+          );
         }
       }
 
@@ -7294,13 +7471,19 @@
         draft.hours = Array.from({ length: 24 }, (_, i) => hour.getTime() - (23 - i) * 3600000);
         draft.custom = defaultCustomTimeRange(draft, range?.unit === "hour" ? "hour" : "day");
         if (!range) return;
-        const start = new Date(range.from).getTime(), end = new Date(range.to).getTime() - 1;
+        const start = new Date(range.from).getTime(),
+          end = new Date(range.to).getTime() - 1;
         if (range.unit === "hour") {
           const first = draft.hours.find((value) => value >= start);
           const last = draft.hours.findLast((value) => value <= end);
-          if (first !== undefined && last - first >= 4 * 3600000) draft.custom = { unit: "hour", start: first, end: last };
+          if (first !== undefined && last - first >= 4 * 3600000)
+            draft.custom = { unit: "hour", start: first, end: last };
         } else if (end >= draft.firstDay && start <= now.getTime()) {
-          draft.custom = { unit: "day", start: Math.max(draft.firstDay, localDay(new Date(start))), end: Math.min(draft.today, localDay(new Date(end))) };
+          draft.custom = {
+            unit: "day",
+            start: Math.max(draft.firstDay, localDay(new Date(start))),
+            end: Math.min(draft.today, localDay(new Date(end))),
+          };
         } else {
           draft.custom = { unit: "day", start: draft.today, end: draft.today };
         }
@@ -7313,7 +7496,12 @@
         const role = account ? "account" : "admin";
         const range = sharedTimeRanges[role];
         const rolling = rollingTimeMode(range.mode);
-        const draft = { ...sharedTimeChoices[role], mode: rolling?.unit || range.mode, view: "summary", endpoint: "start" };
+        const draft = {
+          ...sharedTimeChoices[role],
+          mode: rolling?.unit || range.mode,
+          view: "summary",
+          endpoint: "start",
+        };
         if (rolling) draft[rolling.unit] = rolling.value;
         resetCustomTimeDraft(account, draft);
         sharedTimeDrafts[role] = draft;
@@ -7321,7 +7509,7 @@
         popover.classList.remove("hidden");
         $(sharedTimeID(account, "backdrop")).classList.remove("hidden");
         $(sharedTimeID(account, "trigger")).setAttribute("aria-expanded", "true");
-        popover.querySelector('.time-range-modes .active').focus();
+        popover.querySelector(".time-range-modes .active").focus();
       }
 
       function applyTimeRange(account, range, close = true) {
@@ -7342,9 +7530,14 @@
         $(sharedTimeID(account, "backdrop")).onclick = () => closeSharedTimePopover(account, true);
         $(sharedTimeID(account, "popover")).onkeydown = (event) => {
           if (event.key !== "Tab") return;
-          const controls = Array.from(event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled)'));
+          const controls = Array.from(
+            event.currentTarget.querySelectorAll("button:not(:disabled), input:not(:disabled)"),
+          );
           const target = event.shiftKey ? controls.at(-1) : controls[0];
-          if (!event.currentTarget.contains(document.activeElement) || document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
+          if (
+            !event.currentTarget.contains(document.activeElement) ||
+            document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))
+          ) {
             event.preventDefault();
             target.focus();
           }
@@ -7812,11 +8005,7 @@
         try {
           const row = JSON.parse(message.slice(6));
           const model =
-            row.model_result === "deny"
-              ? "拒绝"
-              : row.model_result === "configuration_error"
-                ? "配置错误"
-                : "允许";
+            row.model_result === "deny" ? "拒绝" : row.model_result === "configuration_error" ? "配置错误" : "允许";
           const credential =
             row.credential_result === "selected"
               ? "上游凭证：" + (sourceLabel(row.selected_credential) || "未知")
@@ -7829,7 +8018,10 @@
                     : row.credential_result === "configuration_error"
                       ? "上游凭证：配置错误"
                       : "上游凭证：全部上游凭证";
-          const outcome = { succeeded: "成功", failed: "失败", rejected: "已拒绝", canceled: "已取消" }[row.outcome] || row.outcome || "未知";
+          const outcome =
+            { succeeded: "成功", failed: "失败", rejected: "已拒绝", canceled: "已取消" }[row.outcome] ||
+            row.outcome ||
+            "未知";
           const id = String(pluginLog.id || "");
           return el(
             "details",
@@ -7869,51 +8061,108 @@
 
       function renderQuotaWindows(view, showCountdown = false) {
         if (view.unlimited) return el("span", { class: "muted", text: "不限制" });
-        return el("div", { class: "quota-windows" }, view.windows.map((quotaWindow) => {
-          const quota = remainingQuota(quotaWindow.used_percent);
-          const resetAt = quotaWindow.started ? new Date(quotaWindow.end_at) : null;
-          let resetLabel = resetAt ? compactResetDate(resetAt) : "未开始";
-          if (resetAt && showCountdown) {
-            resetLabel += "·" + (resetAt <= new Date() ? "已到期" : compactResetAfter((resetAt.getTime() - Date.now()) / 1000));
-          }
-          return el("div", { class: "quota-window" },
-            el("div", { class: "quota-heading" },
-              el("span", { text: quotaWindow.name, title: quotaWindow.name }),
-              el("span", {
-                class: "mono",
-                title: "剩余 " + usd(quotaWindow.remaining_usd) + "/" + usd(quotaWindow.amount_usd),
-              },
-                el("span", { class: quotaWindow.blocked ? "blocked" : "", text: usd(quotaWindow.remaining_usd) }),
-                el("span", { class: "muted", text: "/" + usd(quotaWindow.amount_usd) }),
+        return el(
+          "div",
+          { class: "quota-windows" },
+          view.windows.map((quotaWindow) => {
+            const quota = remainingQuota(quotaWindow.used_percent);
+            const resetAt = quotaWindow.started ? new Date(quotaWindow.end_at) : null;
+            let resetLabel = resetAt ? compactResetDate(resetAt) : "未开始";
+            if (resetAt && showCountdown) {
+              resetLabel +=
+                "·" + (resetAt <= new Date() ? "已到期" : compactResetAfter((resetAt.getTime() - Date.now()) / 1000));
+            }
+            return el(
+              "div",
+              { class: "quota-window" },
+              el(
+                "div",
+                { class: "quota-heading" },
+                el("span", { text: quotaWindow.name, title: quotaWindow.name }),
+                el(
+                  "span",
+                  {
+                    class: "mono",
+                    title: "剩余 " + usd(quotaWindow.remaining_usd) + "/" + usd(quotaWindow.amount_usd),
+                  },
+                  el("span", { class: quotaWindow.blocked ? "blocked" : "", text: usd(quotaWindow.remaining_usd) }),
+                  el("span", { class: "muted", text: "/" + usd(quotaWindow.amount_usd) }),
+                ),
+                el("span", {
+                  class: "muted",
+                  text: resetLabel,
+                  title: resetAt ? when(quotaWindow.end_at) + " 重置" : resetLabel,
+                }),
               ),
-              el("span", { class: "muted", text: resetLabel, title: resetAt ? when(quotaWindow.end_at) + " 重置" : resetLabel }),
-            ),
-            el("div", {
-              class: "bar", role: "progressbar", "aria-label": quotaWindow.name + " 的剩余额度",
-              "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(quota.percent)),
-            }, el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" })),
-          );
-        }));
+              el(
+                "div",
+                {
+                  class: "bar",
+                  role: "progressbar",
+                  "aria-label": quotaWindow.name + " 的剩余额度",
+                  "aria-valuemin": "0",
+                  "aria-valuemax": "100",
+                  "aria-valuenow": String(Math.round(quota.percent)),
+                },
+                el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" }),
+              ),
+            );
+          }),
+        );
       }
 
       function addPlanWindow(quotaWindow = {}) {
         const seconds = quotaWindow.period_seconds;
         const unit = seconds ? PERIOD_UNITS.find(([value]) => seconds % value === 0)[0] : 3600;
         const row = el("div", { class: "plan-window", "data-id": quotaWindow.id || "" });
-        const field = (label, input) => el("label", { class: "field" }, label, input, el("span", { class: "field-error small" }));
+        const field = (label, input) =>
+          el("label", { class: "field" }, label, input, el("span", { class: "field-error small" }));
         row.append(
           field("窗口名称", el("input", { name: "window_name", value: quotaWindow.name || "", required: true })),
-          field("额度（USD）", el("input", { name: "window_amount", type: "number", step: "any", value: quotaWindow.amount_usd ?? "", required: true })),
-          field("周期长度", el("div", { class: "period-input" },
-            el("input", { name: "window_period", type: "number", step: "any", value: seconds ? seconds / unit : "", required: true }),
-            el("span", { class: "native-select" }, el("select", { name: "window_unit", "aria-label": "周期单位" },
-              PERIOD_UNITS.map(([value, label]) => el("option", { value: String(value), selected: value === unit, text: label })),
-            )),
-          )),
-          el("button", { type: "button", class: "link small danger window-delete", text: "删除", onclick: () => {
-            row.remove();
-            updateWindowDeleteButtons();
-          }}),
+          field(
+            "额度（USD）",
+            el("input", {
+              name: "window_amount",
+              type: "number",
+              step: "any",
+              value: quotaWindow.amount_usd ?? "",
+              required: true,
+            }),
+          ),
+          field(
+            "周期长度",
+            el(
+              "div",
+              { class: "period-input" },
+              el("input", {
+                name: "window_period",
+                type: "number",
+                step: "any",
+                value: seconds ? seconds / unit : "",
+                required: true,
+              }),
+              el(
+                "span",
+                { class: "native-select" },
+                el(
+                  "select",
+                  { name: "window_unit", "aria-label": "周期单位" },
+                  PERIOD_UNITS.map(([value, label]) =>
+                    el("option", { value: String(value), selected: value === unit, text: label }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          el("button", {
+            type: "button",
+            class: "link small danger window-delete",
+            text: "删除",
+            onclick: () => {
+              row.remove();
+              updateWindowDeleteButtons();
+            },
+          }),
         );
         $("plan-windows").append(row);
         updateWindowDeleteButtons();
@@ -7922,7 +8171,7 @@
 
       function updateWindowDeleteButtons() {
         const buttons = $("plan-windows").querySelectorAll(".window-delete");
-        buttons.forEach((button) => button.disabled = buttons.length === 1);
+        buttons.forEach((button) => (button.disabled = buttons.length === 1));
       }
 
       function renderPlanKeyPicker(planID) {
@@ -7946,11 +8195,7 @@
                 disabled: ownedByOther,
               }),
               renderAPIKeyIdentity(key),
-              key.deleted_at ? el("span", {
-                class: "tag plain",
-                text: "已删除",
-                title: "可取消勾选以解除绑定",
-              }) : null,
+              key.deleted_at ? el("span", { class: "tag plain", text: "已删除", title: "可取消勾选以解除绑定" }) : null,
               owner ? el("span", { class: "muted small", text: "已绑定「" + (owner.name || owner.id) + "」" }) : null,
             );
           }),
@@ -7981,7 +8226,8 @@
       }
       function planFromForm() {
         let firstInvalid = null;
-        const names = new Set(), periods = new Set();
+        const names = new Set(),
+          periods = new Set();
         const invalid = (input, message) => {
           input.setAttribute("aria-invalid", "true");
           input.closest(".field").querySelector(".field-error").textContent = message;
@@ -7989,21 +8235,28 @@
         };
         const windows = Array.from($("plan-windows").children, (row) => {
           row.querySelectorAll("[aria-invalid]").forEach((input) => input.removeAttribute("aria-invalid"));
-          row.querySelectorAll(".field-error").forEach((error) => error.textContent = "");
+          row.querySelectorAll(".field-error").forEach((error) => (error.textContent = ""));
           const nameInput = row.querySelector('[name="window_name"]');
           const amountInput = row.querySelector('[name="window_amount"]');
           const periodInput = row.querySelector('[name="window_period"]');
           const name = nameInput.value.trim();
           const amount = amountInput.valueAsNumber;
           const seconds = periodInput.valueAsNumber * Number(row.querySelector("select").value);
-          if (!name || new TextEncoder().encode(name).length > 128) invalid(nameInput, "名称不能为空且不能超过 128 字节");
+          if (!name || new TextEncoder().encode(name).length > 128)
+            invalid(nameInput, "名称不能为空且不能超过 128 字节");
           else if (names.has(name.toLowerCase())) invalid(nameInput, "窗口名称重复");
           names.add(name.toLowerCase());
           if (!Number.isFinite(amount) || amount <= 0) invalid(amountInput, "额度必须为正数");
-          if (!Number.isInteger(seconds) || seconds <= 0 || seconds > 9223372036) invalid(periodInput, "周期须为 1 到 9223372036 秒的整数");
+          if (!Number.isInteger(seconds) || seconds <= 0 || seconds > 9223372036)
+            invalid(periodInput, "周期须为 1 到 9223372036 秒的整数");
           else if (periods.has(seconds)) invalid(periodInput, "周期与其他窗口重复");
           periods.add(seconds);
-          return { ...(row.dataset.id ? { id: row.dataset.id } : {}), name, amount_usd: amount, period_seconds: seconds };
+          return {
+            ...(row.dataset.id ? { id: row.dataset.id } : {}),
+            name,
+            amount_usd: amount,
+            period_seconds: seconds,
+          };
         });
         if (firstInvalid) {
           firstInvalid.scrollIntoView({ block: "center" });
@@ -8011,8 +8264,12 @@
           return null;
         }
         return {
-          name: $("plan-name").value.trim(), windows,
-          scopes: Array.from($("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'), (input) => input.value),
+          name: $("plan-name").value.trim(),
+          windows,
+          scopes: Array.from(
+            $("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
+            (input) => input.value,
+          ),
         };
       }
 
@@ -8526,14 +8783,25 @@
         if (!plan) return;
         const id = $("plan-id").value;
         const existing = state.plans.find((entry) => entry.id === id);
-        const affected = (existing?.windows || []).filter((old) =>
-          !plan.windows.some((quotaWindow) => quotaWindow.id === old.id && quotaWindow.period_seconds === old.period_seconds));
+        const affected = (existing?.windows || []).filter(
+          (old) =>
+            !plan.windows.some(
+              (quotaWindow) => quotaWindow.id === old.id && quotaWindow.period_seconds === old.period_seconds,
+            ),
+        );
         $("plan-save").disabled = true;
         $("plan-form-error").textContent = "";
         try {
-          if (affected.length && !(await confirmAction("更新额度周期？",
-            "以下窗口的当前周期和消费将清零：" + affected.map((quotaWindow) => quotaWindow.name).join("、") +
-            "。所有绑定 Key 均受影响，包括已删除 Key；请求事件及其统计不受影响。"))) return;
+          if (
+            affected.length &&
+            !(await confirmAction(
+              "更新额度周期？",
+              "以下窗口的当前周期和消费将清零：" +
+                affected.map((quotaWindow) => quotaWindow.name).join("、") +
+                "。所有绑定 Key 均受影响，包括已删除 Key；请求事件及其统计不受影响。",
+            ))
+          )
+            return;
           if (id) await plugin("PATCH", "/plans", { id, ...plan });
           else await plugin("POST", "/plans", plan);
           notify(id ? "订阅计划已保存" : "订阅计划已创建");
