@@ -1624,6 +1624,9 @@
       .section-toolbar h2, .settings-section-header h2, .account-plan h2 { margin: 0; }
       #price-filter { max-width: 220px; }
       .section-actions { min-width: 0; }
+      .key-toolbar-buttons { gap: 8px; }
+      #keys-import-labels { display: none; }
+      :root[data-cpamp-plugin-host="true"] body.embedded #keys-import-labels { display: inline-flex; }
       .event-list-card {
         height: calc(100dvh - var(--event-list-top) - 16px);
         min-height: 0;
@@ -1966,8 +1969,9 @@
           width: 100%;
         }
         .section-actions .wide-search, #price-filter { width: 100%; max-width: none; min-width: 0; }
+        #tab-keys .section-actions { grid-template-columns: minmax(0, 1fr); }
         #tab-prices .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        #price-filter, #tab-keys #key-filter { grid-column: 1 / -1; }
+        #price-filter { grid-column: 1 / -1; }
         #tab-plugin-logs .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
         #tab-plugin-logs .section-actions > *, #tab-plugin-logs .section-actions select { width: 100%; min-width: 0; }
         .section-actions.auth-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1978,6 +1982,7 @@
           width: 100%;
           min-width: 0;
         }
+        .key-toolbar-buttons .toggle-filter { width: auto; }
         .auth-file-grid { grid-template-columns: 1fr; }
         .event-list-card { height: calc(100dvh - var(--event-list-top) - 12px); }
         .section-actions.event-card-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2460,15 +2465,18 @@
               <h2>API Key</h2>
               <div class="row section-actions">
                 <input id="key-filter" placeholder="搜索 API Key、备注或计划" class="wide-search" />
-                <label class="toggle-filter">
-                  <input id="keys-include-deleted" type="checkbox" />
-                  <span class="toggle-track" aria-hidden="true"></span>
-                  <span>包含已删除</span>
-                </label>
-                <button id="keys-reset-all" class="labeled-icon-button">
-                  <span data-lucide-icon="party-popper" aria-hidden="true"></span>
-                  全员重置
-                </button>
+                <div class="row key-toolbar-buttons">
+                  <label class="toggle-filter">
+                    <input id="keys-include-deleted" type="checkbox" />
+                    <span class="toggle-track" aria-hidden="true"></span>
+                    <span>包含已删除</span>
+                  </label>
+                  <button id="keys-import-labels" class="labeled-icon-button" type="button">导入备注</button>
+                  <button id="keys-reset-all" class="labeled-icon-button">
+                    <span data-lucide-icon="party-popper" aria-hidden="true"></span>
+                    全员重置
+                  </button>
+                </div>
               </div>
             </div>
             <div id="keys-body"></div>
@@ -2898,6 +2906,7 @@
       "use strict";
       const PLUGIN_BASE = "/v0/management/plugins/cpa-key-billing";
       const ACCOUNT_BASE = "/v0/resource/plugins/cpa-key-billing";
+      const CALLER_SCOPE_SALT = "cli-proxy-api:caller-scope:v1\u0000";
       const $ = (id) => document.getElementById(id);
 
       /* A same-origin iframe can borrow the panel's obfuscated management key. When
@@ -6472,11 +6481,10 @@
         button.disabled = true;
         try {
           const keys = await loadConfiguredAPIKeys();
-          const salt = "cli-proxy-api:caller-scope:v1\u0000";
           let key = "";
           for (const value of keys) {
             const candidate = value.trim();
-            const scope = await sha256Hex(salt + candidate);
+            const scope = await sha256Hex(CALLER_SCOPE_SALT + candidate);
             if (scope === view.scope) {
               key = candidate;
               break;
@@ -9076,6 +9084,55 @@
         return keys.length ? "" : "CLIProxyAPI 尚未配置 API Key";
       }
 
+      async function importCPAMPLabels() {
+        const generation = sessionGeneration;
+        const result = await api("GET", "/v0/management/api-key-aliases", null, { raw: true });
+        if (
+          !Array.isArray(result?.items) ||
+          result.items.some(
+            (item) =>
+              !item ||
+              typeof item.apiKeyHash !== "string" ||
+              !/^[a-f0-9]{64}$/i.test(item.apiKeyHash) ||
+              typeof item.alias !== "string",
+          )
+        )
+          throw new Error("CPAMP 备注列表格式无效");
+        const keys = await loadConfiguredAPIKeys();
+        const scopes = new Map();
+        for (const key of keys) {
+          const value = key.trim();
+          if (value) scopes.set(await sha256Hex(value), await sha256Hex(CALLER_SCOPE_SALT + value));
+        }
+        if (generation !== sessionGeneration) throw new StaleRequestError();
+        let imported = 0;
+        let unchanged = 0;
+        try {
+          for (const item of result.items) {
+            if (generation !== sessionGeneration) throw new StaleRequestError();
+            const scope = scopes.get(item.apiKeyHash.toLowerCase());
+            if (!scope) continue;
+            const label = item.alias.trim();
+            const key = state.keys.find((key) => key.scope === scope);
+            if (key && (key.label || "") === label) {
+              unchanged++;
+              continue;
+            }
+            await mutateAdmin("POST", "/keys/label", { scope, label });
+            imported++;
+          }
+        } catch (err) {
+          if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
+          throw new Error("已导入 " + imported + " 条备注，导入中断：" + (err.message || err));
+        }
+        const skipped = result.items.length - imported - unchanged;
+        notify(
+          "已导入 " + imported + " 条备注" +
+            (unchanged ? "，" + unchanged + " 条备注未变化" : "") +
+            (skipped ? "，跳过 " + skipped + " 条无法匹配的备注" : ""),
+        );
+      }
+
       async function submitLogin() {
         const role = loginMode;
         const generation = sessionGeneration;
@@ -9598,6 +9655,13 @@
         closeSharedTimePopover(false);
         closeSharedTimePopover(true);
       });
+      $("keys-import-labels").onclick = () =>
+        openActionDialog(
+          "导入 CPAMP 备注？",
+          "将导入 CPAMP 的 API Key 备注，并覆盖匹配 API Key 的现有备注。无法匹配的备注将跳过。确定继续？",
+          undefined,
+          importCPAMPLabels,
+        );
       $("keys-reset-all").onclick = () =>
         openActionDialog(
           "重置全员订阅额度？",
