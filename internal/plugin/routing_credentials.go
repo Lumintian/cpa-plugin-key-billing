@@ -311,7 +311,7 @@ func (a *App) credentialLabels(refs []string) map[string]string {
 	labels := make(map[string]string, len(refs))
 	for _, ref := range refs {
 		if item, ok := a.credentials[ref]; ok {
-			labels[ref] = item.Provider + "·" + item.DisplayName
+			labels[ref] = item.Provider + " · " + item.DisplayName
 		}
 	}
 	return labels

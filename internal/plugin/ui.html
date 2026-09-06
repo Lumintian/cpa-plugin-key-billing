@@ -5059,12 +5059,12 @@
         const routingValid = access.routing_valid !== false;
         const accountCredentialLabel = (item) =>
           item.provider_wide
-            ? { text: credentialSourceLabel(item.source) + "·" + item.provider, tag: "整类" }
+            ? { text: credentialSourceLabel(item.source) + " · " + item.provider, tag: "整类" }
             : item.status === "missing"
               ? { text: item.name || "指定上游凭证当前不可用", tag: "" }
               : {
                   text:
-                    item.provider + "·" + (item.name || (item.source === "auth-files" ? "未提供邮箱" : "凭证不可用")),
+                    item.provider + " · " + (item.name || (item.source === "auth-files" ? "未提供邮箱" : "凭证不可用")),
                   tag: "",
                 };
 
@@ -5272,7 +5272,7 @@
           existing.data.datasets[0].data = rows.map((row) => row.percent);
           existing.data.datasets[0].backgroundColor = rows.map((_, index) => colors[index % colors.length]);
           existing.options.plugins.tooltip.callbacks.title = (items) =>
-            items.length ? dimensionLabel + "·" + items[0].label : dimensionLabel;
+            items.length ? dimensionLabel + " · " + items[0].label : dimensionLabel;
           existing.options.plugins.tooltip.callbacks.label = (context) => {
             const row = rows[context.dataIndex];
             return [
@@ -5318,7 +5318,7 @@
                 titleColor: themeColor("--text-primary", "#f6f4f1"),
                 bodyColor: themeColor("--text-secondary", "#c9c3bb"),
                 callbacks: {
-                  title: (items) => (items.length ? dimensionLabel + "·" + items[0].label : dimensionLabel),
+                  title: (items) => (items.length ? dimensionLabel + " · " + items[0].label : dimensionLabel),
                   label: (context) => {
                     const row = rows[context.dataIndex];
                     return [
@@ -5868,10 +5868,10 @@
         if (typeSelect.value) types.push(typeSelect.value.slice(5));
         populateEventFilterSelect(
           typeSelect,
-          "全部错误类型·" + int(total),
+          "全部错误类型 · " + int(total),
           [...new Set(types)].sort(),
           (value) => "type:" + value,
-          (value) => (value || "未分类") + "·" + int(counts[value]),
+          (value) => (value || "未分类") + " · " + int(counts[value]),
         );
         populateEventFilterSelect($(prefix + "error-model"), "全部模型", filters.models);
         populateEventFilterSelect($(prefix + "error-source"), "全部来源", filters.sources, undefined, sourceLabel);
@@ -6177,7 +6177,7 @@
 
       function quotaLabel(row) {
         return row.group_label && row.group_label.toLocaleLowerCase() !== row.label.toLocaleLowerCase()
-          ? row.group_label + "·" + row.label
+          ? row.group_label + " · " + row.label
           : row.group_label || row.label;
       }
 
@@ -6191,7 +6191,7 @@
         const amount = quotaAmount(row);
         const stats = [el("span", { class: "auth-quota-value", text: value })];
         if (amount) stats.push(el("span", { text: amount }));
-        if (reset.at) stats.push(el("span", { text: reset.at + (reset.after ? "·" + reset.after : "") }));
+        if (reset.at) stats.push(el("span", { text: reset.at + (reset.after ? " · " + reset.after : "") }));
         return el(
           "div",
           { class: "auth-quota-row" },
@@ -6447,7 +6447,7 @@
       }
 
       function sourceLabel(source) {
-        return String(source || "").replace(/\s*·\s*/g, "·");
+        return String(source || "").replace(/\s*·\s*/g, " · ");
       }
 
       function apiKeyIdentity(view) {
@@ -6457,7 +6457,7 @@
         const label = candidate && candidate !== preview && candidate !== scope ? candidate : "";
         const primary = label || preview || (scope ? "unknown" : "未归属");
         const secondary = label ? preview : "";
-        return { primary, secondary, text: secondary ? primary + "·" + secondary : primary };
+        return { primary, secondary, text: secondary ? primary + " · " + secondary : primary };
       }
 
       function renderAPIKeyIdentity(view, options = {}) {
@@ -6671,7 +6671,7 @@
                       },
                       actionIcon("copy"),
                     ),
-                    !deleted && !view.in_config ? "·仅用量记录" : null,
+                    !deleted && !view.in_config ? " · 仅用量记录" : null,
                   ],
                 }),
               ),
@@ -6729,12 +6729,12 @@
       }
 
       function credentialLabel(item) {
-        if (item.source === "auth-files") return item.provider + "·" + (item.display_name || "未提供邮箱");
-        return item.provider + "·" + item.display_name;
+        if (item.source === "auth-files") return item.provider + " · " + (item.display_name || "未提供邮箱");
+        return item.provider + " · " + item.display_name;
       }
 
       function boundCredentialLabel(ref, labels) {
-        return labels[ref] || "指定上游凭证·" + ref.slice(-8);
+        return labels[ref] || "指定上游凭证 · " + ref.slice(-8);
       }
 
       function credentialSourceLabel(source) {
@@ -6761,7 +6761,7 @@
       }
 
       function credentialProviderLabel(item) {
-        return credentialSourceLabel(item.source) + "·" + item.provider;
+        return credentialSourceLabel(item.source) + " · " + item.provider;
       }
 
       function sameCredentialProvider(a, b) {
@@ -6787,7 +6787,7 @@
                   view.route_names[id] || (Object.hasOwn(view.route_names, id) ? id : "路由规则已不存在，请重新选择"),
                 mono: false,
               }))
-              .concat(models.map((model) => ({ text: "单模型·" + model, mono: true })))
+              .concat(models.map((model) => ({ text: "单模型 · " + model, mono: true })))
               .concat(
                 providers.map((provider) => ({
                   text: credentialProviderLabel(provider),
@@ -6810,7 +6810,7 @@
           {
             class: "route-trigger" + (allRoutes ? " route-trigger-all" : ""),
             disabled: !!view.deleted_at,
-            title: names.map((entry) => entry.text + (entry.tag ? "·" + entry.tag : "")).join("、"),
+            title: names.map((entry) => entry.text + (entry.tag ? " · " + entry.tag : "")).join("、"),
             "aria-label": apiKeyIdentity(view).primary + " 的路由规则",
             onclick: (event) => openRoutePicker(view, event.currentTarget),
           },
@@ -7445,7 +7445,7 @@
                 },
               }),
               actionIcon(credentialIcon(item)),
-              el("span", { title: label + "·整类" }, label),
+              el("span", { title: label + " · 整类" }, label),
               el("span", { class: "tag warn settings-item-chip", text: "整类" }),
               item.available
                 ? null
@@ -7787,7 +7787,7 @@
       function labelRequestEventStatuses(select, counts) {
         for (const option of select.options) {
           const status = REQUEST_EVENT_STATUS_OPTIONS[option.value];
-          const label = status.label + "·" + int((counts || {})[status.count]);
+          const label = status.label + " · " + int((counts || {})[status.count]);
           if (option.textContent !== label) option.textContent = label;
         }
       }
@@ -8566,8 +8566,8 @@
               el("div", {}, outputTPS(cost, entry.latency_ms, measured)),
               el(
                 "div",
-                { class: "muted small", title: hasTTFT ? "首字延迟·总延迟" : "总延迟" },
-                hasTTFT ? latency(entry.ttft_ms) + "·" + latency(entry.latency_ms) : latency(entry.latency_ms),
+                { class: "muted small", title: hasTTFT ? "首字延迟 · 总延迟" : "总延迟" },
+                hasTTFT ? latency(entry.ttft_ms) + " · " + latency(entry.latency_ms) : latency(entry.latency_ms),
               ),
             ),
             el("td", { class: "num" }, tokens(input)),
@@ -8678,7 +8678,7 @@
         const levelSelect = $("plugin-log-level");
         for (const option of levelSelect.options) {
           const label = option.value === "all" ? "全部级别" : pluginLogLevels[option.value].label;
-          const text = label + "·" + int(counts[option.value] || 0);
+          const text = label + " · " + int(counts[option.value] || 0);
           if (option.textContent !== text) option.textContent = text;
         }
         const total = counts[levelSelect.value] || 0;
@@ -8747,7 +8747,7 @@
               el(
                 "span",
                 { class: "row" },
-                el("span", { text: "API Key：" + String(row.key || "未知").replace(/\s*·\s*/g, "·") }),
+                el("span", { text: "API Key：" + String(row.key || "未知").replace(/\s*·\s*/g, " · ") }),
                 el("span", { text: "模型：" + (row.model || "未知") + "（" + model + "）" }),
                 el("span", { text: credential }),
                 el("span", { text: "请求结果：" + outcome }),
@@ -8771,7 +8771,7 @@
         const remaining = (resetAt.getTime() - Date.now()) / 1000;
         return (
           compactResetDate(resetAt) +
-          (showCountdown ? "·" + (remaining <= 0 ? "已到期" : compactResetAfter(remaining)) : "")
+          (showCountdown ? " · " + (remaining <= 0 ? "已到期" : compactResetAfter(remaining)) : "")
         );
       }
 
@@ -9042,11 +9042,11 @@
               tokenThreshold(row.long_context.threshold_input_tokens) +
               " 阶梯：输入 " +
               usd(row.long_context.input_per_1m) +
-              "·输出 " +
+              " · 输出 " +
               usd(row.long_context.output_per_1m),
           );
         }
-        return prices.join("·");
+        return prices.join(" · ");
       }
 
       function syncPriceTierFields() {

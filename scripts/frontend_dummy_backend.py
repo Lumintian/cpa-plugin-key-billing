@@ -1148,7 +1148,7 @@ def model_prices(query, include_custom):
 
 
 def credential_labels(refs):
-    return {item["ref"]: item["provider"] + "·" + item["display_name"]
+    return {item["ref"]: item["provider"] + " · " + item["display_name"]
             for item in CREDENTIALS if item["ref"] in refs}
 
 
