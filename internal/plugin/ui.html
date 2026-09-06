@@ -483,8 +483,7 @@
         min-width: 0;
       }
       .page-tabs-row.controls-inline .page-tab-actions { grid-column: 2; grid-row: 1; }
-      .page-tabs-row.controls-inline .shared-time-filter { flex: none; }
-      .page-tab-actions > button { flex: none; }
+      .page-tabs-row.controls-inline .shared-time-filter, .page-tab-actions > button { flex: none; }
       .tab-refresh {
         display: none;
         grid-column: 2;
@@ -1374,7 +1373,6 @@
       .price-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
       .price-fields .field { min-width: 0; }
       .price-fields input[type="number"] { width: 100%; }
-      .dialog-actions { justify-content: flex-end; margin-top: 20px; }
       .route-dialog { width: min(820px, calc(100vw - 32px)); }
       .route-form-toolbar {
         display: grid;
@@ -1398,6 +1396,7 @@
       .dialog-input { width: 100%; }
       .dialog-actions { justify-content: flex-end; margin-top: 14px; }
       .retry-button { margin-top: 10px; }
+      .display-contents { display: contents; }
       .switch-field {
         display: flex;
         align-items: center;
@@ -1452,7 +1451,6 @@
       .settings-entry-actions { flex: none; gap: 2px; white-space: nowrap; }
       .settings-entry-fields { display: grid; gap: 9px; }
       .settings-entry-field { align-items: flex-start; }
-      .key-bindings { display: grid; gap: 5px; min-width: 0; }
       .key-picker label > .tag { flex: none; }
       .settings-entry-value { flex: 1; min-width: 0; color: var(--text-primary); }
       .settings-chip-list { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
@@ -1975,7 +1973,7 @@
         #tab-plugin-logs .section-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
         #tab-plugin-logs .section-actions > *, #tab-plugin-logs .section-actions select { width: 100%; min-width: 0; }
         .section-actions.auth-filter-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .auth-filter-bar input[type="search"] { width: 100%; min-width: 0; }
+        .auth-filter-bar input[type="search"],
         .auth-filter-bar .native-select,
         .auth-filter-bar select,
         .toggle-filter:not(.compact-toggle) {
@@ -2261,8 +2259,7 @@
         .settings-dialog { padding: 18px; }
         .route-form-toolbar, .route-editor-grid { grid-template-columns: 1fr; }
         .settings-entry-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .account-access-summary { grid-template-columns: 1fr; }
-        .price-fields { grid-template-columns: 1fr; }
+        .account-access-summary, .price-fields { grid-template-columns: 1fr; }
         .price-reference-option { grid-template-columns: 1fr; gap: 2px; }
         .price-reference-prices { text-align: left; }
       }
@@ -2408,19 +2405,14 @@
             <span id="gate-key-label">管理密钥</span>
             <input id="gate-key" type="password" autocomplete="current-password" placeholder="输入管理密钥" />
           </label>
-          <label class="remember-row">
-            <input id="gate-remember" type="checkbox" />
-            记住密钥
-          </label>
+          <label class="remember-row"> <input id="gate-remember" type="checkbox" /> 记住密钥 </label>
           <button id="gate-submit" type="submit" class="primary gate-submit">进入管理控制台</button>
         </form>
       </section>
 
       <main id="app" class="hidden">
         <header class="head app-header">
-          <div class="app-title">
-            <h1>API Key 计费</h1>
-          </div>
+          <div class="app-title"><h1>API Key 计费</h1></div>
           <div class="standalone-actions" aria-label="页面操作">
             <button type="button" class="icon-action" data-page-action="refresh" aria-label="刷新"></button>
             <button type="button" class="icon-action" data-page-action="theme" aria-label="切换主题"></button>
@@ -2444,9 +2436,7 @@
           <div class="page-tab-actions hidden">
             <div id="shared-time-filter" class="shared-time-filter hidden">
               <span class="native-select">
-                <select id="analysis-key" aria-label="按 API Key 筛选">
-                  <option value="">全部 API Key</option>
-                </select>
+                <select id="analysis-key" aria-label="按 API Key 筛选"> <option value="">全部 API Key</option> </select>
               </span>
               <div class="time-range-control">
                 <button
@@ -2459,11 +2449,7 @@
                   <span id="shared-time-label">最近 30 天</span>
                   <span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
                 </button>
-                <div
-                  id="shared-time-popover"
-                  class="time-range-popover hidden"
-                  role="dialog"
-                  aria-label="选择时间范围"></div>
+                <div id="shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
               </div>
             </div>
             <button id="request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -2493,9 +2479,7 @@
           </div>
         </section>
 
-        <section id="tab-analysis" class="hidden">
-          <div id="analysis-body"></div>
-        </section>
+        <section id="tab-analysis" class="hidden"><div id="analysis-body"></div></section>
 
         <section id="tab-plans" class="hidden">
           <div class="card">
@@ -2508,10 +2492,7 @@
           <dialog id="plan-dialog" class="settings-dialog plan-dialog">
             <h2 id="plan-form-title">新建订阅计划</h2>
             <input id="plan-id" type="hidden" />
-            <label class="field">
-              计划名称
-              <input id="plan-name" placeholder="团队额度" />
-            </label>
+            <label class="field"> 计划名称 <input id="plan-name" placeholder="团队额度" /> </label>
             <div class="row spread plan-windows-heading">
               <span class="small muted">额度窗口</span>
               <button id="plan-window-add" type="button" class="link small">添加窗口</button>
@@ -2535,20 +2516,15 @@
               <h2>路由规则</h2>
               <button id="route-new" type="button">新建路由规则</button>
             </div>
+            <div id="route-inventory-notice" class="notice warn show hidden"></div>
             <div id="routes-body"></div>
           </div>
           <dialog id="route-dialog" class="settings-dialog route-dialog">
             <h2 id="route-form-title">新建路由规则</h2>
             <input id="route-id" type="hidden" />
             <div class="route-form-toolbar">
-              <label class="field">
-                规则名称
-                <input id="route-name" placeholder="Codex 认证文件" />
-              </label>
-              <label class="field">
-                筛选
-                <input id="route-rule-search" type="search" placeholder="搜索模型或凭证" />
-              </label>
+              <label class="field"> 规则名称 <input id="route-name" placeholder="Codex 认证文件" /> </label>
+              <label class="field"> 筛选 <input id="route-rule-search" type="search" placeholder="搜索模型或凭证" /> </label>
               <div class="row">
                 <button id="route-rule-all" type="button" class="link">全选</button>
                 <button id="route-rule-none" type="button" class="link">清空</button>
@@ -2556,20 +2532,12 @@
             </div>
             <div class="route-editor-grid">
               <div class="route-editor-section">
-                <span class="small muted">
-                  模型（
-                  <span id="route-model-count">全部</span>
-                  ）
-                </span>
+                <span class="small muted"> 模型（ <span id="route-model-count">全部</span> ） </span>
                 <div id="route-model-list" class="key-picker route-rule-list settings-picker-list"></div>
               </div>
               <div class="route-editor-section">
                 <div class="route-editor-title">
-                  <span class="small muted">
-                    凭证（
-                    <span id="route-credential-count">全部</span>
-                    ）
-                  </span>
+                  <span class="small muted"> 凭证（ <span id="route-credential-count">全部</span> ） </span>
                   <label class="toggle-filter compact-toggle">
                     <input id="route-credential-enabled-only" type="checkbox" checked />
                     <span class="toggle-track" aria-hidden="true"></span>
@@ -2611,14 +2579,10 @@
               <h2>请求事件</h2>
               <div class="row section-actions event-card-actions">
                 <span class="native-select">
-                  <select id="request-event-model" aria-label="按模型筛选">
-                    <option value="">全部模型</option>
-                  </select>
+                  <select id="request-event-model" aria-label="按模型筛选"> <option value="">全部模型</option> </select>
                 </span>
                 <span class="native-select">
-                  <select id="request-event-source" aria-label="按来源筛选">
-                    <option value="">全部来源</option>
-                  </select>
+                  <select id="request-event-source" aria-label="按来源筛选"> <option value="">全部来源</option> </select>
                 </span>
                 <span class="native-select">
                   <select id="request-event-status" aria-label="按状态筛选">
@@ -2631,9 +2595,7 @@
               </div>
             </div>
             <div id="request-events-body" class="event-list-region"></div>
-            <div class="event-list-footer">
-              <span id="request-event-note" class="muted small"></span>
-            </div>
+            <div class="event-list-footer"><span id="request-event-note" class="muted small"></span></div>
           </div>
         </section>
 
@@ -2643,27 +2605,19 @@
               <h2>错误事件</h2>
               <div class="row section-actions event-card-actions">
                 <span class="native-select">
-                  <select id="error-model" aria-label="按模型筛选">
-                    <option value="">全部模型</option>
-                  </select>
+                  <select id="error-model" aria-label="按模型筛选"> <option value="">全部模型</option> </select>
                 </span>
                 <span class="native-select">
-                  <select id="error-source" aria-label="按来源筛选">
-                    <option value="">全部来源</option>
-                  </select>
+                  <select id="error-source" aria-label="按来源筛选"> <option value="">全部来源</option> </select>
                 </span>
                 <span class="native-select">
-                  <select id="error-type" aria-label="按错误类型筛选">
-                    <option value="">全部错误类型</option>
-                  </select>
+                  <select id="error-type" aria-label="按错误类型筛选"> <option value="">全部错误类型</option> </select>
                 </span>
                 <button id="errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
               </div>
             </div>
             <div id="errors-body" class="event-list-region"></div>
-            <div class="event-list-footer">
-              <span id="error-note" class="muted small"></span>
-            </div>
+            <div class="event-list-footer"><span id="error-note" class="muted small"></span></div>
           </div>
         </section>
 
@@ -2713,9 +2667,7 @@
               </div>
             </div>
             <div id="plugin-logs-body" class="event-list-region plugin-log-region"></div>
-            <div class="event-list-footer">
-              <span id="plugin-log-note" class="muted small"></span>
-            </div>
+            <div class="event-list-footer"><span id="plugin-log-note" class="muted small"></span></div>
           </div>
         </section>
       </main>
@@ -2797,9 +2749,7 @@
               <div id="account-models" class="account-models"></div>
             </div>
           </section>
-          <section id="account-tab-analysis" class="hidden">
-            <div id="account-analysis-body"></div>
-          </section>
+          <section id="account-tab-analysis" class="hidden"><div id="account-analysis-body"></div></section>
           <section id="account-tab-request-events" class="hidden">
             <div class="card event-list-card">
               <div class="row spread section-toolbar event-list-title-row">
@@ -2826,9 +2776,7 @@
                 </div>
               </div>
               <div id="account-request-events-body" class="event-list-region"></div>
-              <div class="event-list-footer">
-                <span id="account-request-event-note" class="muted small"></span>
-              </div>
+              <div class="event-list-footer"><span id="account-request-event-note" class="muted small"></span></div>
             </div>
           </section>
           <section id="account-tab-errors" class="hidden">
@@ -2837,27 +2785,19 @@
                 <h2>错误事件</h2>
                 <div class="row section-actions event-card-actions">
                   <span class="native-select">
-                    <select id="account-error-model">
-                      <option value="">全部模型</option>
-                    </select>
+                    <select id="account-error-model"> <option value="">全部模型</option> </select>
                   </span>
                   <span class="native-select">
-                    <select id="account-error-source">
-                      <option value="">全部来源</option>
-                    </select>
+                    <select id="account-error-source"> <option value="">全部来源</option> </select>
                   </span>
                   <span class="native-select">
-                    <select id="account-error-type" aria-label="按错误类型筛选">
-                      <option value="">全部错误类型</option>
-                    </select>
+                    <select id="account-error-type" aria-label="按错误类型筛选"> <option value="">全部错误类型</option> </select>
                   </span>
                   <button id="account-errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
                 </div>
               </div>
               <div id="account-errors" class="event-list-region"></div>
-              <div class="event-list-footer">
-                <span id="account-error-note" class="muted small"></span>
-              </div>
+              <div class="event-list-footer"><span id="account-error-note" class="muted small"></span></div>
             </div>
           </section>
           <section id="account-tab-auth-files" class="hidden">
@@ -2905,27 +2845,12 @@
         <div id="price-reference-results" class="price-reference-results" aria-live="polite"></div>
       </div>
       <div class="price-fields">
-        <label class="field">
-          输入 / 1M Token
-          <input id="price-in" type="number" step="any" min="0" value="0" />
-        </label>
-        <label class="field">
-          输出 / 1M Token
-          <input id="price-out" type="number" step="any" min="0" value="0" />
-        </label>
-        <label class="field">
-          缓存读 / 1M Token
-          <input id="price-cr" type="number" step="any" min="0" />
-        </label>
-        <label class="field">
-          缓存写 / 1M Token
-          <input id="price-cw" type="number" step="any" min="0" />
-        </label>
+        <label class="field"> 输入 / 1M Token <input id="price-in" type="number" step="any" min="0" value="0" /> </label>
+        <label class="field"> 输出 / 1M Token <input id="price-out" type="number" step="any" min="0" value="0" /> </label>
+        <label class="field"> 缓存读 / 1M Token <input id="price-cr" type="number" step="any" min="0" /> </label>
+        <label class="field"> 缓存写 / 1M Token <input id="price-cw" type="number" step="any" min="0" /> </label>
       </div>
-      <label class="switch-field">
-        <input id="price-tiered" type="checkbox" />
-        启用长上下文阶梯计价
-      </label>
+      <label class="switch-field"> <input id="price-tiered" type="checkbox" /> 启用长上下文阶梯计价 </label>
       <div id="price-tier-fields" class="price-fields tier-fields hidden">
         <label class="field">
           长上下文阈值（输入 Token）
@@ -2940,14 +2865,8 @@
           长上下文输出 / 1M Token
           <input id="price-tier-out" type="number" step="any" min="0" value="0" />
         </label>
-        <label class="field">
-          长上下文缓存读 / 1M Token
-          <input id="price-tier-cr" type="number" step="any" min="0" />
-        </label>
-        <label class="field">
-          长上下文缓存写 / 1M Token
-          <input id="price-tier-cw" type="number" step="any" min="0" />
-        </label>
+        <label class="field"> 长上下文缓存读 / 1M Token <input id="price-tier-cr" type="number" step="any" min="0" /> </label>
+        <label class="field"> 长上下文缓存写 / 1M Token <input id="price-tier-cw" type="number" step="any" min="0" /> </label>
       </div>
       <div class="row dialog-actions">
         <button id="price-cancel">取消</button>
@@ -3268,7 +3187,13 @@
         admin: ["request-event-model", "request-event-source", "request-event-status"],
         account: ["account-request-event-model", "account-request-event-source", "account-request-event-status"],
       };
-      const SHARED_TIME_LABELS = { hour: "小时", day: "天", today: "今天", yesterday: "昨天", custom: "自定义" };
+      const SHARED_TIME_LABELS = {
+        hour: "小时",
+        day: "天",
+        today: "今天",
+        yesterday: "昨天",
+        custom: "自定义",
+      };
       const sharedTimeDrafts = { admin: null, account: null };
       const sharedTimeChoices = {
         admin: { hour: 8, day: 7, custom: null },
@@ -3304,7 +3229,7 @@
           scrollers: ["request-events-body", "account-request-events-body"],
           timed: true,
           path: (account, range, cursor) => requestEventPath(cursor || 0, LIST_PAGE_SIZE, account, range),
-          next: (page, entries) => entries.length < Number(page.total || 0) ? entries.length : null,
+          next: (page, entries) => (entries.length < Number(page.total || 0) ? entries.length : null),
           render: renderRequestEvents,
         },
         errors: {
@@ -3318,7 +3243,7 @@
             params.set("offset", String(cursor || 0));
             return "/errors?" + params;
           },
-          next: (page, entries) => entries.length < Number(page.total || 0) ? entries.length : null,
+          next: (page, entries) => (entries.length < Number(page.total || 0) ? entries.length : null),
           render: renderErrors,
         },
         logs: {
@@ -3327,7 +3252,10 @@
           label: "插件日志",
           scrollers: ["plugin-logs-body"],
           path: (_account, _range, cursor) => {
-            const params = new URLSearchParams({ level: $("plugin-log-level").value, limit: String(LIST_PAGE_SIZE) });
+            const params = new URLSearchParams({
+              level: $("plugin-log-level").value,
+              limit: String(LIST_PAGE_SIZE),
+            });
             if (cursor) params.set("before_id", String(cursor));
             return "/plugin-logs?" + params;
           },
@@ -3424,7 +3352,8 @@
                 list.render();
               });
             list.promise = task;
-            if (!previous || append) list.render();
+            if (!previous) list.render();
+            else list.renderStatus();
             return task;
           },
           maybeLoadMore() {
@@ -3434,29 +3363,32 @@
           renderEmpty() {
             if (list.data) return false;
             const message = list.promise ? "加载中…" : list.error ? view.label + "加载失败" : "暂无" + view.label;
-            const retry = list.error && !list.promise
-              ? el("button", { class: "retry-button", onclick: () => guard(() => list.load()) }, "重试")
-              : null;
+            const retry =
+              list.error && !list.promise
+                ? el("button", { class: "retry-button", onclick: () => guard(() => list.load()) }, "重试")
+                : null;
             replaceContent(list.scroller, el("div", { class: "empty" }, el("div", { text: message }), retry));
             return true;
           },
-          renderContent(content) {
+          renderStatus() {
             const scroller = list.scroller;
             const top = scroller.scrollTop;
             const left = scroller.scrollLeft;
+            let status = null;
             if (list.pending === "append") {
-              content.push(el("div", { class: "event-load-state", role: "status", text: "正在加载更多…" }));
+              status = el("div", { class: "event-load-state", role: "status", text: "正在加载更多…" });
             } else if (list.errorAction && !list.promise) {
               const action = list.errorAction === "append" ? "append" : "replace";
-              content.push(
-                el(
-                  "div",
-                  { class: "event-load-state" },
-                  el("button", { onclick: () => guard(() => list.load(action)) }, "重试加载"),
-                ),
+              status = el(
+                "div",
+                { class: "event-load-state" },
+                el("button", { onclick: () => guard(() => list.load(action)) }, "重试加载"),
               );
             }
-            replaceContent(scroller, ...content);
+            const previous = scroller.querySelector(":scope > .event-load-state");
+            if (status && previous) patchDisplayNode(previous, status);
+            else if (status) scroller.append(status);
+            else previous?.remove();
             scroller.scrollTop = top;
             scroller.scrollLeft = left;
             requestAnimationFrame(() => list.maybeLoadMore());
@@ -3586,18 +3518,12 @@
         const account = role === "account";
         const prefix = account ? "account-" : "";
         closeSharedTimePopover(account);
-        const requestEventScroller = $(account ? "account-request-events-body" : "request-events-body");
-        requestEventScroller.scrollTop = 0;
-        requestEventScroller.scrollLeft = 0;
-
         $(prefix + "auth-search").value = "";
         if (!account) {
           $("key-filter").value = "";
           $("keys-include-deleted").checked = false;
           $("price-filter").value = "";
           $("plugin-log-filter").value = "";
-          $("plugin-logs-body").scrollTop = 0;
-          $("plugin-logs-body").scrollLeft = 0;
         }
       }
 
@@ -3606,7 +3532,11 @@
         destroyAnalysisCharts(account);
         delete $(account ? "account-analysis-body" : "analysis-body").dataset.analysisSignature;
         if (role === "account") accountState = emptyAccountState();
-        else state = emptyAdminState();
+        else {
+          state = emptyAdminState();
+          expandedPluginLogIDs.clear();
+          adminMutationQueue = Promise.resolve();
+        }
         invalidateResources(role);
         for (const list of Object.values(pagedLists[role])) list.reset();
         resetRoleControls(role);
@@ -3767,7 +3697,10 @@
         if (!value) return null;
         const date = new Date(value);
         if (isNaN(date.getTime()) || date.getFullYear() < 2000) return null;
-        return { time: date.toLocaleTimeString("zh-CN", { hour12: false }), date: date.toLocaleDateString("zh-CN") };
+        return {
+          time: date.toLocaleTimeString("zh-CN", { hour12: false }),
+          date: date.toLocaleDateString("zh-CN"),
+        };
       }
       function dateTimeLines(value) {
         const parts = dateTimeParts(value);
@@ -3775,28 +3708,24 @@
         return [el("div", {}, parts.time), el("div", { class: "muted small mono" }, parts.date)];
       }
 
+      const nodeListeners = new WeakMap();
+
       function el(tag, attrs, ...children) {
         const node = document.createElement(tag);
         for (const [name, value] of Object.entries(attrs || {})) {
           if (name === "class") node.className = value;
           else if (name === "text") node.textContent = value;
-          else if (name.startsWith("on")) node.addEventListener(name.slice(2), value);
-          else if (value !== null && value !== undefined && value !== false) node.setAttribute(name, value);
+          else if (name.startsWith("on")) {
+            node.addEventListener(name.slice(2), value);
+            if (!nodeListeners.has(node)) nodeListeners.set(node, new Map());
+            nodeListeners.get(node).set(name.slice(2), value);
+          } else if (value !== null && value !== undefined && value !== false) node.setAttribute(name, value);
         }
         for (const child of children.flat()) {
           if (child === null || child === undefined || child === false) continue;
           node.append(child.nodeType ? child : document.createTextNode(String(child)));
         }
         return node;
-      }
-      function table(headers, rows) {
-        if (!rows.length) return el("div", { class: "empty", text: "暂无数据" });
-        const head = el(
-          "tr",
-          {},
-          headers.map((h) => el("th", { class: h.num ? "num" : "" }, h.label ?? h)),
-        );
-        return el("div", { class: "table-scroll" }, el("table", {}, el("thead", {}, head), el("tbody", {}, rows)));
       }
       function replaceContent(target, ...children) {
         if (
@@ -3805,6 +3734,122 @@
         )
           return;
         target.replaceChildren(...children);
+      }
+
+      // Only renderer-owned display trees use this patcher, never editor drafts
+      // or chart canvases. Refresh closures as well as markup to avoid stale actions.
+      function patchDisplayNode(current, next) {
+        const nextValue = next.value;
+        const nextChecked = next.checked;
+        if (current.nodeType !== next.nodeType || current.nodeName !== next.nodeName) {
+          current.replaceWith(next);
+          return next;
+        }
+        if (current.nodeType === Node.TEXT_NODE) {
+          if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
+          return current;
+        }
+        for (const attr of [...current.attributes]) {
+          if (!next.hasAttribute(attr.name)) current.removeAttribute(attr.name);
+        }
+        for (const attr of next.attributes) {
+          if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
+        }
+        for (const [type, listener] of nodeListeners.get(current) || []) current.removeEventListener(type, listener);
+        for (const [type, listener] of nodeListeners.get(next) || []) current.addEventListener(type, listener);
+        nodeListeners.set(current, nodeListeners.get(next));
+        const oldChildren = [...current.childNodes];
+        const newChildren = [...next.childNodes];
+        for (let index = 0; index < Math.max(oldChildren.length, newChildren.length); index++) {
+          if (!newChildren[index]) oldChildren[index].remove();
+          else if (!oldChildren[index]) current.append(newChildren[index]);
+          else patchDisplayNode(oldChildren[index], newChildren[index]);
+        }
+        if (current instanceof HTMLInputElement) {
+          if (current.value !== nextValue) current.value = nextValue;
+          if (current.checked !== nextChecked) current.checked = nextChecked;
+        } else if (current instanceof HTMLSelectElement && current.value !== nextValue) current.value = nextValue;
+        return current;
+      }
+
+      const renderedCollections = new WeakMap();
+
+      function renderCollection(
+        target,
+        items,
+        {
+          key = (item) => item.id,
+          signature = (item) => item,
+          context = null,
+          render,
+          headers,
+          attrs,
+          empty = "暂无数据",
+        },
+      ) {
+        let collection = renderedCollections.get(target);
+        if (!collection || collection.root.parentNode !== target || collection.generation !== sessionGeneration) {
+          const body = el(headers ? "tbody" : "div", headers ? {} : attrs);
+          const head = headers ? el("thead", {}) : null;
+          const root = headers ? el("div", { class: "table-scroll" }, el("table", {}, head, body)) : body;
+          collection = {
+            root,
+            body,
+            head,
+            generation: sessionGeneration,
+            rows: new Map(),
+            empty: el("div", { class: "empty" }),
+          };
+          renderedCollections.set(target, collection);
+          target.replaceChildren(root, collection.empty);
+        }
+        const headerSignature = JSON.stringify(headers);
+        if (headers && collection.headerSignature !== headerSignature) {
+          const row = el(
+            "tr",
+            {},
+            headers.map((h) => el("th", { class: h.num ? "num" : "" }, h.label ?? h)),
+          );
+          if (collection.head.firstChild) patchDisplayNode(collection.head.firstChild, row);
+          else collection.head.append(row);
+          collection.headerSignature = headerSignature;
+        }
+        collection.root.classList.toggle("hidden", !items.length);
+        collection.empty.classList.toggle("hidden", !!items.length);
+        if (collection.empty.textContent !== empty) collection.empty.textContent = empty;
+        const nextRows = new Map();
+        const contextStamp = JSON.stringify(context);
+        const contextChanged = collection.contextStamp !== contextStamp;
+        let position = collection.body.firstChild;
+        for (const item of items) {
+          const id = String(key(item));
+          if (nextRows.has(id)) continue;
+          // Immutable rows only track joined display names; logs need no signature.
+          const stamp = signature ? JSON.stringify(signature(item)) : "";
+          let row = collection.rows.get(id);
+          if (!row) row = { node: render(item), stamp };
+          else if (row.stamp !== stamp || contextChanged) {
+            row = { node: patchDisplayNode(row.node, render(item)), stamp };
+          }
+          nextRows.set(id, row);
+          if (row.node !== position) collection.body.insertBefore(row.node, position);
+          position = row.node.nextSibling;
+        }
+        for (const [id, row] of collection.rows) if (!nextRows.has(id)) row.node.remove();
+        collection.rows = nextRows;
+        collection.contextStamp = contextStamp;
+      }
+
+      const renderedSections = new WeakMap();
+
+      function renderSection(target, value, render) {
+        const signature = JSON.stringify([sessionGeneration, value]);
+        const previous = renderedSections.get(target);
+        if (previous?.signature === signature && previous.node.parentNode === target) return;
+        const next = render();
+        const node = previous?.node.parentNode === target ? patchDisplayNode(previous.node, next) : next;
+        if (node.parentNode !== target) target.replaceChildren(node);
+        renderedSections.set(target, { signature, node });
       }
       let noticeTimer = 0;
       function notify(message, kind) {
@@ -4136,18 +4181,80 @@
       }
 
       function loadAdminAccess() {
-        return loadResource(
-          detailLoads.adminAccess,
-          () => plugin("GET", "/access"),
-          (access) => {
-            state.access = access;
-            state.keys = access.keys;
-            state.plans = access.plans || [];
-            state.routes = access.routes || [];
-            state.credentials = access.credentials || [];
-            renderAdminAccess();
-          },
-        );
+        return loadResource(detailLoads.adminAccess, () => plugin("GET", "/access"), applyAdminAccess);
+      }
+
+      function applyAdminAccess(access) {
+        state.access = access;
+        state.keys = access.keys;
+        state.plans = access.plans || [];
+        state.routes = access.routes || [];
+        state.credentials = access.credentials || [];
+        renderAdminAccess();
+      }
+
+      function acceptResource(load, value, apply) {
+        resetLoadState(load);
+        load.cache = { key: "", at: Date.now(), value };
+        apply(value);
+      }
+
+      let adminMutationQueue = Promise.resolve();
+
+      // Serialize writes and retire older reads so late responses cannot undo edits.
+      function mutateAdmin(method, path, data = null, options) {
+        const generation = sessionGeneration;
+        const payload = structuredClone(data);
+        const task = adminMutationQueue
+          .catch(() => {})
+          .then(async () => {
+            if (generation !== sessionGeneration || currentRole !== "admin") throw new StaleRequestError();
+            const result = await plugin(
+              method,
+              path + (path.includes("?") ? "&" : "?") + "view=1",
+              { data: payload, models: path.startsWith("/prices") ? state.models : undefined },
+              options,
+            );
+            if (generation !== sessionGeneration) throw new StaleRequestError();
+            const view = result.view;
+            if (view.configuration) {
+              acceptResource(detailLoads.adminAccess, { ...state.access, ...view.configuration }, applyAdminAccess);
+              if (path === "/keys/label") {
+                resetLoadState(detailLoads.adminEventKeys);
+                resetEventViews(false);
+              }
+            }
+            if (view.prices) {
+              acceptResource(
+                detailLoads.adminPrices,
+                {
+                  models: state.models,
+                  prices: view.prices,
+                  status: { metadata: view.metadata },
+                  modelError: state.priceModelError,
+                },
+                applyAdminPrices,
+              );
+            }
+            if (view.logs_cleared) {
+              const list = pagedList("logs");
+              list.reset();
+              expandedPluginLogIDs.clear();
+              list.data = { entries: [], level_counts: {}, next_before_id: 0 };
+              list.pages = 1;
+              list.cache = { key: timeRangeCacheKey(false, selectedRange(false)), at: Date.now() };
+              list.render();
+            }
+            if (view.error) {
+              resetLoadState(detailLoads.adminPrices);
+              state.priceModelError = "写入已成功，价格视图暂时无法更新：" + view.error;
+              renderReferencePriceStatus(view.metadata);
+              guard(loadAdminPrices);
+            }
+            return result;
+          });
+        adminMutationQueue = task;
+        return task;
       }
 
       async function fetchModelPrices(models, account) {
@@ -4214,14 +4321,16 @@
             ]);
             return { models, prices, status, modelError };
           },
-          ({ models, prices, status, modelError }) => {
-            if (!modelError) state.models = models;
-            state.prices = prices.map((price) => ({ ...price, in_models: modelError ? undefined : price.in_models }));
-            state.priceModelError = modelError;
-            renderReferencePriceStatus(status.metadata);
-            renderAdminPrices();
-          },
+          applyAdminPrices,
         );
+      }
+
+      function applyAdminPrices({ models, prices, status, modelError }) {
+        if (!modelError) state.models = models;
+        state.prices = prices.map((price) => ({ ...price, in_models: modelError ? undefined : price.in_models }));
+        state.priceModelError = modelError;
+        renderReferencePriceStatus(status.metadata);
+        if (currentRole === "admin" && activeAdminTab() === "settings") renderPriceTable();
       }
 
       function renderReferencePriceStatus(metadata) {
@@ -4311,7 +4420,9 @@
             target.analysis = analysis;
           },
           render,
-          { cacheKey: JSON.stringify([timeRangeCacheKey(account, range), account ? "" : $("analysis-key").value]) },
+          {
+            cacheKey: JSON.stringify([timeRangeCacheKey(account, range), account ? "" : $("analysis-key").value]),
+          },
         );
       }
 
@@ -4399,13 +4510,12 @@
         tabBar.addEventListener("scroll", () => updateTabScrollHint(tabBar), { passive: true });
       }
 
-      // Foreground loads include configuration; background loads only live view data.
       const VIEW_DEPENDENCIES = {
         admin: {
           keys: { foreground: ["access", "prices"], background: ["access"] },
-          analysis: { foreground: ["eventKeys", "analysis"], background: ["analysis"] },
-          "request-events": { foreground: ["eventKeys", "events"], background: ["events"] },
-          errors: { foreground: ["eventKeys", "errors"], background: ["errors"] },
+          analysis: { foreground: ["analysis"], background: ["analysis"] },
+          "request-events": { foreground: ["events"], background: ["events"] },
+          errors: { foreground: ["errors"], background: ["errors"] },
           "auth-files": { foreground: ["authFiles"], background: [] },
           settings: { foreground: ["access", "prices", "logs"], background: ["logs"] },
         },
@@ -4432,11 +4542,16 @@
         let syncError;
         if (!background) {
           try {
-            await loadResource(detailLoads.adminInventory, async () => {
-              const summary = await autoSyncKeys();
-              if (summary) notify(summary);
-              await loadConfiguredCredentials();
-            });
+            await loadResource(
+              detailLoads.adminInventory,
+              async () => {
+                const summary = await autoSyncKeys();
+                if (summary) notify(summary);
+                await loadConfiguredCredentials();
+              },
+              // A concurrent live read may predate the completed synchronization.
+              () => resetLoadState(detailLoads.adminAccess),
+            );
           } catch (error) {
             syncError = error;
           }
@@ -4449,31 +4564,26 @@
       function viewResources(account, reason, range) {
         const background = reason === "background";
         const resources = {
-          eventKeys: { state: detailLoads.adminEventKeys, load: () => loadEventKeys(range) },
           access: {
             state: account ? detailLoads.accountAccess : detailLoads.adminAccess,
             load: () => loadAccessForView(account, background),
           },
           prices: {
-            state: account ? detailLoads.accountPrices : detailLoads.adminPrices,
-            load: () => account
-              ? loadAccountPrices(reason === "login" ? accountState.models : undefined)
-              : loadAdminPrices(),
+            load: () =>
+              account ? loadAccountPrices(reason === "login" ? accountState.models : undefined) : loadAdminPrices(),
           },
           analysis: {
-            requires: account || background ? [] : ["eventKeys"],
             state: account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis,
             load: () => loadAnalysis(account, range),
           },
           authFiles: {
-            state: account ? detailLoads.accountAuthFiles : detailLoads.adminAuthFiles,
             load: () => loadAuthFiles(account),
           },
         };
         for (const [name, list] of Object.entries(pagedLists[account ? "account" : "admin"])) {
           resources[name] = {
-            requires: account || background || name === "logs" ? [] : ["eventKeys"],
-            load: () => list.load(background ? "background" : reason === "navigation" ? "navigation" : "replace", range),
+            load: () =>
+              list.load(background ? "background" : reason === "navigation" ? "navigation" : "replace", range),
           };
         }
         return resources;
@@ -4496,18 +4606,15 @@
             if (resources[name].state) resources[name].state.cache = null;
           }
         }
-        const jobs = new Map();
-        const run = (name) => {
-          if (!jobs.has(name)) {
-            const resource = resources[name];
-            jobs.set(name, Promise.all((resource.requires || []).map(run)).then(() => {
-              if (generation !== sessionGeneration || viewGeneration !== viewLoadGenerations[role]) return;
-              return resource.load();
-            }));
-          }
-          return jobs.get(name);
-        };
-        const results = await Promise.allSettled(dependencies.map(run));
+        if (!account && !background && ["analysis", "request-events", "errors"].includes(tab)) {
+          await loadEventKeys(range);
+        }
+        const results = await Promise.allSettled(
+          dependencies.map(async (name) => {
+            if (generation !== sessionGeneration || viewGeneration !== viewLoadGenerations[role]) return;
+            return resources[name].load();
+          }),
+        );
         if (generation !== sessionGeneration) return;
         const failed =
           results.find((result) => result.status === "rejected" && result.reason instanceof AuthError) ||
@@ -4605,7 +4712,11 @@
             ? "额度用尽"
             : "正常";
         // Countdown labels depend on time even when the access response is unchanged.
-        replaceContent($("account-windows"), renderQuotaWindows(subscription, true));
+        renderSection(
+          $("account-windows"),
+          [subscription, (subscription.windows || []).map((row) => quotaWindowResetLabel(row, true))],
+          () => renderQuotaWindows(subscription, true),
+        );
 
         const routingValid = access.routing_valid !== false;
         const modelScope = new Set((access.models || []).map((model) => model.toLowerCase()));
@@ -4620,13 +4731,18 @@
         )
           .slice()
           .sort(compareModelId);
-        replaceContent(
-          $("account-models"),
-          ...(models.length
-            ? models.map((model) => renderAccountModel(model))
-            : [el("span", { class: "muted", text: "暂无模型价格" })]),
+        renderCollection($("account-models"), models, {
+          key: (model) => model,
+          signature: (model) => [model, accountModelPrice(model)],
+          attrs: { class: "display-contents" },
+          empty: "暂无模型价格",
+          render: renderAccountModel,
+        });
+        renderSection(
+          $("account-access"),
+          [access.routing_valid, access.models, access.credentials, access.warnings],
+          () => renderAccountAccess(access),
         );
-        renderAccountAccess(access);
       }
 
       function renderAccountAccess(access) {
@@ -4690,7 +4806,7 @@
               ...(access.warnings || []).map((warning) => el("span", { class: "tag warn", text: warning })),
             ),
           );
-        replaceContent($("account-access"), ...nodes);
+        return el("div", { class: "display-contents" }, nodes);
       }
 
       function accountModelPrice(model) {
@@ -4763,7 +4879,11 @@
       const analysisDimensions = { admin: "api_keys", account: "models" };
       const analysisMetrics = { admin: "total_tokens", account: "total_tokens" };
       const DISTRIBUTION_METRICS = {
-        total_tokens: { label: "Token 总数", option: "Token 占比", format: (row) => tokens(row.total_tokens) },
+        total_tokens: {
+          label: "Token 总数",
+          option: "Token 占比",
+          format: (row) => tokens(row.total_tokens),
+        },
         requests: { label: "请求数", option: "请求数占比", format: (row) => int(row.requests) },
         cost_usd: { label: "总成本", option: "成本占比", format: (row) => usd(row.cost_usd) },
       };
@@ -4837,9 +4957,7 @@
         }
         if (existing && existing.canvas === canvas) {
           existing.data.labels = rows.map((row) =>
-            dimension === "api_keys" && row.key !== "other"
-              ? apiKeyIdentity(row).text
-              : row.label || row.key || "未知",
+            dimension === "api_keys" && row.key !== "other" ? apiKeyIdentity(row).text : row.label || row.key || "未知",
           );
           existing.data.datasets[0].data = rows.map((row) => row.percent);
           existing.data.datasets[0].backgroundColor = rows.map((_, index) => colors[index % colors.length]);
@@ -5278,7 +5396,10 @@
         const list = rows.map((row, index) =>
           el(
             "div",
-            { class: "usage-distribution-row", style: "--distribution-color:" + colors[index % colors.length] },
+            {
+              class: "usage-distribution-row",
+              style: "--distribution-color:" + colors[index % colors.length],
+            },
             el(
               "div",
               { class: "usage-distribution-heading" },
@@ -5444,6 +5565,12 @@
         populateEventFilterSelect($(prefix + "error-source"), "全部来源", filters.sources, undefined, sourceLabel);
       }
 
+      // The stored event is immutable. Only these joined names can change after
+      // a key or credential rename, independently of the event's database ID.
+      function eventDisplayIdentity(entry, account) {
+        return account ? [entry.source] : [entry.preview, entry.label, entry.source];
+      }
+
       function renderErrors(account) {
         const owner = account ? accountState : state;
         const note = $(account ? "account-error-note" : "error-note");
@@ -5452,37 +5579,44 @@
         if (list.renderEmpty()) return;
         populateErrorFilters(owner.errors, account);
         updateFilterClearButton($(account ? "account-errors-filter-clear" : "errors-filter-clear"));
-        const entries = (owner.errors.entries || []).map((entry) => {
-          const tags = [
-            el("span", { class: "tag bad", text: entry.status_code ? "HTTP " + entry.status_code : "失败" }),
-          ];
-          if (entry.error_type) {
-            tags.push(el("span", { class: "tag bad", text: entry.error_type }));
-          }
-          return el(
-            "article",
-            { class: "event-entry request-failure", role: "listitem" },
-            el(
-              "div",
-              { class: "event-entry-head" },
-              el("time", { class: "event-time", datetime: entry.at || null }, when(entry.at)),
+        renderCollection(list.scroller, owner.errors.entries || [], {
+          signature: (entry) => eventDisplayIdentity(entry, account),
+          attrs: { class: "event-list", role: "list", "aria-label": "错误事件列表" },
+          empty: "暂无错误事件",
+          render: (entry) => {
+            const tags = [
+              el("span", {
+                class: "tag bad",
+                text: entry.status_code ? "HTTP " + entry.status_code : "失败",
+              }),
+            ];
+            if (entry.error_type) {
+              tags.push(el("span", { class: "tag bad", text: entry.error_type }));
+            }
+            return el(
+              "article",
+              { class: "event-entry request-failure", role: "listitem" },
               el(
                 "div",
-                { class: "event-request-meta" },
-                account ? null : errorEventField("API Key", apiKeyIdentity(entry).text, false),
-                errorEventField("模型", entry.billing_model || entry.upstream_model),
-                errorEventField("来源", sourceLabel(entry.source)),
+                { class: "event-entry-head" },
+                el("time", { class: "event-time", datetime: entry.at || null }, when(entry.at)),
+                el(
+                  "div",
+                  { class: "event-request-meta" },
+                  account ? null : errorEventField("API Key", apiKeyIdentity(entry).text, false),
+                  errorEventField("模型", entry.billing_model || entry.upstream_model),
+                  errorEventField("来源", sourceLabel(entry.source)),
+                ),
+                el("div", { class: "event-entry-tags" }, tags),
               ),
-              el("div", { class: "event-entry-tags" }, tags),
-            ),
-            el("pre", { class: "event-error-body mono", text: entry.body || entry.reason || "没有错误详情" }),
-          );
+              el("pre", {
+                class: "event-error-body mono",
+                text: entry.body || entry.reason || "没有错误详情",
+              }),
+            );
+          },
         });
-        list.renderContent([
-          entries.length
-            ? el("div", { class: "event-list", role: "list", "aria-label": "错误事件列表" }, entries)
-            : el("div", { class: "empty", text: "暂无错误事件" }),
-        ]);
+        list.renderStatus();
         note.textContent = "已加载 " + int(owner.errors.entries?.length) + " / " + int(owner.errors.total) + " 条";
       }
 
@@ -5820,81 +5954,85 @@
         const files = filteredAuthFiles(account);
         const refreshable = files.filter((file) => file.quota_supported).length;
         ui.bulk.disabled = refreshable === 0 || ui.bulk.dataset.loading === "true";
-        if (!files.length) {
-          replaceContent(ui.body, el("div", { class: "empty", text: "没有符合筛选条件的认证文件" }));
-          return;
-        }
-        replaceContent(
-          ui.body,
-          el(
-            "div",
-            { class: "auth-file-grid" },
-            files.map((file) => {
-              const statusText = file.disabled ? "已停用" : file.unavailable ? "不可用" : "已启用";
-              const statusClass = file.disabled ? "plain" : file.unavailable ? "bad" : "ok";
-              const category = AUTH_CATEGORY_LABELS[file.category] || file.category || "未知";
-              const plan = authPlanLabel(file.category, ui.owner.authQuotas.get(file.auth_index)?.plan);
-              const seenMeta = new Set();
-              const meta = [category, plan].filter((value) => {
-                const key = String(value || "")
-                  .trim()
-                  .toLocaleLowerCase();
-                if (!key || seenMeta.has(key)) return false;
-                seenMeta.add(key);
-                return true;
-              });
-              const loading = ui.owner.authQuotaLoading.has(file.auth_index);
-              const refreshButton = el(
-                "button",
-                {
-                  type: "button",
-                  class: "auth-refresh-icon-button" + (loading ? " loading" : ""),
-                  disabled: !file.quota_supported || loading,
-                  "aria-label": "更新限额",
-                  title: file.quota_supported
-                    ? "更新限额"
-                    : file.quota_unavailable_reason || "该认证文件类型暂不支持限额查询",
-                  onclick: () => guard(() => refreshAuthQuota(file, account)),
-                },
-                actionIcon("refresh"),
-              );
-              return el(
-                "article",
-                { class: "auth-file-card" },
+        renderCollection(ui.body, files, {
+          key: (file) => file.auth_index,
+          attrs: { class: "auth-file-grid" },
+          empty: "没有符合筛选条件的认证文件",
+          signature: (file) => {
+            const quota = ui.owner.authQuotas.get(file.auth_index);
+            return [
+              file,
+              quota,
+              ui.owner.authQuotaErrors.get(file.auth_index),
+              ui.owner.authQuotaLoading.has(file.auth_index),
+              (quota?.quota || []).map(quotaResetMeta),
+            ];
+          },
+          render: (file) => {
+            const statusText = file.disabled ? "已停用" : file.unavailable ? "不可用" : "已启用";
+            const statusClass = file.disabled ? "plain" : file.unavailable ? "bad" : "ok";
+            const category = AUTH_CATEGORY_LABELS[file.category] || file.category || "未知";
+            const plan = authPlanLabel(file.category, ui.owner.authQuotas.get(file.auth_index)?.plan);
+            const seenMeta = new Set();
+            const meta = [category, plan].filter((value) => {
+              const key = String(value || "")
+                .trim()
+                .toLocaleLowerCase();
+              if (!key || seenMeta.has(key)) return false;
+              seenMeta.add(key);
+              return true;
+            });
+            const loading = ui.owner.authQuotaLoading.has(file.auth_index);
+            const refreshButton = el(
+              "button",
+              {
+                type: "button",
+                class: "auth-refresh-icon-button" + (loading ? " loading" : ""),
+                disabled: !file.quota_supported || loading,
+                "aria-label": "更新限额",
+                title: file.quota_supported
+                  ? "更新限额"
+                  : file.quota_unavailable_reason || "该认证文件类型暂不支持限额查询",
+                onclick: () => guard(() => refreshAuthQuota(file, account)),
+              },
+              actionIcon("refresh"),
+            );
+            return el(
+              "article",
+              { class: "auth-file-card" },
+              el(
+                "div",
+                { class: "auth-file-head" },
                 el(
                   "div",
-                  { class: "auth-file-head" },
+                  { class: "auth-file-main" },
+                  authProviderIcon(file.category),
                   el(
                     "div",
-                    { class: "auth-file-main" },
-                    authProviderIcon(file.category),
+                    { class: "auth-file-identity" },
+                    el("div", {
+                      class: "auth-file-email-title",
+                      title: file.email || "未提供邮箱",
+                      text: file.email || "未提供邮箱",
+                    }),
                     el(
                       "div",
-                      { class: "auth-file-identity" },
-                      el("div", {
-                        class: "auth-file-email-title",
-                        title: file.email || "未提供邮箱",
-                        text: file.email || "未提供邮箱",
-                      }),
-                      el(
-                        "div",
-                        { class: "auth-file-meta" },
-                        meta.map((value) => el("span", { title: value, text: value })),
-                      ),
+                      { class: "auth-file-meta" },
+                      meta.map((value) => el("span", { title: value, text: value })),
                     ),
                   ),
-                  el(
-                    "div",
-                    { class: "auth-file-actions" },
-                    el("span", { class: "tag " + statusClass, text: statusText }),
-                    refreshButton,
-                  ),
                 ),
-                renderAuthFileQuota(file, account),
-              );
-            }),
-          ),
-        );
+                el(
+                  "div",
+                  { class: "auth-file-actions" },
+                  el("span", { class: "tag " + statusClass, text: statusText }),
+                  refreshButton,
+                ),
+              ),
+              renderAuthFileQuota(file, account),
+            );
+          },
+        });
       }
 
       const AUTH_QUOTA_TIMEOUT_MS = 65000;
@@ -5970,13 +6108,6 @@
         }
       }
 
-      function renderAdminPrices() {
-        if (currentRole !== "admin") return;
-        if (activeAdminTab() === "settings") {
-          renderPriceTable("prices-body", state.prices || [], $("price-filter").value, true);
-        }
-      }
-
       function renderAdminTab(tab) {
         if (tab === "keys") {
           // Replacing the anchor row would close a picker the user is working in.
@@ -5992,7 +6123,7 @@
         } else if (tab === "settings") {
           renderPlans();
           renderRoutes();
-          renderPriceTable("prices-body", state.prices || [], $("price-filter").value, true);
+          renderPriceTable();
           renderPluginLogs();
         }
       }
@@ -6018,7 +6149,10 @@
           el("span", { class: "api-key-identity-line" + className }, el("span", { text }), children);
         return el(
           "span",
-          { class: "api-key-identity" + (options.stacked ? " api-key-identity-stacked" : ""), title: identity.text },
+          {
+            class: "api-key-identity" + (options.stacked ? " api-key-identity-stacked" : ""),
+            title: identity.text,
+          },
           line(identity.primary, "", identity.secondary ? [] : trailing),
           identity.secondary ? line(identity.secondary, " api-key-identity-secondary", trailing) : null,
         );
@@ -6085,14 +6219,13 @@
         if (!Number.isSafeInteger(limit) || limit < 0 || limit > 10000) {
           throw new Error("并发限制必须是 0 到 10000 之间的整数");
         }
-        await plugin("POST", "/keys/concurrency", { scope: view.scope, concurrency_limit: limit });
+        await mutateAdmin("POST", "/keys/concurrency", { scope: view.scope, concurrency_limit: limit });
         notify(limit ? "并发限制已更新为 " + limit : "已取消并发限制");
-        await refreshPage("foreground");
       }
 
       function renderKeys() {
         const filter = $("key-filter").value.trim().toLowerCase();
-        const rows = state.keys
+        const keys = state.keys
           .filter((key) => !key.deleted_at || $("keys-include-deleted").checked)
           .filter(
             (view) =>
@@ -6102,8 +6235,12 @@
                 .join(" ")
                 .toLowerCase()
                 .includes(filter),
-          )
-          .map((view) => {
+          );
+        renderCollection($("keys-body"), keys, {
+          key: (view) => view.scope,
+          context: [state.plans, state.routes, state.credentials],
+          headers: ["API Key", "订阅计划", "路由规则", "并发限制", "订阅额度", "状态", "操作"],
+          render: (view) => {
             const deleted = !!view.deleted_at;
             const name = apiKeyIdentity(view).primary;
             const select = el(
@@ -6115,10 +6252,10 @@
                 onchange: (event) =>
                   guard(async () => {
                     const planID = event.target.value;
-                    if (planID) await plugin("POST", "/keys/bind", { scope: view.scope, plan_id: planID });
-                    else await plugin("POST", "/keys/unbind", { scope: view.scope });
+                    event.target.value = view.plan_id || "";
+                    if (planID) await mutateAdmin("POST", "/keys/bind", { scope: view.scope, plan_id: planID });
+                    else await mutateAdmin("POST", "/keys/unbind", { scope: view.scope });
                     notify("订阅计划已更新");
-                    await refreshPage("foreground");
                   }),
               },
               el("option", { value: "", text: "不限制" }),
@@ -6141,20 +6278,19 @@
                 title: "最大并发请求数；0 表示不限制",
                 onchange: (event) =>
                   guard(async () => {
-                    if (event.target.value === CUSTOM_CONCURRENCY) {
+                    const value = event.target.value;
+                    event.target.value = String(currentConcurrencyLimit);
+                    if (value === CUSTOM_CONCURRENCY) {
                       const raw = await ask(
                         "设置并发限制",
                         "请输入 0 到 10000 的整数，0 表示不限制。",
                         String(currentConcurrencyLimit),
                       );
-                      if (raw === null) {
-                        event.target.value = String(currentConcurrencyLimit);
-                        return;
-                      }
+                      if (raw === null) return;
                       await saveConcurrency(view, raw);
                       return;
                     }
-                    await saveConcurrency(view, event.target.value);
+                    await saveConcurrency(view, value);
                   }),
               },
               concurrencyValues.map((limit) =>
@@ -6234,9 +6370,8 @@
                         ))
                       )
                         return;
-                      await plugin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
+                      await mutateAdmin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
                       notify("订阅额度已重置");
-                      await refreshPage("foreground");
                     }),
                 }),
                 el("button", {
@@ -6246,19 +6381,14 @@
                     guard(async () => {
                       const label = await ask("备注", name, view.label || "");
                       if (label === null) return;
-                      await plugin("POST", "/keys/label", { scope: view.scope, label });
+                      await mutateAdmin("POST", "/keys/label", { scope: view.scope, label });
                       notify("已保存备注");
-                      await refreshPage("foreground");
                     }),
                 }),
               ),
             );
-          });
-
-        replaceContent(
-          $("keys-body"),
-          table(["API Key", "订阅计划", "路由规则", "并发限制", "订阅额度", "状态", "操作"], rows),
-        );
+          },
+        });
       }
 
       function routeName(id) {
@@ -6319,7 +6449,11 @@
               .map((id) => ({ text: routeName(id), mono: false }))
               .concat(models.map((model) => ({ text: "单模型·" + model, mono: true })))
               .concat(
-                providers.map((provider) => ({ text: credentialProviderLabel(provider), mono: false, tag: "整类" })),
+                providers.map((provider) => ({
+                  text: credentialProviderLabel(provider),
+                  mono: false,
+                  tag: "整类",
+                })),
               )
               .concat(
                 credentialIDs.map((ref) => {
@@ -6639,10 +6773,10 @@
         button.disabled = true;
         button.textContent = "正在保存…";
         try {
-          await plugin("PUT", "/keys/routes", body);
+          await mutateAdmin("PUT", "/keys/routes", body);
           notify("API Key 路由规则已保存");
           closeRoutePicker();
-          await refreshPage("foreground");
+          renderAdminAccess();
         } finally {
           button.disabled = false;
           button.textContent = "保存";
@@ -6658,7 +6792,10 @@
             el(
               "span",
               item.title
-                ? { class: "settings-chip settings-item-chip" + (item.tag ? " has-tag" : ""), title: item.title }
+                ? {
+                    class: "settings-chip settings-item-chip" + (item.tag ? " has-tag" : ""),
+                    title: item.title,
+                  }
                 : { class: "settings-chip settings-item-chip" + (item.tag ? " has-tag" : "") },
               item.tag ? el("span", { class: "settings-chip-label", text: item.text }) : item.text,
               item.tag ? el("span", { class: "tag warn", text: item.tag }) : null,
@@ -6677,12 +6814,11 @@
       }
 
       function boundKeyField(keys) {
-        const chips = keys.map((key) => ({ text: apiKeyIdentity(key).text, tag: key.deleted_at ? "已删除" : "" }));
+        const chips = keys.map((key) => ({
+          text: apiKeyIdentity(key).text,
+          tag: key.deleted_at ? "已删除" : "",
+        }));
         return settingsEntryField("已绑定 Key", settingsChipList(chips, "—"));
-      }
-
-      function modelChipItems(models) {
-        return models.map((model) => ({ text: model }));
       }
 
       function bindingSummary(keys) {
@@ -6691,140 +6827,144 @@
       }
 
       function renderPlans() {
-        const cards = state.plans.map((plan) => {
-          const boundKeys = state.keys.filter((key) => key.plan_id === plan.id);
-          const name = plan.name || plan.id;
-          return el(
-            "article",
-            { class: "auth-file-card", role: "listitem" },
-            el(
-              "div",
-              { class: "event-entry-head settings-entry-header" },
-              el("div", { class: "settings-entry-title", text: name }),
+        const plans = state.plans.map((plan) => ({
+          plan,
+          boundKeys: state.keys.filter((key) => key.plan_id === plan.id),
+        }));
+        renderCollection($("plans-body"), plans, {
+          key: ({ plan }) => plan.id,
+          attrs: { class: "event-list settings-card-list", role: "list" },
+          empty: "暂无订阅计划",
+          render: ({ plan, boundKeys }) => {
+            const name = plan.name || plan.id;
+            return el(
+              "article",
+              { class: "auth-file-card", role: "listitem" },
               el(
                 "div",
-                { class: "row settings-entry-actions" },
-                el("button", { class: "link", text: "编辑", onclick: () => editPlan(plan) }),
-                el("button", {
-                  class: "link danger",
-                  text: "删除",
-                  onclick: () =>
-                    guard(async () => {
-                      if (
-                        !(await confirmAction(
-                          "删除订阅计划「" + name + "」？",
-                          boundKeys.length
-                            ? "将解除 " +
-                                bindingSummary(boundKeys) +
-                                " 的套餐绑定。解除后不再限制套餐额度。" +
-                                (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
-                            : "",
-                        ))
-                      )
-                        return;
-                      await plugin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
-                      notify("订阅计划已删除");
-                      await refreshPage("foreground");
-                    }),
-                }),
-              ),
-            ),
-            el(
-              "div",
-              { class: "settings-entry-fields" },
-              plan.windows.map((quotaWindow) =>
+                { class: "event-entry-head settings-entry-header" },
+                el("div", { class: "settings-entry-title", text: name }),
                 el(
                   "div",
-                  { class: "event-request-meta" },
-                  settingsEntryField(quotaWindow.name, el("b", { class: "mono", text: usd(quotaWindow.amount_usd) })),
-                  settingsEntryField("周期", periodLabel(quotaWindow.period_seconds)),
+                  { class: "row settings-entry-actions" },
+                  el("button", { class: "link", text: "编辑", onclick: () => editPlan(plan) }),
+                  el("button", {
+                    class: "link danger",
+                    text: "删除",
+                    onclick: () =>
+                      guard(async () => {
+                        if (
+                          !(await confirmAction(
+                            "删除订阅计划「" + name + "」？",
+                            boundKeys.length
+                              ? "将解除 " +
+                                  bindingSummary(boundKeys) +
+                                  " 的套餐绑定。解除后不再限制套餐额度。" +
+                                  (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
+                              : "",
+                          ))
+                        )
+                          return;
+                        await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
+                        notify("订阅计划已删除");
+                      }),
+                  }),
                 ),
               ),
-              boundKeyField(boundKeys),
-            ),
-          );
+              el(
+                "div",
+                { class: "settings-entry-fields" },
+                plan.windows.map((quotaWindow) =>
+                  el(
+                    "div",
+                    { class: "event-request-meta" },
+                    settingsEntryField(quotaWindow.name, el("b", { class: "mono", text: usd(quotaWindow.amount_usd) })),
+                    settingsEntryField("周期", periodLabel(quotaWindow.period_seconds)),
+                  ),
+                ),
+                boundKeyField(boundKeys),
+              ),
+            );
+          },
         });
-        replaceContent(
-          $("plans-body"),
-          cards.length
-            ? el("div", { class: "event-list settings-card-list", role: "list" }, cards)
-            : el("div", { class: "empty", text: "暂无订阅计划" }),
-        );
       }
 
       function renderRoutes() {
-        const cards = state.routes.map((route) => {
-          const rule = route.rule;
-          const models = rule.models;
-          const credentials = rule.credential_providers
-            .map((item) => ({ text: credentialProviderLabel(item), tag: "整类" }))
-            .concat(
-              rule.credential_ids.map((ref) => {
-                const credential = state.credentials.find((item) => item.ref === ref);
-                return { text: credential ? credentialLabel(credential) : "凭证已不存在" };
-              }),
-            );
-          const boundKeys = state.keys.filter((key) => key.route_bindings.route_ids.includes(route.id));
-          const name = route.name || route.id;
-          return el(
-            "article",
-            { class: "auth-file-card", role: "listitem" },
-            el(
-              "div",
-              { class: "event-entry-head settings-entry-header" },
-              el("div", { class: "settings-entry-title", text: name }),
+        const inventoryError = state.access?.credential_inventory_error;
+        $("route-inventory-notice").textContent = inventoryError ? "凭证信息暂时无法加载：" + inventoryError : "";
+        $("route-inventory-notice").classList.toggle("hidden", !inventoryError);
+        const routes = state.routes.map((route) => ({
+          route,
+          boundKeys: state.keys.filter((key) => key.route_bindings.route_ids.includes(route.id)),
+        }));
+        renderCollection($("routes-body"), routes, {
+          key: ({ route }) => route.id,
+          attrs: { class: "event-list settings-card-list", role: "list" },
+          empty: "暂无路由规则",
+          context: state.credentials,
+          render: ({ route, boundKeys }) => {
+            const rule = route.rule;
+            const models = rule.models;
+            const credentials = rule.credential_providers
+              .map((item) => ({ text: credentialProviderLabel(item), tag: "整类" }))
+              .concat(
+                rule.credential_ids.map((ref) => {
+                  const credential = state.credentials.find((item) => item.ref === ref);
+                  return { text: credential ? credentialLabel(credential) : "凭证已不存在" };
+                }),
+              );
+            const name = route.name || route.id;
+            return el(
+              "article",
+              { class: "auth-file-card", role: "listitem" },
               el(
                 "div",
-                { class: "row settings-entry-actions" },
-                el("button", { class: "link", text: "编辑", onclick: () => editRoute(route) }),
-                el("button", {
-                  class: "link danger",
-                  text: "删除",
-                  onclick: () =>
-                    guard(async () => {
-                      if (
-                        !(await confirmAction(
-                          "删除路由规则「" + name + "」？",
-                          boundKeys.length
-                            ? "将从 " +
-                                bindingSummary(boundKeys) +
-                                " 的绑定中解除此规则；其中 " +
-                                (route.fully_unrestricted_keys || 0) +
-                                " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
-                            : "此操作无法撤销。",
-                        ))
-                      )
-                        return;
-                      await plugin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
-                      notify("路由规则已删除");
-                      await refreshPage("foreground");
-                    }),
-                }),
+                { class: "event-entry-head settings-entry-header" },
+                el("div", { class: "settings-entry-title", text: name }),
+                el(
+                  "div",
+                  { class: "row settings-entry-actions" },
+                  el("button", { class: "link", text: "编辑", onclick: () => editRoute(route) }),
+                  el("button", {
+                    class: "link danger",
+                    text: "删除",
+                    onclick: () =>
+                      guard(async () => {
+                        if (
+                          !(await confirmAction(
+                            "删除路由规则「" + name + "」？",
+                            boundKeys.length
+                              ? "将从 " +
+                                  bindingSummary(boundKeys) +
+                                  " 的绑定中解除此规则；其中 " +
+                                  (route.fully_unrestricted_keys || 0) +
+                                  " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
+                              : "此操作无法撤销。",
+                          ))
+                        )
+                          return;
+                        await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
+                        notify("路由规则已删除");
+                      }),
+                  }),
+                ),
               ),
-            ),
-            el(
-              "div",
-              { class: "settings-entry-fields" },
-              settingsEntryField("模型范围", settingsChipList(modelChipItems(models), "全部模型")),
-              settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
-              boundKeyField(boundKeys),
-            ),
-          );
+              el(
+                "div",
+                { class: "settings-entry-fields" },
+                settingsEntryField(
+                  "模型范围",
+                  settingsChipList(
+                    models.map((text) => ({ text })),
+                    "全部模型",
+                  ),
+                ),
+                settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
+                boundKeyField(boundKeys),
+              ),
+            );
+          },
         });
-        replaceContent(
-          $("routes-body"),
-          ...(state.access?.credential_inventory_error
-            ? [
-                el("div", {
-                  class: "notice warn show",
-                  text: "凭证信息暂时无法加载：" + state.access.credential_inventory_error,
-                }),
-              ]
-            : []),
-          cards.length
-            ? el("div", { class: "event-list settings-card-list", role: "list" }, cards)
-            : el("div", { class: "empty", text: "暂无路由规则" }),
-        );
       }
 
       let routeModels = new Set();
@@ -6974,7 +7114,12 @@
         node.replaceChildren(
           ...(options.length
             ? options
-            : [el("div", { class: "empty", text: currentModelIDs().length ? "没有匹配的模型" : "暂无可选模型" })]),
+            : [
+                el("div", {
+                  class: "empty",
+                  text: currentModelIDs().length ? "没有匹配的模型" : "暂无可选模型",
+                }),
+              ]),
         );
       }
 
@@ -7090,56 +7235,59 @@
         return 0;
       }
 
-      function renderPriceTable(target, prices, filter, editable) {
-        filter = filter.trim().toLowerCase();
-        const rows = (prices || [])
+      function renderPriceTable() {
+        const filter = $("price-filter").value.trim().toLowerCase();
+        const rows = (state.prices || [])
           .filter((row) => !filter || row.model_id.toLowerCase().includes(filter))
-          .sort((a, b) => compareModelId(a.model_id, b.model_id))
-          .map((row) => {
-            const cells = [
-              el(
-                "td",
-                { class: "mono" },
-                row.model_id,
-                editable && row.in_models === false
-                  ? el("div", { class: "muted small", text: "不在 CPA 模型列表中" })
-                  : null,
-                editable && row.custom_price_model_id && row.custom_price_model_id !== row.model_id
-                  ? el("div", { class: "muted small", text: "沿用 " + row.custom_price_model_id + " 的自定义价" })
-                  : null,
-              ),
-              el("td", { class: "num" }, tierPriceCell(row, "input_per_1m")),
-              el("td", { class: "num" }, tierPriceCell(row, "output_per_1m")),
-              el("td", { class: "num" }, tierPriceCell(row, "cache_read_per_1m")),
-              el("td", { class: "num" }, tierPriceCell(row, "cache_write_per_1m")),
-            ];
-            if (editable) {
-              cells.push(el("td", {}, priceSourceTag(row.source)));
-              cells.push(
-                el(
-                  "td",
-                  { class: "small" },
-                  el("button", { class: "link", text: "编辑", onclick: () => editPrice(row) }),
-                  el("button", {
-                    class: "link danger",
-                    text: "删除",
-                    disabled: row.source !== "custom",
-                    onclick: () => guard(() => deleteCustomPrice(row)),
-                  }),
-                ),
-              );
-            }
-            return el("tr", {}, cells);
-          });
+          .sort((a, b) => compareModelId(a.model_id, b.model_id));
+        const renderRow = (row) => {
+          return el(
+            "tr",
+            {},
+            el(
+              "td",
+              { class: "mono" },
+              row.model_id,
+              row.in_models === false ? el("div", { class: "muted small", text: "不在 CPA 模型列表中" }) : null,
+              row.custom_price_model_id && row.custom_price_model_id !== row.model_id
+                ? el("div", {
+                    class: "muted small",
+                    text: "沿用 " + row.custom_price_model_id + " 的自定义价",
+                  })
+                : null,
+            ),
+            el("td", { class: "num" }, tierPriceCell(row, "input_per_1m")),
+            el("td", { class: "num" }, tierPriceCell(row, "output_per_1m")),
+            el("td", { class: "num" }, tierPriceCell(row, "cache_read_per_1m")),
+            el("td", { class: "num" }, tierPriceCell(row, "cache_write_per_1m")),
+            el("td", {}, priceSourceTag(row.source)),
+            el(
+              "td",
+              { class: "small" },
+              el("button", { class: "link", text: "编辑", onclick: () => editPrice(row) }),
+              el("button", {
+                class: "link danger",
+                text: "删除",
+                disabled: row.source !== "custom",
+                onclick: () => guard(() => deleteCustomPrice(row)),
+              }),
+            ),
+          );
+        };
         const headers = [
           "模型",
           { label: "输入 / 1M Token", num: true },
           { label: "输出 / 1M Token", num: true },
           { label: "缓存读 / 1M Token", num: true },
           { label: "缓存写 / 1M Token", num: true },
+          "来源",
+          "操作",
         ];
-        if (editable) headers.push("来源", "操作");
-        replaceContent($(target), table(headers, rows));
+        renderCollection($("prices-body"), rows, {
+          key: (row) => row.model_id,
+          headers,
+          render: renderRow,
+        });
       }
 
       function costTierText(cost) {
@@ -7225,24 +7373,40 @@
       function labelRequestEventStatuses(select, counts) {
         for (const option of select.options) {
           const status = REQUEST_EVENT_STATUS_OPTIONS[option.value];
-          option.textContent = status.label + "·" + int((counts || {})[status.count]);
+          const label = status.label + "·" + int((counts || {})[status.count]);
+          if (option.textContent !== label) option.textContent = label;
         }
+      }
+
+      function renderSelectOptions(select, options) {
+        const selected = select.value;
+        const previous = new Map([...select.options].map((option) => [option.value, option]));
+        let position = select.firstChild;
+        for (const { value, text } of options) {
+          const option = previous.get(value) || el("option", { value });
+          if (option.textContent !== text) option.textContent = text;
+          if (option !== position) select.insertBefore(option, position);
+          position = option.nextSibling;
+          previous.delete(value);
+        }
+        for (const option of previous.values()) option.remove();
+        select.value = selected;
+        if (select.selectedIndex < 0) select.value = "";
       }
 
       function populateEventFilterSelect(select, defaultLabel, values, valueOf = (item) => item, labelOf = valueOf) {
         const selected = select.value;
         const selectedLabel = select.selectedOptions[0]?.textContent || selected;
-        const options = [el("option", { value: "", text: defaultLabel })];
+        const options = [{ value: "", text: defaultLabel }];
         let found = !selected;
         for (const item of values || []) {
           const value = String(valueOf(item) || "");
           if (!value) continue;
           if (value === selected) found = true;
-          options.push(el("option", { value, text: labelOf(item) }));
+          options.push({ value, text: String(labelOf(item)) });
         }
-        if (selected && !found) options.push(el("option", { value: selected, text: selectedLabel }));
-        replaceContent(select, ...options);
-        select.value = selected;
+        if (selected && !found) options.push({ value: selected, text: selectedLabel });
+        renderSelectOptions(select, options);
       }
 
       function populateRequestEventFilters(filters, account) {
@@ -7267,17 +7431,13 @@
           (keys) => {
             const select = $("analysis-key");
             const selected = select.value;
-            replaceContent(
-              select,
-              el("option", { value: "", text: "全部 API Key" }),
-              ...keys.map((key) =>
-                el("option", {
-                  value: key.scope,
-                  text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
-                }),
-              ),
-            );
-            select.value = keys.some((key) => key.scope === selected) ? selected : "";
+            renderSelectOptions(select, [
+              { value: "", text: "全部 API Key" },
+              ...keys.map((key) => ({
+                value: key.scope,
+                text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
+              })),
+            ]);
             if (select.value !== selected) {
               saveChoice("admin", "analysis-key");
               resetEventViews(false);
@@ -7576,7 +7736,10 @@
                           },
                         },
                         el("span", {
-                          text: new Date(hour).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }),
+                          text: new Date(hour).toLocaleDateString("zh-CN", {
+                            month: "short",
+                            day: "numeric",
+                          }),
                         }),
                         el("span", {
                           text:
@@ -7739,7 +7902,10 @@
                   "div",
                   { class: "range-ticks small muted", "aria-hidden": "true" },
                   ticks.map((tick) =>
-                    el("span", { text: String(tick), style: "left:" + ((tick - min) / (max - min)) * 100 + "%" }),
+                    el("span", {
+                      text: String(tick),
+                      style: "left:" + ((tick - min) / (max - min)) * 100 + "%",
+                    }),
                   ),
                 ),
               ),
@@ -7751,7 +7917,10 @@
               "div",
               { class: "time-range-rolling" },
               el("span", { class: "small", text: SHARED_TIME_LABELS[draft.mode] }),
-              el("span", { class: "small muted", text: draft.mode === "today" ? "00:00 → 现在" : "00:00 → 24:00" }),
+              el("span", {
+                class: "small muted",
+                text: draft.mode === "today" ? "00:00 → 现在" : "00:00 → 24:00",
+              }),
             ),
           );
         }
@@ -7919,7 +8088,7 @@
         const entries = view.entries || [];
         const hasCacheWrite = entries.some((entry) => Number(entry.cost?.cache_write_tokens || 0) !== 0);
         note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
-        const rows = entries.map((entry) => {
+        const renderRow = (entry) => {
           const cost = entry.cost || {};
           const statusMarks = [];
           if (entry.failed) statusMarks.push(el("span", { class: "tag bad", text: "失败" }));
@@ -8028,28 +8197,28 @@
               cost.tiered ? el("div", { class: "muted small" }, cost.long_context ? "长上下文" : "标准") : null,
             ),
           );
-        });
+        };
 
-        const content = [
-          table(
-            [
-              "时间",
-              ...(account ? [] : ["API Key"]),
-              "模型",
-              "执行器 / 来源",
-              "推理 / 速度",
-              "状态",
-              { label: "TPS / 延迟", num: true },
-              { label: "输入", num: true },
-              { label: "缓存读", num: true },
-              ...(hasCacheWrite ? [{ label: "缓存写", num: true }] : []),
-              { label: "输出", num: true },
-              { label: "费用", num: true },
-            ],
-            rows,
-          ),
-        ];
-        list.renderContent(content);
+        renderCollection(list.scroller, entries, {
+          context: hasCacheWrite,
+          signature: (entry) => eventDisplayIdentity(entry, account),
+          render: renderRow,
+          headers: [
+            "时间",
+            ...(account ? [] : ["API Key"]),
+            "模型",
+            "执行器 / 来源",
+            "推理 / 速度",
+            "状态",
+            { label: "TPS / 延迟", num: true },
+            { label: "输入", num: true },
+            { label: "缓存读", num: true },
+            ...(hasCacheWrite ? [{ label: "缓存写", num: true }] : []),
+            { label: "输出", num: true },
+            { label: "费用", num: true },
+          ],
+        });
+        list.renderStatus();
       }
 
       const pluginLogLevels = {
@@ -8082,7 +8251,7 @@
         if (list.renderEmpty()) return;
         const pluginLogs = list.data.entries || [];
         const filter = $("plugin-log-filter").value.trim().toLowerCase();
-        const currentIDs = new Set(pluginLogs.map((entry) => String(entry.id || "")).filter(Boolean));
+        const currentIDs = new Set(pluginLogs.map((entry) => String(entry.id)));
         for (const id of expandedPluginLogIDs) if (!currentIDs.has(id)) expandedPluginLogIDs.delete(id);
         const searched = pluginLogs.filter((pluginLog) => {
           if (!filter) return true;
@@ -8095,30 +8264,31 @@
         const levelSelect = $("plugin-log-level");
         for (const option of levelSelect.options) {
           const label = option.value === "all" ? "全部级别" : pluginLogLevels[option.value].label;
-          option.textContent = label + "·" + int(counts[option.value] || 0);
+          const text = label + "·" + int(counts[option.value] || 0);
+          if (option.textContent !== text) option.textContent = text;
         }
         const total = counts[levelSelect.value] || 0;
         note.textContent = "已加载 " + int(pluginLogs.length) + " / " + int(total) + " 条";
-        const entries = searched.map((pluginLog) => {
-          const level = pluginLogLevels[pluginLog.level] || pluginLogLevels.info;
-          return el(
-            "article",
-            { class: "event-entry", role: "listitem" },
-            el(
-              "div",
-              { class: "event-entry-head" },
-              el("time", { class: "event-time", datetime: pluginLog.at || null }, when(pluginLog.at)),
-              el("span", { class: level.class, text: level.label }),
-            ),
-            renderPluginLogMessage(pluginLog),
-          );
+        renderCollection(list.scroller, searched, {
+          attrs: { class: "event-list", role: "list", "aria-label": "插件日志列表" },
+          empty: pluginLogs.length ? "没有匹配的日志" : "暂无插件日志",
+          signature: null,
+          render: (pluginLog) => {
+            const level = pluginLogLevels[pluginLog.level] || pluginLogLevels.info;
+            return el(
+              "article",
+              { class: "event-entry", role: "listitem" },
+              el(
+                "div",
+                { class: "event-entry-head" },
+                el("time", { class: "event-time", datetime: pluginLog.at || null }, when(pluginLog.at)),
+                el("span", { class: level.class, text: level.label }),
+              ),
+              renderPluginLogMessage(pluginLog),
+            );
+          },
         });
-        const content = [
-          entries.length
-            ? el("div", { class: "event-list", role: "list", "aria-label": "插件日志列表" }, entries)
-            : el("div", { class: "empty", text: pluginLogs.length ? "没有匹配的日志" : "暂无插件日志" }),
-        ];
-        list.renderContent(content);
+        list.renderStatus();
       }
 
       function renderPluginLogMessage(pluginLog) {
@@ -8144,14 +8314,14 @@
             { succeeded: "成功", failed: "失败", rejected: "已拒绝", canceled: "已取消" }[row.outcome] ||
             row.outcome ||
             "未知";
-          const id = String(pluginLog.id || "");
+          const id = String(pluginLog.id);
           return el(
             "details",
             {
               class: "plugin-log-message",
-              open: (id && expandedPluginLogIDs.has(id)) || undefined,
+              open: expandedPluginLogIDs.has(id),
               ontoggle: (event) => {
-                if (!id) return;
+                if (!event.currentTarget.isConnected) return;
                 if (event.currentTarget.open) expandedPluginLogIDs.add(id);
                 else expandedPluginLogIDs.delete(id);
               },
@@ -8181,6 +8351,16 @@
         return int(seconds / unit) + " " + label;
       }
 
+      function quotaWindowResetLabel(row, showCountdown) {
+        if (!row.started) return "未开始";
+        const resetAt = new Date(row.end_at);
+        const remaining = (resetAt.getTime() - Date.now()) / 1000;
+        return (
+          compactResetDate(resetAt) +
+          (showCountdown ? "·" + (remaining <= 0 ? "已到期" : compactResetAfter(remaining)) : "")
+        );
+      }
+
       function renderQuotaWindows(view, showCountdown = false) {
         if (view.unlimited) return el("span", { class: "muted", text: "不限制" });
         return el(
@@ -8189,11 +8369,7 @@
           view.windows.map((quotaWindow) => {
             const quota = remainingQuota(quotaWindow.used_percent);
             const resetAt = quotaWindow.started ? new Date(quotaWindow.end_at) : null;
-            let resetLabel = resetAt ? compactResetDate(resetAt) : "未开始";
-            if (resetAt && showCountdown) {
-              resetLabel +=
-                "·" + (resetAt <= new Date() ? "已到期" : compactResetAfter((resetAt.getTime() - Date.now()) / 1000));
-            }
+            const resetLabel = quotaWindowResetLabel(quotaWindow, showCountdown);
             return el(
               "div",
               { class: "quota-window" },
@@ -8207,7 +8383,10 @@
                     class: "mono",
                     title: "剩余 " + usd(quotaWindow.remaining_usd) + "/" + usd(quotaWindow.amount_usd),
                   },
-                  el("span", { class: quotaWindow.blocked ? "blocked" : "", text: usd(quotaWindow.remaining_usd) }),
+                  el("span", {
+                    class: quotaWindow.blocked ? "blocked" : "",
+                    text: usd(quotaWindow.remaining_usd),
+                  }),
                   el("span", { class: "muted", text: "/" + usd(quotaWindow.amount_usd) }),
                 ),
                 el("span", {
@@ -8800,10 +8979,14 @@
       }
       for (const lists of Object.values(pagedLists)) {
         for (const list of Object.values(lists)) {
-          list.scroller.addEventListener("scroll", () => {
-            hideCostTooltip();
-            list.maybeLoadMore();
-          }, { passive: true });
+          list.scroller.addEventListener(
+            "scroll",
+            () => {
+              hideCostTooltip();
+              list.maybeLoadMore();
+            },
+            { passive: true },
+          );
         }
       }
 
@@ -8890,11 +9073,10 @@
             ))
           )
             return;
-          if (id) await plugin("PATCH", "/plans", { id, ...plan });
-          else await plugin("POST", "/plans", plan);
+          if (id) await mutateAdmin("PATCH", "/plans", { id, ...plan });
+          else await mutateAdmin("POST", "/plans", plan);
           notify(id ? "订阅计划已保存" : "订阅计划已创建");
           $("plan-dialog").close();
-          await refreshPage("foreground");
         } catch (error) {
           $("plan-form-error").textContent = error.message || String(error);
         } finally {
@@ -9002,11 +9184,10 @@
                 ))
               )
                 return;
-              await plugin("PATCH", "/routes", { id, name, rule, scopes });
-            } else await plugin("POST", "/routes", { name, rule, scopes });
+              await mutateAdmin("PATCH", "/routes", { id, name, rule, scopes });
+            } else await mutateAdmin("POST", "/routes", { name, rule, scopes });
             notify(id ? "路由规则已保存" : "路由规则已创建");
             $("route-dialog").close();
-            await refreshPage("foreground");
           } finally {
             button.disabled = false;
             if ($("route-dialog").open) button.textContent = originalText;
@@ -9025,18 +9206,21 @@
             !(await confirmAction("清空全部插件日志？", "该操作只清除插件自身的运行记录，不影响计费数据，且无法恢复。"))
           )
             return;
-          const result = await plugin("DELETE", "/plugin-logs");
+          const result = await mutateAdmin("DELETE", "/plugin-logs");
           notify("已清空 " + result.cleared + " 条插件日志");
-          await refreshPage("foreground");
         });
       for (const account of [false, true]) {
         const role = account ? "account" : "admin";
         const prefix = account ? "account-" : "";
         bindPagedListFilters(
-          pagedList("events", account), role, REQUEST_EVENT_FILTER_IDS[role], $(prefix + "request-events-filter-clear"),
+          pagedList("events", account),
+          role,
+          REQUEST_EVENT_FILTER_IDS[role],
+          $(prefix + "request-events-filter-clear"),
         );
         bindPagedListFilters(
-          pagedList("errors", account), role,
+          pagedList("errors", account),
+          role,
           ["error-model", "error-source", "error-type"].map((id) => prefix + id),
           $(prefix + "errors-filter-clear"),
         );
@@ -9080,13 +9264,10 @@
             ))
           )
             return;
-          const result = await plugin("POST", "/keys/reset", { mode: "global" });
+          const result = await mutateAdmin("POST", "/keys/reset", { mode: "global" });
           notify(result.keys ? "已重置 " + result.keys + " 个 API Key 的额度" : "没有需要重置的额度");
-          await refreshPage("foreground");
         });
-      $("price-filter").addEventListener("input", () =>
-        renderPriceTable("prices-body", state.prices, $("price-filter").value, true),
-      );
+      $("price-filter").addEventListener("input", renderPriceTable);
       $("price-reference-search").addEventListener("input", () => {
         priceReferenceRequest++;
         $("price-reference-results").replaceChildren();
@@ -9106,15 +9287,10 @@
         const model = row.custom_price_model_id || row.model_id;
         const message = "删除 " + model + " 的自定义价后，使用该定价的模型将改用参考价。若无参考价，将无法使用。";
         if (!(await confirmAction("删除自定义价？", message))) return;
-        await plugin("DELETE", "/prices?model_id=" + encodeURIComponent(model));
+        await mutateAdmin("DELETE", "/prices?model_id=" + encodeURIComponent(model));
         notify("已删除自定义价");
-        await refreshPrices();
       }
 
-      async function refreshPrices() {
-        resetLoadState(detailLoads.adminPrices);
-        await loadAdminPrices();
-      }
       $("price-add").onclick = () => editPrice({ model_id: "", input_per_1m: 0, output_per_1m: 0 });
       $("price-cancel").onclick = () => $("price-dlg").close();
       $("price-save").onclick = () =>
@@ -9139,19 +9315,17 @@
               cache_write_per_1m: priceNumber("price-tier-cw", null),
             };
           }
-          await plugin("PUT", "/prices", price);
+          await mutateAdmin("PUT", "/prices", price);
           $("price-dlg").close();
           notify("已保存 " + model + " 的定价");
-          await refreshPrices();
         });
       $("price-reference-refresh").onclick = () =>
         guard(async () => {
           const button = $("price-reference-refresh");
           button.disabled = true;
           try {
-            const result = await plugin("POST", "/prices/reference/refresh", null, { timeoutMS: 45000 });
+            const result = await mutateAdmin("POST", "/prices/reference/refresh", null, { timeoutMS: 45000 });
             notify(result.changed ? "参考价已更新" : "参考价已是最新");
-            await refreshPrices();
           } catch (err) {
             if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
             try {

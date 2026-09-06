@@ -683,6 +683,7 @@ def make_request_events():
     for index, sample in enumerate(EVENT_SAMPLES):
         key = KEYS[sample["key_index"]]
         entries.append({
+            "id": str(index + 1),
             "at": iso(NOW - timedelta(hours=index * 22, minutes=(index % 4) * 11)),
             "scope": key["scope"],
             "preview": key["preview"],
@@ -843,6 +844,7 @@ def request_error(event_index, message, status=0, error_type="", code=""):
     if error_type:
         reason += f"（{error_type}）"
     return {
+        "id": event["id"],
         "at": event["at"],
         "scope": event["scope"],
         "preview": event["preview"],
@@ -1225,6 +1227,18 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def send_json(self, status, payload):
+        if 200 <= status < 300 and getattr(self, "mutation_view", None) is not None:
+            path = urlparse(self.path).path
+            view = {}
+            if path in {f"{API_BASE}/plans", f"{API_BASE}/routes"} or path.startswith(f"{API_BASE}/keys/"):
+                refresh_route_counts()
+                view["configuration"] = {"keys": KEYS, "plans": PLANS, "routes": ROUTES}
+            elif path in {f"{API_BASE}/prices", f"{API_BASE}/prices/reference/refresh"}:
+                view["prices"] = model_prices({"model": self.mutation_view.get("models", [])}, include_custom=True)
+                view["metadata"] = price_status()["metadata"]
+            elif path == f"{API_BASE}/plugin-logs":
+                view["logs_cleared"] = True
+            payload = dict(payload, view=view)
         body = json.dumps(payload, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1233,6 +1247,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        self.mutation_view = None
         parsed = urlparse(self.path)
         if parsed.path == "/favicon.ico":
             self.send_response(204)
@@ -1321,10 +1336,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_mutation(self):
         parsed = urlparse(self.path)
+        self.mutation_view = None
         length = int(self.headers.get("Content-Length", "0"))
         request_body = b""
         if length:
             request_body = self.rfile.read(length)
+        if parse_qs(parsed.query).get("view") == ["1"]:
+            self.mutation_view = json.loads(request_body or b"{}")
+            request_body = json.dumps(self.mutation_view.get("data") or {}).encode()
         route = self.command, parsed.path
         if route == ("DELETE", f"{API_BASE}/plugin-logs"):
             cleared = len(PLUGIN_LOGS)
@@ -1494,6 +1513,11 @@ class Handler(BaseHTTPRequestHandler):
                         refresh_key_quota(key)
             self.send_json(200, {"ok": True})
         elif route == ("POST", f"{API_BASE}/keys/label"):
+            body = json.loads(request_body or b"{}")
+            for key in KEYS:
+                if key["scope"] == body.get("scope"):
+                    key["label"] = body.get("label", "").strip()
+                    break
             self.send_json(200, {"ok": True})
         else:
             self.send_json(404, {"error": {"message": "dummy backend: route not found"}})

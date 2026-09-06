@@ -158,6 +158,9 @@ func (a *App) handleManagement(raw []byte) ([]byte, error) {
 func (a *App) routeManagement(req ManagementRequest, suffix string) ManagementResponse {
 	for _, endpoint := range managementEndpoints {
 		if req.Method == endpoint.method && suffix == endpoint.path {
+			if req.Query.Get("view") == "1" && req.Method != http.MethodGet {
+				return a.mutateWithView(req, suffix, endpoint.handle)
+			}
 			return endpoint.handle(a, req)
 		}
 	}
