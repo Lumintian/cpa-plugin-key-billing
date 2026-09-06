@@ -10,6 +10,14 @@ import (
 )
 
 func appendRequestEvent(tx *sql.Tx, entry billing.RequestEvent) (int64, error) {
+	// Only persistence encodes the multiplier into the price source.
+	priceSource := string(entry.PriceSource)
+	switch entry.PriceSource {
+	case billing.PriceSourceCustom, billing.PriceSourceBuiltin, billing.PriceSourceReference:
+		if entry.Cost.Multiplier == billing.CodexFastModeMultiplier {
+			priceSource += ":x2.5"
+		}
+	}
 	result, errInsert := tx.Exec(`
 		INSERT INTO request_events (
 			at, scope, auth_index, provider, executor_type, reasoning_effort, service_tier,
@@ -24,7 +32,7 @@ func appendRequestEvent(tx *sql.Tx, entry billing.RequestEvent) (int64, error) {
 		nanos(entry.At), entry.Scope, entry.AuthIndex, entry.Provider, entry.ExecutorType, entry.ReasoningEffort, entry.ServiceTier,
 		entry.UpstreamModel, entry.BillingModel, entry.Failed,
 		entry.LatencyMS, entry.TTFTMS,
-		string(entry.AccountingQuality), string(entry.PriceSource), entry.ReasoningTokens,
+		string(entry.AccountingQuality), priceSource, entry.ReasoningTokens,
 		entry.Cost.TotalUSD, entry.Cost.UncachedInputUSD, entry.Cost.CacheReadUSD,
 		entry.Cost.CacheWriteUSD, entry.Cost.OutputUSD,
 		entry.Cost.UncachedInputTokens, entry.Cost.CacheReadTokens,
@@ -275,6 +283,11 @@ func scanRequestEventRow(rows *sql.Rows) (billing.RequestEventRow, error) {
 	row.At = timeAt(at)
 	row.Failed = failed != 0
 	row.AccountingQuality = billing.TokenAccountingQuality(quality)
+	switch priceSource {
+	case "custom:x2.5", "builtin:x2.5", "reference:x2.5":
+		priceSource = strings.TrimSuffix(priceSource, ":x2.5")
+		row.Cost.Multiplier = billing.CodexFastModeMultiplier
+	}
 	row.PriceSource = billing.PriceSource(priceSource)
 	return row, nil
 }

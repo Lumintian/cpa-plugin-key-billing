@@ -3159,6 +3159,7 @@
           "reasoning_tokens",
           "cache_read_tokens",
           "cache_write_tokens",
+          "multiplier",
           "total_usd",
         ],
         errors: [
@@ -7698,6 +7699,12 @@
           ...(cost.tiered
             ? [el("div", { class: "cost-tooltip-summary" }, el("span", {}, "档位"), el("b", {}, costTierText(cost)))]
             : []),
+          ...(cost.multiplier === 2.5
+            ? [
+                el("div", { class: "cost-tooltip-summary" }, el("span", {}, "计费倍率"), el("b", {}, "2.5× · Codex Fast mode")),
+                el("div", { class: "cost-tooltip-summary" }, "以下单价和金额已包含倍率"),
+              ]
+            : []),
           el(
             "div",
             { class: "cost-tooltip-grid" },
@@ -8398,6 +8405,7 @@
               ? {
                   ...entry,
                   ...entry.cost,
+                  multiplier: entry.cost.multiplier || 1,
                   input_tokens: requestInputTokens(entry.cost),
                   output_tps: outputTPS(entry.cost, entry.latency_ms, entry.accounting_quality === "complete"),
                 }
@@ -8470,6 +8478,9 @@
         note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
         const renderRow = (entry) => {
           const cost = entry.cost;
+          const costNote = [cost.tiered ? (cost.long_context ? "长上下文" : "标准") : "", cost.multiplier === 2.5 ? "x2.5" : ""]
+            .filter(Boolean)
+            .join(" · ");
           const input = requestInputTokens(cost);
           const output = cost.billed_output_tokens;
           // Missing usage details mean unknown counts, not zero usage.
@@ -8562,7 +8573,7 @@
                     )
                   : usd(cost.total_usd),
               ),
-              cost.tiered ? el("div", { class: "muted small" }, cost.long_context ? "长上下文" : "标准") : null,
+              costNote ? el("div", { class: "muted small" }, costNote) : null,
             ),
           );
         };

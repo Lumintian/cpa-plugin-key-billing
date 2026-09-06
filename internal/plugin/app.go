@@ -133,6 +133,11 @@ func registration() Registration {
 					Description: "启用 API Key 路由、计费、并发限制和订阅额度控制",
 				},
 				{
+					Name:        "codex_fast_mode_billing",
+					Type:        "boolean",
+					Description: "请求 Codex 上游时指定 priority 档位，按 2.5 倍计费，默认关闭",
+				},
+				{
 					Name:        "state_file",
 					Type:        "string",
 					Description: "计费数据库文件路径",

@@ -128,7 +128,13 @@ func (r PriceRates) resolve(source PriceSource) Price {
 	return price
 }
 
+const CodexFastModeMultiplier = 2.5
+
 type Cost struct {
+	// Multiplier is the applied billing multiplier. Zero/omitted means 1x.
+	// Applied rates and amounts already include it; token counts do not.
+	Multiplier float64 `json:"multiplier,omitempty"`
+
 	TotalUSD         float64 `json:"total_usd"`
 	UncachedInputUSD float64 `json:"uncached_input_usd"`
 	CacheReadUSD     float64 `json:"cache_read_usd"`

@@ -579,8 +579,8 @@ PRICES = [
     },
 ]
 
-def make_cost(uncached, cache_read, cache_write, output, rates, tiered=False, long_context=False):
-    input_price, read_price, write_price, output_price = rates
+def make_cost(uncached, cache_read, cache_write, output, rates, tiered=False, long_context=False, multiplier=1):
+    input_price, read_price, write_price, output_price = (rate * multiplier for rate in rates)
     parts = {
         "uncached_input_usd": uncached * input_price / 1_000_000,
         "cache_read_usd": cache_read * read_price / 1_000_000,
@@ -589,6 +589,7 @@ def make_cost(uncached, cache_read, cache_write, output, rates, tiered=False, lo
     }
     return {
         **parts,
+        "multiplier": multiplier,
         "total_usd": sum(parts.values()),
         "uncached_input_tokens": uncached,
         "cache_read_tokens": cache_read,
@@ -621,6 +622,7 @@ def event_sample(
     billing_model="",
     long_context=False,
     failed=False,
+    multiplier=1,
 ):
     uncached, cache_read, cache_write, output = tokens
     if failed:
@@ -647,6 +649,7 @@ def event_sample(
             rates,
             model.startswith("gpt-5."),
             long_context,
+            multiplier if not failed else 1,
         ),
         "reasoning_tokens": 0 if failed else reasoning_tokens,
     }
@@ -655,7 +658,7 @@ def event_sample(
 # Numeric usage and timing values are sampled from a real export. All identities
 # below are synthetic and intentionally unrelated to the source records.
 SUCCESS_EVENT_SAMPLES = [
-    event_sample(0, "codex · dev-team@example.com", "codex", "gpt-5.6-sol", "CodexExecutor", "high", "auto", 11513, 8209, 266, (712, 91648, 4096, 425), (4, 0.4, 5, 20)),
+    event_sample(0, "codex · dev-team@example.com", "codex", "gpt-5.6-sol", "CodexExecutor", "high", "priority", 11513, 8209, 266, (712, 91648, 4096, 425), (4, 0.4, 5, 20), multiplier=2.5),
     event_sample(5, "codex · dev-team@example.com", "codex", "gpt-5.6-luna", "CodexWebsocketsExecutor", "low", "auto", 2516, 1431, 10, (1030, 49920, 0, 75), (0.2, 0.02, 0.25, 1.2)),
     event_sample(1, "codex · dev-team@example.com", "codex", "gpt-5.5", "CodexWebsocketsExecutor", "medium", "auto", 2417, 1103, 0, (1194, 95616, 0, 73), (5, 0.5, 5, 30)),
     event_sample(1, "codex · dev-team@example.com", "codex", "gpt-5.6-sol", "CodexWebsocketsExecutor", "high", "auto", 5306, 2121, 21, (798, 169984, 0, 201), (4, 0.4, 5, 20)),

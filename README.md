@@ -87,8 +87,11 @@ plugins:
     cpa-key-billing:
       enabled: true
       debug: false # 是否记录 debug 日志，例如路由日志、匹配参考价日志
+      codex_fast_mode_billing: false # Codex 的 priority 请求按 2.5 倍计费
       state_file: "plugins/cpa-key-billing-state-v1.db"
 ```
+
+`codex_fast_mode_billing` 开启后，请求 Codex 上游时在请求中指定 `service_tier=priority`，按普通费用的 **2.5 倍**结算。
 
 > [!WARNING]
 > 升级前请备份数据文件。

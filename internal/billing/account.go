@@ -52,6 +52,22 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 	cost := ComputeCost(price, event.Breakdown)
 	missingCycleTime := false
 	updateResult(s, func(state *State) (struct{}, Changes) {
+		// ServiceTier is the client-requested tier, not the upstream response tier.
+		if s.cfg.CodexFastModeBilling && price.Source != PriceSourceNone && event.Breakdown.Billable() &&
+			strings.EqualFold(strings.TrimSpace(event.Provider), "codex") &&
+			strings.EqualFold(strings.TrimSpace(event.AuthType), "oauth") &&
+			strings.EqualFold(strings.TrimSpace(event.ServiceTier), "priority") {
+			cost.Multiplier = CodexFastModeMultiplier
+			cost.UncachedInputUSD *= CodexFastModeMultiplier
+			cost.CacheReadUSD *= CodexFastModeMultiplier
+			cost.CacheWriteUSD *= CodexFastModeMultiplier
+			cost.OutputUSD *= CodexFastModeMultiplier
+			cost.TotalUSD = cost.UncachedInputUSD + cost.CacheReadUSD + cost.CacheWriteUSD + cost.OutputUSD
+			cost.AppliedInputPer1M *= CodexFastModeMultiplier
+			cost.AppliedOutputPer1M *= CodexFastModeMultiplier
+			cost.AppliedCacheReadPer1M *= CodexFastModeMultiplier
+			cost.AppliedCacheWritePer1M *= CodexFastModeMultiplier
+		}
 		upstreamModel := strings.TrimSpace(event.UpstreamModel)
 		if upstreamModel == "" {
 			upstreamModel = strings.TrimSpace(event.RouteModel)

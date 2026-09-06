@@ -12,18 +12,10 @@ import (
 const DefaultStateFile = "plugins/cpa-key-billing-state-v1.db"
 
 type Config struct {
-	Enabled   bool   `yaml:"enabled"`
-	Debug     bool   `yaml:"debug"`
-	StateFile string `yaml:"state_file"`
-}
-
-// Priority and Store belong to the host and are ignored by this plugin.
-type configDocument struct {
-	Enabled   bool      `yaml:"enabled"`
-	Debug     bool      `yaml:"debug"`
-	StateFile string    `yaml:"state_file"`
-	Priority  int       `yaml:"priority"`
-	Store     yaml.Node `yaml:"store"`
+	Enabled              bool   `yaml:"enabled"`
+	Debug                bool   `yaml:"debug"`
+	StateFile            string `yaml:"state_file"`
+	CodexFastModeBilling bool   `yaml:"codex_fast_mode_billing"`
 }
 
 func DefaultConfig() Config {
@@ -36,7 +28,12 @@ func DefaultConfig() Config {
 func DecodeConfig(raw []byte) (Config, error) {
 	cfg := DefaultConfig()
 	if len(bytes.TrimSpace(raw)) > 0 {
-		document := configDocument{Enabled: cfg.Enabled, StateFile: cfg.StateFile}
+		document := struct {
+			Config `yaml:",inline"`
+			// These fields belong to the host and are ignored by the plugin.
+			Priority int       `yaml:"priority"`
+			Store    yaml.Node `yaml:"store"`
+		}{Config: cfg}
 		decoder := yaml.NewDecoder(bytes.NewReader(raw))
 		decoder.KnownFields(true)
 		if errDecode := decoder.Decode(&document); errDecode != nil {
@@ -45,9 +42,7 @@ func DecodeConfig(raw []byte) (Config, error) {
 		if errTrailing := decoder.Decode(&struct{}{}); errTrailing != io.EOF {
 			return Config{}, fmt.Errorf("解析插件配置：只能包含一个 YAML 文档")
 		}
-		cfg.Enabled = document.Enabled
-		cfg.Debug = document.Debug
-		cfg.StateFile = document.StateFile
+		cfg = document.Config
 	}
 	return cfg.normalized(), nil
 }
