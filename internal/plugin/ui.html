@@ -7750,6 +7750,7 @@
         labelRequestEventStatuses($(prefix + "-status"), view.status_counts);
         updateFilterClearButton($(account ? "account-request-events-filter-clear" : "request-events-filter-clear"));
         const entries = view.entries || [];
+        const hasCacheWrite = entries.some((entry) => Number(entry.cost?.cache_write_tokens || 0) !== 0);
         note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
         const previousScrollTop = scroller.scrollTop;
         const previousScrollLeft = scroller.scrollLeft;
@@ -7828,7 +7829,7 @@
               el("div", {}, tokens(cost.cache_read_tokens)),
               measured ? el("div", { class: "muted small" }, cacheReadRate(cost.cache_read_tokens, input)) : null,
             ),
-            el("td", { class: "num" }, tokens(cost.cache_write_tokens)),
+            hasCacheWrite ? el("td", { class: "num" }, tokens(cost.cache_write_tokens)) : null,
             el(
               "td",
               { class: "num" },
@@ -7876,7 +7877,7 @@
               { label: "TPS / 延迟", num: true },
               { label: "输入", num: true },
               { label: "缓存读", num: true },
-              { label: "缓存写", num: true },
+              ...(hasCacheWrite ? [{ label: "缓存写", num: true }] : []),
               { label: "输出", num: true },
               { label: "费用", num: true },
             ],
