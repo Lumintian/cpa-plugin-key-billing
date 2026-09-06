@@ -67,6 +67,9 @@ func (s *Store) ModelPriceRows(models []string, includeCustom bool) ([]PriceRow,
 			row.PriceRates = price.PriceRates
 			row.Source = PriceSourceCustom
 			row.CustomPriceModelID = price.ModelID
+		} else if rates, found := resolveBuiltinRates(billingModel); found {
+			row.PriceRates = rates
+			row.Source = PriceSourceBuiltin
 		} else {
 			missing = append(missing, name)
 		}
@@ -143,6 +146,9 @@ func (s *Store) ResolveModelPrice(upstream, requested string, refresh bool) (Pri
 	s.read(func(state *State) {
 		model = state.ResolveBillingModel(upstream, requested)
 		price = state.ResolveCustomPrice(model)
+		if price.Source == PriceSourceNone {
+			price = ResolveBuiltinPrice(model)
+		}
 		references = s.referencePrices.Load()
 	})
 	if price.Source != PriceSourceNone {
@@ -172,6 +178,9 @@ func (s *Store) ResolveModelPrice(upstream, requested string, refresh bool) (Pri
 		return Price{Source: PriceSourceNone}, model, fmt.Errorf("参考价数据库已切换，请重试")
 	}
 	if price.Source == PriceSourceCustom {
+		return price, model, nil
+	}
+	if price = ResolveBuiltinPrice(model); price.Source != PriceSourceNone {
 		return price, model, nil
 	}
 	if err != nil {

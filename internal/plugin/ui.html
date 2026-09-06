@@ -6772,6 +6772,8 @@
         switch (source) {
           case "custom":
             return el("span", { class: "tag warn", text: "自定义" });
+          case "builtin":
+            return el("span", { class: "tag ok", text: "内置" });
           case "reference":
             return el("span", { class: "tag ok", text: "参考价" });
           default:

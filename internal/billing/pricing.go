@@ -64,6 +64,7 @@ const (
 	PriceSourceReference PriceSource = "reference"
 	PriceSourceNone      PriceSource = "none"
 	PriceSourceCustom    PriceSource = "custom"
+	PriceSourceBuiltin   PriceSource = "builtin"
 )
 
 // PriceRates describes token prices in USD per million tokens. Nil cache rates

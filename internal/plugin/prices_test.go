@@ -51,6 +51,26 @@ func TestPriceAdmissionAndDeleteWithoutInventory(t *testing.T) {
 	callOK(t, app, http.MethodPut, routePrices, nil, billing.CustomPrice{ModelID: "gpt-*"}, 200, nil)
 }
 
+func TestBuiltinPriceAdmissionAndListing(t *testing.T) {
+	app := newConfiguredApp(t)
+	for _, test := range []struct {
+		model      string
+		input, out float64
+	}{
+		{model: "codex-auto-review", input: 0, out: 0},
+		{model: "gpt-image-1.5", input: 5, out: 32},
+	} {
+		price, model, err := app.store.ResolveModelPrice(test.model, test.model, true)
+		if err != nil || model != test.model || price.Source != billing.PriceSourceBuiltin || price.InputPer1M != test.input || price.OutputPer1M != test.out {
+			t.Fatalf("builtin admission price = %+v, model=%q, error=%v", price, model, err)
+		}
+		rows := readPrices(t, app, test.model)
+		if len(rows) != 1 || rows[0].Source != billing.PriceSourceBuiltin || rows[0].InputPer1M != test.input || rows[0].OutputPer1M != test.out {
+			t.Fatalf("builtin listing = %+v", rows)
+		}
+	}
+}
+
 func TestUsageAfterPriceDeletionKeepsTokensAndZeroCost(t *testing.T) {
 	for _, failed := range []bool{false, true} {
 		t.Run(fmt.Sprintf("failed=%t", failed), func(t *testing.T) {

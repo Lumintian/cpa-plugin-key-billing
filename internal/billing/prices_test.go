@@ -25,6 +25,34 @@ func TestResolveCustomPrice(t *testing.T) {
 	}
 }
 
+func TestResolveBuiltinPrice(t *testing.T) {
+	price := ResolveBuiltinPrice("gpt-image-1.5")
+	if price.Source != PriceSourceBuiltin || price.InputPer1M != 5 || price.OutputPer1M != 32 || price.CacheReadPer1M != 1.25 {
+		t.Fatalf("gpt-image-1.5 builtin price = %+v", price)
+	}
+	price = ResolveBuiltinPrice("codex-auto-review")
+	if price.Source != PriceSourceBuiltin || price.InputPer1M != 0 || price.OutputPer1M != 0 {
+		t.Fatalf("codex-auto-review builtin price = %+v", price)
+	}
+	if price := ResolveBuiltinPrice("unknown"); price.Source != PriceSourceNone {
+		t.Fatalf("unknown model has a builtin price: %+v", price)
+	}
+}
+
+func TestCustomPriceOverridesBuiltinPrice(t *testing.T) {
+	store := NewStore(nil, nil)
+	if _, err := store.UpsertPrice(CustomPrice{
+		ModelID:    "gpt-image-1.5",
+		PriceRates: PriceRates{InputPer1M: 7, OutputPer1M: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	price, model, err := store.ResolveModelPrice("gpt-image-1.5", "", false)
+	if err != nil || model != "gpt-image-1.5" || price.Source != PriceSourceCustom || price.InputPer1M != 7 || price.OutputPer1M != 8 {
+		t.Fatalf("custom price did not override builtin: price=%+v model=%q err=%v", price, model, err)
+	}
+}
+
 func TestResolveBillingModel(t *testing.T) {
 	state := NewState()
 	state.Prices = map[string]CustomPrice{
