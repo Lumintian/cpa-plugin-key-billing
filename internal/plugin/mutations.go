@@ -28,8 +28,12 @@ func (a *App) mutateWithView(req ManagementRequest, path string, handle func(*Ap
 	view := map[string]any{}
 	switch path {
 	case routePlans, routeRoutes, routeKeysBind, routeKeysUnbind, routeKeysReset, routeKeysLabel, routeKeysConcurrency, routeKeysRoutes:
-		view["configuration"] = map[string]any{
-			"keys": a.store.KeyViews(), "plans": a.store.Plans(), "routes": a.store.RouteViews(),
+		view["keys"] = a.keyRows()
+		if path == routePlans {
+			view["plans"] = a.store.Plans()
+		}
+		if path == routeRoutes || path == routeKeysRoutes {
+			view["routes"] = a.routeRows()
 		}
 	case routePrices, routeReferencePricesRefresh:
 		prices, err := a.store.ModelPriceRows(input.Models, true)

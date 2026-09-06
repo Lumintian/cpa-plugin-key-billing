@@ -50,11 +50,13 @@ func callOK(t *testing.T, app *App, method, suffix string, query url.Values, bod
 	}
 }
 
-func readAccess(t *testing.T, app *App) accessResponse {
+func readKeys(t *testing.T, app *App) []billing.KeyView {
 	t.Helper()
-	var access accessResponse
-	callOK(t, app, http.MethodGet, routeAccess, nil, nil, http.StatusOK, &access)
-	return access
+	var response struct {
+		Keys []billing.KeyView `json:"keys"`
+	}
+	callOK(t, app, http.MethodGet, routeKeys, nil, nil, http.StatusOK, &response)
+	return response.Keys
 }
 
 func readPrices(t *testing.T, app *App, models ...string) []billing.PriceRow {
@@ -62,6 +64,28 @@ func readPrices(t *testing.T, app *App, models ...string) []billing.PriceRow {
 	var prices []billing.PriceRow
 	callOK(t, app, http.MethodGet, routePrices, url.Values{"model": models}, nil, http.StatusOK, &prices)
 	return prices
+}
+
+func TestManagementListsDeferCredentialDiscovery(t *testing.T) {
+	app := newConfiguredApp(t)
+	calls := 0
+	app.SetHostCaller(func(method string, _ any) (json.RawMessage, error) {
+		calls++
+		if method != hostAuthList {
+			t.Fatalf("unexpected host call %s", method)
+		}
+		return json.RawMessage(`{"files":[]}`), nil
+	})
+	for _, path := range []string{routeKeys, routePlans, routeRoutes} {
+		callOK(t, app, http.MethodGet, path, nil, nil, http.StatusOK, nil)
+	}
+	if calls != 0 {
+		t.Fatalf("table reads discovered credentials %d times", calls)
+	}
+	callOK(t, app, http.MethodGet, routeCredentials, nil, nil, http.StatusOK, nil)
+	if calls != 1 {
+		t.Fatalf("credential options made %d host calls", calls)
+	}
 }
 
 func TestPricesRoundTripThroughTheManagementAPI(t *testing.T) {
@@ -121,7 +145,11 @@ func TestPlansCRUDThroughTheManagementAPI(t *testing.T) {
 		t.Fatalf("plan = %+v", patched.Plan)
 	}
 
-	if plans := readAccess(t, app).Plans; len(plans) != 1 {
+	var listed struct {
+		Plans []billing.Plan `json:"plans"`
+	}
+	callOK(t, app, http.MethodGet, routePlans, nil, nil, http.StatusOK, &listed)
+	if plans := listed.Plans; len(plans) != 1 {
 		t.Fatalf("plans = %+v", plans)
 	}
 
@@ -190,7 +218,7 @@ func TestKeyConcurrencyRoundTrips(t *testing.T) {
 func keysByScope(t *testing.T, app *App) map[string]billing.KeyView {
 	t.Helper()
 	byScope := map[string]billing.KeyView{}
-	for _, key := range readAccess(t, app).Keys {
+	for _, key := range readKeys(t, app) {
 		byScope[key.Scope] = key
 	}
 	return byScope
@@ -238,7 +266,7 @@ func TestSyncKeysStoresOnlyMaskedKeys(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 
-	keys := readAccess(t, app).Keys
+	keys := readKeys(t, app)
 	if len(keys) != 2 {
 		t.Fatalf("keys = %+v", keys)
 	}
@@ -387,7 +415,11 @@ func TestRoutesRoundTripThroughTheManagementAPI(t *testing.T) {
 	callOK(t, app, http.MethodPatch, routeRoutes, nil, map[string]any{
 		"id": "fast-models", "name": name,
 	}, http.StatusOK, nil)
-	routes := readAccess(t, app).Routes
+	var listed struct {
+		Routes []routeRow `json:"routes"`
+	}
+	callOK(t, app, http.MethodGet, routeRoutes, nil, nil, http.StatusOK, &listed)
+	routes := listed.Routes
 	if len(routes) != 1 || routes[0].Name != name || len(routes[0].Rule.Models) != 2 {
 		t.Fatalf("routes = %+v, want only the name changed", routes)
 	}

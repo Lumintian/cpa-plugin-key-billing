@@ -304,6 +304,26 @@ func (a *App) credentialInventory() []credentialView {
 	return result
 }
 
+// Table summaries use known labels without discovering host credentials.
+func (a *App) credentialLabels(refs []string) map[string]string {
+	a.routingMu.Lock()
+	defer a.routingMu.Unlock()
+	labels := make(map[string]string, len(refs))
+	for _, ref := range refs {
+		if item, ok := a.credentials[ref]; ok {
+			labels[ref] = item.Provider + "·" + item.DisplayName
+		}
+	}
+	return labels
+}
+
+func (a *App) listCredentials(_ ManagementRequest) ManagementResponse {
+	if err := a.refreshCredentialInventory(); err != nil {
+		return JSONError(http.StatusBadGateway, "host_unavailable", err.Error())
+	}
+	return JSONResponse(http.StatusOK, map[string]any{"credentials": a.credentialInventory()})
+}
+
 func (a *App) credentialByRawID(id string) (credentialView, bool) {
 	a.routingMu.Lock()
 	defer a.routingMu.Unlock()

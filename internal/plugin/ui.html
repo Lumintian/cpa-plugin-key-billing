@@ -968,10 +968,9 @@
       .plan-window input, .plan-dialog > .field input { width: 100%; min-width: 0; }
       .period-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
       .window-delete { margin-top: 24px; }
-      .field-error, #plan-form-error { color: var(--error-color); }
+      .field-error { color: var(--error-color); }
       .field-error:empty { display: none; }
       .plan-window [aria-invalid="true"] { border-color: var(--error-color); }
-      #plan-form-error { margin-top: 12px; }
       @media (max-width: 640px) {
         .plan-window {
           grid-template-columns: 1fr;
@@ -1077,6 +1076,7 @@
       }
       .account-empty { padding: 40px 20px; text-align: center; }
       .empty { padding: 26px; text-align: center; color: var(--text-tertiary); }
+      .section-loading { min-height: 400px; }
       .auth-filter-bar {
         display: flex;
         flex-wrap: nowrap;
@@ -2275,7 +2275,6 @@
       #keys-body tr.key-deleted .quota-window { opacity: 0.65; }
       #keys-body tr.key-deleted .quota-fill { background: var(--text-tertiary); }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script>
       "use strict";
       /* Apply the host or stored theme before painting the body. */
@@ -2491,6 +2490,7 @@
           </div>
           <dialog id="plan-dialog" class="settings-dialog plan-dialog">
             <h2 id="plan-form-title">新建订阅计划</h2>
+            <div class="editor-state notice hidden"></div>
             <input id="plan-id" type="hidden" />
             <label class="field"> 计划名称 <input id="plan-name" placeholder="团队额度" /> </label>
             <div class="row spread plan-windows-heading">
@@ -2498,7 +2498,6 @@
               <button id="plan-window-add" type="button" class="link small">添加窗口</button>
             </div>
             <div id="plan-windows"></div>
-            <div id="plan-form-error" class="small" role="alert"></div>
             <div class="settings-picker-section">
               <div class="small muted">绑定 API Key</div>
               <div id="plan-key-picker" class="key-picker settings-picker-list"></div>
@@ -2516,11 +2515,11 @@
               <h2>路由规则</h2>
               <button id="route-new" type="button">新建路由规则</button>
             </div>
-            <div id="route-inventory-notice" class="notice warn show hidden"></div>
             <div id="routes-body"></div>
           </div>
           <dialog id="route-dialog" class="settings-dialog route-dialog">
             <h2 id="route-form-title">新建路由规则</h2>
+            <div class="editor-state notice hidden"></div>
             <input id="route-id" type="hidden" />
             <div class="route-form-toolbar">
               <label class="field"> 规则名称 <input id="route-name" placeholder="Codex 认证文件" /> </label>
@@ -2833,6 +2832,7 @@
 
     <dialog id="price-dlg" class="settings-dialog">
       <h2 id="price-dialog-title">编辑模型定价</h2>
+      <div class="editor-state notice hidden"></div>
       <label class="field">
         模型 ID
         <input class="mono price-dialog-model" id="price-model" placeholder="模型 ID" maxlength="1024" />
@@ -2876,6 +2876,7 @@
 
     <dialog id="dlg">
       <h2 id="dlg-title"></h2>
+      <div class="editor-state notice hidden"></div>
       <p id="dlg-text" class="muted small"></p>
       <input id="dlg-input" class="dialog-input" />
       <div class="row dialog-actions">
@@ -2990,13 +2991,13 @@
       function emptyAdminState() {
         return {
           keys: [],
+          keySubmissions: new Set(),
           plans: [],
           prices: null,
           priceModelError: "",
           models: [],
           routes: [],
           credentials: [],
-          access: null,
           requestEvents: null,
           errors: null,
           analysis: null,
@@ -3009,7 +3010,9 @@
       }
       function emptyAccountState() {
         return {
-          access: null,
+          profile: null,
+          subscription: null,
+          routing: null,
           prices: null,
           requestEvents: null,
           errors: null,
@@ -3207,17 +3210,25 @@
       }
 
       const detailLoads = {
-        adminAccess: emptyLoadState(),
+        adminKeys: emptyLoadState(),
+        adminPlans: emptyLoadState(CONFIG_CACHE_MS),
+        adminRoutes: emptyLoadState(CONFIG_CACHE_MS),
+        adminCredentials: emptyLoadState(CONFIG_CACHE_MS),
+        adminModels: emptyLoadState(CONFIG_CACHE_MS),
         adminEventKeys: emptyLoadState(CONFIG_CACHE_MS),
         adminAPIKeys: emptyLoadState(CONFIG_CACHE_MS),
         adminPrices: emptyLoadState(CONFIG_CACHE_MS),
-        accountAccess: emptyLoadState(),
+        adminPriceStatus: emptyLoadState(CONFIG_CACHE_MS),
+        accountProfile: emptyLoadState(),
+        accountSubscription: emptyLoadState(),
+        accountRouting: emptyLoadState(CONFIG_CACHE_MS),
+        accountModels: emptyLoadState(CONFIG_CACHE_MS),
         accountPrices: emptyLoadState(CONFIG_CACHE_MS),
         adminAnalysis: emptyLoadState(),
         accountAnalysis: emptyLoadState(),
         adminAuthFiles: emptyLoadState(),
         accountAuthFiles: emptyLoadState(),
-        adminInventory: emptyLoadState(CONFIG_CACHE_MS),
+        adminKeySync: emptyLoadState(CONFIG_CACHE_MS),
       };
 
       // Views describe their API and markup; the controller owns paging and refresh state.
@@ -3288,7 +3299,11 @@
             return $(view.scrollers[account ? 1 : 0]);
           },
           active() {
-            return currentRole === (account ? "account" : "admin") && activeTab(account) === view.tab;
+            return (
+              currentRole === (account ? "account" : "admin") &&
+              activeTab(account) === view.tab &&
+              (kind !== "logs" || sectionVisible($("tab-plugin-logs")))
+            );
           },
           canRefresh() {
             return list.active() && list.pages <= 1 && list.scroller.scrollTop <= 0 && (view.idle?.() ?? true);
@@ -3305,8 +3320,10 @@
           },
           load(action = "replace", selected = selectedRange(account)) {
             const cacheKey = timeRangeCacheKey(account, selected);
-            if (action === "navigation" && list.promise) return list.promise;
-            if (action === "navigation" && list.cache?.key === cacheKey && Date.now() - list.cache.at < list.maxAge) {
+            const passive = action === "navigation" || action === "visible";
+            if (passive && list.promise) return list.promise;
+            if (action === "visible" && list.data && !list.canRefresh()) return Promise.resolve();
+            if (passive && list.cache?.key === cacheKey && Date.now() - list.cache.at < list.maxAge) {
               return list.promise || Promise.resolve();
             }
             const append = action === "append";
@@ -3327,7 +3344,11 @@
                 return account ? accountAPI(path) : plugin("GET", path);
               })
               .then((page) => {
-                if (generation !== list.generation || (background && !list.canRefresh())) return;
+                if (
+                  generation !== list.generation ||
+                  ((background || action === "visible") && previous && !list.canRefresh())
+                )
+                  return;
                 const incoming = page.entries || [];
                 const entries = append ? (previous?.entries || []).concat(incoming) : incoming;
                 // Commit rows, cursor and snapshot together. A discarded refresh must
@@ -3537,6 +3558,8 @@
         delete $(account ? "account-analysis-body" : "analysis-body").dataset.analysisSignature;
         if (role === "account") accountState = emptyAccountState();
         else {
+          routePicker.saving = false;
+          closeRoutePicker();
           state = emptyAdminState();
           expandedPluginLogIDs.clear();
           adminMutationQueue = Promise.resolve();
@@ -3890,23 +3913,110 @@
         }
       }
 
-      function ask(title, text, value) {
+      function openActionDialog(title, text, value, save) {
         return new Promise((resolve) => {
-          $("dlg-title").textContent = title;
-          $("dlg-text").textContent = text || "";
-          $("dlg-input").value = value || "";
-          $("dlg-input").classList.toggle("hidden", value === undefined);
-          const close = (result) => {
-            $("dlg").close();
-            resolve(result);
-          };
-          $("dlg-ok").onclick = () => close(value === undefined ? true : $("dlg-input").value);
-          $("dlg-cancel").onclick = () => close(null);
-          $("dlg").showModal();
-          if (value !== undefined) $("dlg-input").focus();
+          let accepted = false;
+          $("dlg").addEventListener("close", () => resolve(accepted), { once: true });
+          openEditor("dlg", null, () => {
+            $("dlg-title").textContent = title;
+            $("dlg-text").textContent = text || "";
+            $("dlg-input").value = value || "";
+            $("dlg-input").classList.toggle("hidden", value === undefined);
+            $("dlg-ok").onclick = () =>
+              submitEditor("dlg", async () => {
+                await save?.($("dlg-input").value);
+                accepted = true;
+              });
+          });
         });
       }
-      const confirmAction = (title, text) => ask(title, text, undefined);
+
+      const editors = new WeakMap();
+      function editorCurrent(editor) {
+        return editor.dialog.open && editors.get(editor.dialog) === editor;
+      }
+
+      function editorBusy(editor, busy) {
+        editor.button.disabled = busy;
+        editor.dialog.querySelector(".dialog-actions button:not(.primary)").disabled = editor.saving;
+        for (const field of editor.dialog.children) {
+          if (!field.matches("h2, .editor-state, .dialog-actions")) field.inert = busy;
+        }
+      }
+
+      function openEditor(id, load, initialize) {
+        const dialog = $(id);
+        const editor = {
+          dialog,
+          button: dialog.querySelector(".dialog-actions .primary"),
+          notice: dialog.querySelector(".editor-state"),
+          ready: false,
+          saving: false,
+        };
+        editors.set(dialog, editor);
+        dialog.showModal();
+        const prepare = async () => {
+          editorBusy(editor, true);
+          editor.notice.className = "editor-state notice show";
+          editor.notice.textContent = "正在加载编辑数据…";
+          try {
+            await load?.();
+            if (!editorCurrent(editor)) return;
+            editor.initial = initialize();
+            editor.ready = true;
+            editor.notice.className = "editor-state notice hidden";
+            editorBusy(editor, false);
+            dialog.querySelector("input:not([type=hidden])")?.focus();
+          } catch (error) {
+            if (!editorCurrent(editor)) return;
+            if (error instanceof StaleRequestError) return prepare();
+            if (error instanceof AuthError) return fail(error);
+            editor.notice.className = "editor-state notice err show";
+            editor.notice.replaceChildren(
+              el("span", { text: error.message || String(error) }),
+              el("button", { class: "retry-button", onclick: prepare }, "重试"),
+            );
+          }
+        };
+        prepare();
+      }
+
+      async function submitEditor(id, save) {
+        const editor = editors.get($(id));
+        if (!editor || !editorCurrent(editor) || !editor.ready || editor.saving) return;
+        editor.saving = true;
+        const label = editor.button.textContent;
+        editorBusy(editor, true);
+        editor.button.textContent = "正在保存…";
+        editor.notice.className = "editor-state notice hidden";
+        try {
+          const saved = await save(editor);
+          if (saved !== false && editorCurrent(editor)) editor.dialog.close();
+        } catch (error) {
+          if (error instanceof AuthError || error instanceof StaleRequestError) return fail(error);
+          if (editorCurrent(editor)) {
+            editor.notice.className = "editor-state notice err show";
+            editor.notice.textContent = error.message || String(error);
+          }
+        } finally {
+          editor.saving = false;
+          if (editors.get(editor.dialog) === editor) {
+            editorBusy(editor, false);
+            editor.button.textContent = label;
+          }
+        }
+      }
+
+      for (const id of ["plan-dialog", "route-dialog", "price-dlg", "dlg"]) {
+        const dialog = $(id);
+        dialog.querySelector(".dialog-actions button:not(.primary)").onclick = () => dialog.close();
+        dialog.addEventListener("cancel", (event) => {
+          if (editors.get(dialog)?.saving) event.preventDefault();
+        });
+        dialog.addEventListener("close", () => {
+          if (!dialog.open) editors.delete(dialog);
+        });
+      }
 
       function previewCredential(value) {
         value = String(value || "").trim();
@@ -3943,6 +4053,7 @@
       function showGate(mode, error) {
         stopAutoRefresh();
         sessionGeneration++;
+        for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
         for (const controller of activeRequests) controller.abort();
         pageRefreshPromise = null;
         queuedForegroundRefresh = null;
@@ -3968,11 +4079,11 @@
         }
       }
 
-      function loadResource(load, request, apply, render, { cacheKey = "", maxAge = load.maxAge } = {}) {
+      function loadResource(load, request, apply, render, { cacheKey = "" } = {}) {
         if (load.promise && load.requestKey !== cacheKey) resetLoadState(load);
         if (load.promise) return load.promise;
         load.error = "";
-        if (maxAge && load.cache?.key === cacheKey && Date.now() - load.cache.at < maxAge) {
+        if (load.cache?.key === cacheKey && Date.now() - load.cache.at < load.maxAge) {
           return Promise.resolve(load.cache.value);
         }
         load.requestKey = cacheKey;
@@ -3983,13 +4094,13 @@
             return request();
           })
           .then((result) => {
-            if (load.generation !== generation) return;
+            if (load.generation !== generation) throw new StaleRequestError();
             apply?.(result);
-            if (maxAge) load.cache = { key: cacheKey, at: Date.now(), value: result };
+            load.cache = { key: cacheKey, at: Date.now(), value: result };
             return result;
           })
           .catch((err) => {
-            if (load.generation !== generation || err instanceof StaleRequestError) return;
+            if (load.generation !== generation || err instanceof StaleRequestError) throw new StaleRequestError();
             load.error = err.message || String(err);
             throw err;
           })
@@ -4184,23 +4295,49 @@
         await plugin("POST", "/credentials/sync", { credentials });
       }
 
-      function loadAdminAccess() {
-        return loadResource(detailLoads.adminAccess, () => plugin("GET", "/access"), applyAdminAccess);
+      const adminCollections = {
+        keys: detailLoads.adminKeys,
+        plans: detailLoads.adminPlans,
+        routes: detailLoads.adminRoutes,
+      };
+
+      function loadAdminCollection(name) {
+        return loadResource(
+          adminCollections[name],
+          () => plugin("GET", "/" + name),
+          (result) => {
+            state[name] = result[name];
+          },
+          renderAdminConfiguration,
+        );
       }
 
-      function applyAdminAccess(access) {
-        state.access = access;
-        state.keys = access.keys;
-        state.plans = access.plans || [];
-        state.routes = access.routes || [];
-        state.credentials = access.credentials || [];
-        renderAdminAccess();
+      function loadAdminCredentials() {
+        return loadResource(
+          detailLoads.adminCredentials,
+          async () => {
+            await loadConfiguredCredentials();
+            return plugin("GET", "/credentials");
+          },
+          (result) => {
+            state.credentials = result.credentials;
+          },
+        );
+      }
+
+      function loadRouteEditorData() {
+        return Promise.all([
+          loadKeysForView(false),
+          loadAdminCollection("routes"),
+          loadModels(false),
+          loadAdminCredentials(),
+        ]);
       }
 
       function acceptResource(load, value, apply) {
         resetLoadState(load);
         load.cache = { key: "", at: Date.now(), value };
-        apply(value);
+        apply?.(value);
       }
 
       let adminMutationQueue = Promise.resolve();
@@ -4213,32 +4350,48 @@
           .catch(() => {})
           .then(async () => {
             if (generation !== sessionGeneration || currentRole !== "admin") throw new StaleRequestError();
+            const models = path.startsWith("/prices") ? state.models : undefined;
             const result = await plugin(
               method,
               path + (path.includes("?") ? "&" : "?") + "view=1",
-              { data: payload, models: path.startsWith("/prices") ? state.models : undefined },
+              { data: payload, models },
               options,
             );
             if (generation !== sessionGeneration) throw new StaleRequestError();
             const view = result.view;
-            if (view.configuration) {
-              acceptResource(detailLoads.adminAccess, { ...state.access, ...view.configuration }, applyAdminAccess);
+            if (view.keys) {
+              for (const name of ["keys", "plans", "routes"]) {
+                if (!Object.hasOwn(view, name)) continue;
+                acceptResource(adminCollections[name], { [name]: view[name] }, (result) => {
+                  state[name] = result[name];
+                });
+              }
+              renderAdminConfiguration();
               if (path === "/keys/label") {
                 resetLoadState(detailLoads.adminEventKeys);
                 resetEventViews(false);
               }
             }
             if (view.prices) {
+              const modelCache = detailLoads.adminModels.cache;
+              const modelError =
+                modelCache?.value === models
+                  ? ""
+                  : state.priceModelError || "模型列表尚未加载完整，当前仅展示已知模型和自定义价格";
               acceptResource(
                 detailLoads.adminPrices,
                 {
-                  models: state.models,
                   prices: view.prices,
-                  status: { metadata: view.metadata },
-                  modelError: state.priceModelError,
+                  modelError,
                 },
                 applyAdminPrices,
               );
+              // Price writes do not refresh the model inventory used for this view.
+              if (modelError) detailLoads.adminPrices.cache = null;
+              else detailLoads.adminPrices.cache.at = modelCache.at;
+            }
+            if (view.metadata) {
+              acceptResource(detailLoads.adminPriceStatus, { metadata: view.metadata });
             }
             if (view.logs_cleared) {
               const list = pagedList("logs");
@@ -4252,9 +4405,10 @@
             if (view.error) {
               resetLoadState(detailLoads.adminPrices);
               state.priceModelError = "写入已成功，价格视图暂时无法更新：" + view.error;
-              renderReferencePriceStatus(view.metadata);
-              guard(loadAdminPrices);
             }
+            if (view.prices) renderAdminPrices();
+            else if (view.metadata || view.error) renderReferencePriceStatus();
+            if (view.error) guard(loadAdminPrices);
             return result;
           });
         adminMutationQueue = task;
@@ -4291,7 +4445,11 @@
       function loadConfiguredAPIKeys() {
         return loadResource(detailLoads.adminAPIKeys, async () => {
           const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
-          return result["api-keys"] || [];
+          const keys = result?.["api-keys"];
+          if (keys === null) return [];
+          if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string"))
+            throw new Error("CPA API Key 列表格式无效");
+          return keys;
         });
       }
 
@@ -4299,7 +4457,6 @@
         let key = authKey;
         if (!account) {
           const keys = await loadConfiguredAPIKeys();
-          if (!keys) throw new StaleRequestError();
           key = keys.find((value) => value.trim()) || "";
         }
         const result = await api("GET", "/v1/models", null, { raw: true, key });
@@ -4307,41 +4464,69 @@
         return [...new Set(result.data.map((item) => item.id).filter((id) => typeof id === "string" && id.trim()))];
       }
 
-      function loadAdminPrices() {
+      function loadModels(account) {
         return loadResource(
+          account ? detailLoads.accountModels : detailLoads.adminModels,
+          () => fetchPricingModels(account),
+          (models) => {
+            (account ? accountState : state).models = models;
+          },
+        );
+      }
+
+      async function loadAdminPrices() {
+        const result = await loadResource(
           detailLoads.adminPrices,
           async () => {
             let models = [];
             let modelError = "";
             try {
-              models = await fetchPricingModels(false);
+              models = await loadModels(false);
             } catch (error) {
-              if (error instanceof StaleRequestError) throw error;
+              if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
               modelError = "模型列表获取失败：" + error.message;
             }
-            const [prices, status] = await Promise.all([
-              fetchModelPrices(models, false),
-              plugin("GET", "/prices/reference/status"),
-            ]);
-            return { models, prices, status, modelError };
+            const prices = await fetchModelPrices(models, false);
+            return { prices, modelError };
           },
           applyAdminPrices,
+          renderAdminPrices,
         );
+        if (result.modelError && detailLoads.adminPrices.cache?.value === result) detailLoads.adminPrices.cache = null;
+        return result;
       }
 
-      function applyAdminPrices({ models, prices, status, modelError }) {
-        if (!modelError) state.models = models;
+      function applyAdminPrices({ prices, modelError }) {
         state.prices = prices.map((price) => ({ ...price, in_models: modelError ? undefined : price.in_models }));
         state.priceModelError = modelError;
-        renderReferencePriceStatus(status.metadata);
+      }
+
+      function renderAdminPrices() {
+        renderReferencePriceStatus();
         if (currentRole === "admin" && activeAdminTab() === "settings") renderPriceTable();
       }
 
-      function renderReferencePriceStatus(metadata) {
+      function loadAdminPriceStatus() {
+        return loadResource(
+          detailLoads.adminPriceStatus,
+          () => plugin("GET", "/prices/reference/status"),
+          undefined,
+          renderReferencePriceStatus,
+        );
+      }
+
+      function renderReferencePriceStatus() {
+        const load = detailLoads.adminPriceStatus;
+        const metadata = load.cache?.value.metadata;
         $("price-status").textContent = [
           metadata?.usable && metadata?.fetched_at
             ? "参考价更新时间：" + new Date(metadata.fetched_at).toLocaleString()
-            : "暂无参考价",
+            : load.promise
+              ? "正在加载参考价状态…"
+              : load.error
+                ? ""
+                : "暂无参考价",
+          load.error,
           metadata?.last_error,
           state.priceModelError,
         ]
@@ -4349,28 +4534,27 @@
           .join("；");
       }
 
-      function loadAccountAccess() {
+      function loadAccountData(name, load) {
         return loadResource(
-          detailLoads.accountAccess,
-          () => accountAPI("/access"),
-          (access) => {
-            accountState.access = access;
+          load,
+          () => accountAPI("/" + name),
+          (result) => {
+            accountState[name] = result;
+          },
+          () => {
             if (currentRole === "account") renderAccount(false);
           },
         );
       }
 
-      function loadAccountPrices(initialModels) {
+      function loadAccountPrices() {
         return loadResource(
           detailLoads.accountPrices,
-          async () => {
-            const models = initialModels ?? (await fetchPricingModels(true));
-            const prices = await fetchModelPrices(models, true);
-            return { models, prices };
+          async () => fetchModelPrices(await loadModels(true), true),
+          (prices) => {
+            accountState.prices = prices;
           },
-          ({ models, prices }) => {
-            accountState.models = models;
-            accountState.prices = prices || [];
+          () => {
             if (currentRole === "account") renderAccount(false);
           },
         );
@@ -4516,78 +4700,94 @@
 
       const VIEW_DEPENDENCIES = {
         admin: {
-          keys: { foreground: ["access", "prices"], background: ["access"] },
-          analysis: { foreground: ["analysis"], background: ["analysis"] },
-          "request-events": { foreground: ["events"], background: ["events"] },
-          errors: { foreground: ["errors"], background: ["errors"] },
-          "auth-files": { foreground: ["authFiles"], background: [] },
-          settings: { foreground: ["access", "prices", "logs"], background: ["logs"] },
+          keys: ["keys", "plans"],
+          analysis: ["analysis"],
+          "request-events": ["events"],
+          errors: ["errors"],
+          "auth-files": ["authFiles"],
+          settings: [],
         },
         account: {
-          subscription: { foreground: ["access", "prices"], background: ["access"] },
-          analysis: { foreground: ["access", "analysis"], background: ["analysis"] },
-          "request-events": { foreground: ["access", "events"], background: ["events"] },
-          errors: { foreground: ["access", "errors"], background: ["errors"] },
-          "auth-files": { foreground: ["access", "authFiles"], background: [] },
+          subscription: ["subscription"],
+          analysis: ["analysis"],
+          "request-events": ["events"],
+          errors: ["errors"],
+          "auth-files": ["authFiles"],
         },
       };
 
       function viewDependencies(account, tab, background, range) {
-        const dependencies = VIEW_DEPENDENCIES[account ? "account" : "admin"][tab];
-        if (!background) return dependencies.foreground;
         const duration = Date.parse(range.to) - Date.parse(range.from);
-        if (tab === "analysis" && !(duration > 0 && duration <= 86400000)) return [];
-        return dependencies.background;
+        if (background && (tab === "auth-files" || (tab === "analysis" && !(duration > 0 && duration <= 86400000))))
+          return [];
+        const names = [...VIEW_DEPENDENCIES[account ? "account" : "admin"][tab]];
+        if (!account && ["analysis", "request-events", "errors"].includes(tab)) names.push("eventKeys");
+        names.push(...visibleDependencies(account, tab));
+        return [...new Set(names)];
       }
 
-      async function loadAccessForView(account, background) {
-        if (account) return loadAccountAccess();
+      async function loadKeysForView(background) {
         const generation = sessionGeneration;
         let syncError;
         if (!background) {
           try {
             await loadResource(
-              detailLoads.adminInventory,
+              detailLoads.adminKeySync,
               async () => {
                 const summary = await autoSyncKeys();
                 if (summary) notify(summary);
-                await loadConfiguredCredentials();
               },
               // A concurrent live read may predate the completed synchronization.
-              () => resetLoadState(detailLoads.adminAccess),
+              () => resetLoadState(detailLoads.adminKeys),
             );
           } catch (error) {
             syncError = error;
           }
         }
         if (generation !== sessionGeneration) return;
-        await loadAdminAccess();
+        await loadAdminCollection("keys");
         if (syncError) throw syncError;
       }
 
       function viewResources(account, reason, range) {
         const background = reason === "background";
         const resources = {
-          access: {
-            state: account ? detailLoads.accountAccess : detailLoads.adminAccess,
-            load: () => loadAccessForView(account, background),
+          keys: {
+            state: detailLoads.adminKeys,
+            invalidate: [detailLoads.adminKeys, detailLoads.adminKeySync, detailLoads.adminAPIKeys],
+            load: () => loadKeysForView(background),
+          },
+          plans: { state: detailLoads.adminPlans, load: () => loadAdminCollection("plans") },
+          routes: { state: detailLoads.adminRoutes, load: () => loadAdminCollection("routes") },
+          eventKeys: { state: detailLoads.adminEventKeys, load: () => loadEventKeys(range) },
+          subscription: {
+            state: detailLoads.accountSubscription,
+            load: () => loadAccountData("subscription", detailLoads.accountSubscription),
+          },
+          routing: {
+            state: detailLoads.accountRouting,
+            load: () => loadAccountData("routing", detailLoads.accountRouting),
           },
           prices: {
-            load: () =>
-              account ? loadAccountPrices(reason === "login" ? accountState.models : undefined) : loadAdminPrices(),
+            state: account ? detailLoads.accountPrices : detailLoads.adminPrices,
+            invalidate: account
+              ? [detailLoads.accountPrices, detailLoads.accountModels]
+              : [detailLoads.adminPrices, detailLoads.adminModels, detailLoads.adminAPIKeys],
+            load: () => (account ? loadAccountPrices() : loadAdminPrices()),
           },
+          priceStatus: { state: detailLoads.adminPriceStatus, load: loadAdminPriceStatus },
           analysis: {
             state: account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis,
             load: () => loadAnalysis(account, range),
           },
           authFiles: {
+            state: account ? detailLoads.accountAuthFiles : detailLoads.adminAuthFiles,
             load: () => loadAuthFiles(account),
           },
         };
         for (const [name, list] of Object.entries(pagedLists[account ? "account" : "admin"])) {
           resources[name] = {
-            load: () =>
-              list.load(background ? "background" : reason === "navigation" ? "navigation" : "replace", range),
+            load: () => list.load(["background", "navigation", "visible"].includes(reason) ? reason : "replace", range),
           };
         }
         return resources;
@@ -4595,23 +4795,118 @@
 
       const viewLoadGenerations = { admin: 0, account: 0 };
 
+      function sectionVisible(section) {
+        const rect = section.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.top < innerHeight + 160 && rect.bottom > -160;
+      }
+
+      const deferredSections = new Map([
+        [$("tab-plans"), { account: false, tab: "settings", resources: ["keys", "plans"] }],
+        [$("tab-routes"), { account: false, tab: "settings", resources: ["keys", "routes"] }],
+        [$("tab-prices"), { account: false, tab: "settings", resources: ["prices", "priceStatus"] }],
+        [$("tab-plugin-logs"), { account: false, tab: "settings", resources: ["logs"] }],
+        [$("account-access").parentElement, { account: true, tab: "subscription", resources: ["routing"] }],
+        [$("account-models").parentElement, { account: true, tab: "subscription", resources: ["routing", "prices"] }],
+      ]);
+
+      function visibleDependencies(account, tab, sections = deferredSections.keys()) {
+        const names = new Set();
+        for (const section of sections) {
+          const config = deferredSections.get(section);
+          if (config.account === account && config.tab === tab && sectionVisible(section)) {
+            for (const name of config.resources) names.add(name);
+          }
+        }
+        return [...names];
+      }
+
+      function loadVisibleSections(sections) {
+        const account = currentRole === "account";
+        if (!currentRole || (account && !accountState.profile?.tracked)) return Promise.resolve();
+        const resources = viewResources(account, "visible", selectedRange(account));
+        const names = visibleDependencies(account, activeTab(account), sections);
+        return Promise.all(
+          names.map((name) => {
+            const load = resources[name].state || pagedLists[account ? "account" : "admin"][name];
+            if (!load.error) return resources[name].load();
+          }),
+        );
+      }
+      const deferredSectionObserver = new IntersectionObserver(
+        (entries) => {
+          const sections = entries.filter((entry) => entry.isIntersecting).map((entry) => entry.target);
+          if (sections.length) guard(() => loadVisibleSections(sections));
+        },
+        { rootMargin: "160px" },
+      );
+      for (const section of deferredSections.keys()) deferredSectionObserver.observe(section);
+
+      let chartLoadPromise;
+      let chartError = "";
+      function loadCharts() {
+        if (typeof Chart !== "undefined") return Promise.resolve();
+        if (chartLoadPromise) return chartLoadPromise;
+        chartError = "";
+        chartLoadPromise = new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          const timer = setTimeout(() => {
+            script.remove();
+            chartLoadPromise = null;
+            chartError = "图表加载超时";
+            reject(new Error("图表加载超时"));
+          }, 10000);
+          script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js";
+          script.onload = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+          script.onerror = () => {
+            clearTimeout(timer);
+            script.remove();
+            chartLoadPromise = null;
+            chartError = "图表加载失败";
+            reject(new Error("图表加载失败"));
+          };
+          document.head.append(script);
+        });
+        return chartLoadPromise;
+      }
+
       async function loadView(account, reason = "navigation") {
         const role = account ? "account" : "admin";
         const viewGeneration = ++viewLoadGenerations[role];
         const tab = activeTab(account);
         const generation = sessionGeneration;
         const background = reason === "background";
+        if (background && (document.querySelector("dialog[open]") || routePicker.scope)) return;
         const range = selectedRange(account);
-        const dependencies = viewDependencies(account, tab, background, range);
+        let dependencies = background ? viewDependencies(account, tab, true, range) : null;
+        if (background && !dependencies.length) return;
+        if (account) {
+          if (reason === "foreground") resetLoadState(detailLoads.accountProfile);
+          await loadAccountData("profile", detailLoads.accountProfile);
+          if (generation !== sessionGeneration || !accountState.profile?.tracked) return;
+        }
+        dependencies ||= viewDependencies(account, tab, false, range);
         const resources = viewResources(account, reason, range);
-        if (reason === "foreground") invalidateResources(account ? "account" : "admin");
+        if (reason === "foreground") {
+          const loads = new Set(
+            dependencies.flatMap((name) => resources[name].invalidate || [resources[name].state]).filter(Boolean),
+          );
+          for (const load of loads) resetLoadState(load);
+        }
         if (background) {
           for (const name of dependencies) {
-            if (resources[name].state) resources[name].state.cache = null;
+            const load = resources[name].state;
+            if (load?.maxAge === LIVE_CACHE_MS) load.cache = null;
           }
         }
-        if (!account && !background && ["analysis", "request-events", "errors"].includes(tab)) {
-          await loadEventKeys(range);
+        if (tab === "analysis") {
+          const render = () => {
+            if (generation === sessionGeneration && currentRole === role && activeTab(account) === "analysis")
+              renderAnalysis(account);
+          };
+          loadCharts().then(render, render);
         }
         const results = await Promise.allSettled(
           dependencies.map(async (name) => {
@@ -4646,8 +4941,7 @@
         authKey = key;
         // CLIProxyAPI remains authoritative for whether this downstream key is
         // currently valid. The plugin endpoint only uses the key to select its hash.
-        const modelList = await api("GET", "/v1/models", null, { raw: true });
-        accountState.models = modelList.data.map((item) => item.id);
+        await loadModels(true);
         await activateCredentialScope(true, key);
         restoreRolePreferences("account");
         $("gate").classList.add("hidden");
@@ -4681,23 +4975,24 @@
           closeSharedTimePopover(true);
         }
         schedulePageTabLayout();
-        if (currentRole === "account" && accountState.access) renderAccount();
+        if (currentRole === "account" && accountState.profile) renderAccount();
         revealTab(document.querySelector(`[data-account-tab="${accountTab}"]`));
       }
 
       function renderAccount(renderDetail = true) {
-        const access = accountState.access;
-        const tracked = access?.tracked === true;
-        $("account-untracked").classList.toggle("hidden", !access || tracked);
-        $("account-content").classList.toggle("hidden", !!access && !tracked);
-        if (!access) return;
-        const identity = access.identity || {};
+        const profile = accountState.profile;
+        const tracked = profile?.tracked === true;
+        $("account-untracked").classList.toggle("hidden", !profile || tracked);
+        $("account-content").classList.toggle("hidden", !!profile && !tracked);
+        if (!profile) return;
+        const identity = profile.identity || {};
         if (tracked) $("account-identity").textContent = apiKeyIdentity(identity).text;
-        const subscription = access.subscription || {};
-        const concurrency = access.concurrency || {};
-        $("account-concurrency").textContent = !tracked
-          ? "—"
-          : int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
+        const subscription = accountState.subscription?.subscription || {};
+        const concurrency = accountState.subscription?.concurrency || {};
+        $("account-concurrency").textContent =
+          !tracked || !accountState.subscription
+            ? "—"
+            : int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
         if (!tracked) return;
         if (accountTab !== "subscription") {
           if (renderDetail && accountTab === "analysis") renderAnalysis(true);
@@ -4707,25 +5002,36 @@
           return;
         }
 
-        $("account-plan-name").textContent =
-          subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
+        $("account-plan-name").textContent = !accountState.subscription
+          ? "订阅额度"
+          : subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
         $("account-plan-status").className = "tag " + (subscription.blocked ? "bad" : "plain");
-        $("account-plan-status").textContent = subscription.unlimited
-          ? "不限制"
-          : subscription.blocked
-            ? "额度用尽"
-            : "正常";
-        // Countdown labels depend on time even when the access response is unchanged.
+        $("account-plan-status").textContent = !accountState.subscription
+          ? ""
+          : subscription.unlimited
+            ? "不限制"
+            : subscription.blocked
+              ? "额度用尽"
+              : "正常";
+        // Countdown labels change even when the subscription response does not.
         renderSection(
           $("account-windows"),
-          [subscription, (subscription.windows || []).map((row) => quotaWindowResetLabel(row, true))],
-          () => renderQuotaWindows(subscription, true),
+          [
+            subscription,
+            detailLoads.accountSubscription.error,
+            (subscription.windows || []).map((row) => quotaWindowResetLabel(row, true)),
+          ],
+          () =>
+            accountState.subscription
+              ? renderQuotaWindows(subscription, true)
+              : el("div", { class: "empty", text: detailLoads.accountSubscription.error || "正在加载订阅状态…" }),
         );
 
+        const access = accountState.routing || {};
         const routingValid = access.routing_valid !== false;
         const modelScope = new Set((access.models || []).map((model) => model.toLowerCase()));
         const models = (
-          !routingValid
+          !routingValid || !accountState.routing || !accountState.prices
             ? []
             : !modelScope.size
               ? accountState.models
@@ -4739,13 +5045,13 @@
           key: (model) => model,
           signature: (model) => [model, accountModelPrice(model)],
           attrs: { class: "display-contents" },
-          empty: "暂无模型价格",
+          empty: detailLoads.accountPrices.error || (!accountState.prices ? "正在加载模型价格…" : "暂无模型价格"),
           render: renderAccountModel,
         });
-        renderSection(
-          $("account-access"),
-          [access.routing_valid, access.models, access.credentials, access.warnings],
-          () => renderAccountAccess(access),
+        renderSection($("account-access"), [accountState.routing, detailLoads.accountRouting.error], () =>
+          accountState.routing
+            ? renderAccountAccess(access)
+            : el("div", { class: "empty", text: detailLoads.accountRouting.error || "正在加载路由权限…" }),
         );
       }
 
@@ -4956,7 +5262,7 @@
           return;
         }
         if (typeof Chart === "undefined") {
-          canvas.parentElement.replaceChildren(el("div", { class: "empty", text: "图表加载失败" }));
+          canvas.parentElement.replaceChildren(el("div", { class: "empty", text: chartError || "正在加载图表…" }));
           return;
         }
         if (existing && existing.canvas === canvas) {
@@ -5039,7 +5345,7 @@
           return;
         }
         if (typeof Chart === "undefined") {
-          canvas.parentElement.replaceChildren(el("div", { class: "empty", text: "图表加载失败" }));
+          canvas.parentElement.replaceChildren(el("div", { class: "empty", text: chartError || "正在加载图表…" }));
           return;
         }
         const values = (name) => trends[name].map((point) => Number(point.value || 0));
@@ -5489,6 +5795,7 @@
         const points = trends.total_tokens;
         const daily = points.length > 1 && new Date(points[1].time) - new Date(points[0].time) > 12 * 3600000;
         const renderSignature = JSON.stringify([
+          typeof Chart === "undefined" ? chartError : "ready",
           document.documentElement.getAttribute("data-theme") || "",
           summary,
           trends,
@@ -5497,6 +5804,7 @@
         const trendCanvasID = account ? "account-usage-trend-chart" : "usage-trend-chart";
         const distributionID = account ? "account-usage-distribution" : "usage-distribution";
         const structureSignature = JSON.stringify([
+          typeof Chart === "undefined" ? chartError : "ready",
           document.documentElement.getAttribute("data-theme") || "",
           points.length > 0,
         ]);
@@ -5678,6 +5986,10 @@
         owner.authQuotas.clear();
         owner.authQuotaLoading.clear();
         owner.authQuotaErrors.clear();
+        resetAuthQuotaBatch(account);
+      }
+
+      function resetAuthQuotaBatch(account) {
         const bulk = authUI(account).bulk;
         if (bulk) {
           bulk.dataset.loading = "false";
@@ -5774,6 +6086,7 @@
         owner.authFiles = files;
         if (!stale) return;
         authQuotaGeneration[role]++;
+        resetAuthQuotaBatch(account);
         for (const index of owner.authQuotas.keys()) if (staleIndex(index)) owner.authQuotas.delete(index);
         for (const index of owner.authQuotaErrors.keys()) if (staleIndex(index)) owner.authQuotaErrors.delete(index);
         owner.authQuotaLoading.clear();
@@ -5921,7 +6234,8 @@
         if (Number.isFinite(Number(result.rate_limit_reset_credits_available_count))) {
           summary.push(el("span", { text: "主动重置次数 " + int(result.rate_limit_reset_credits_available_count) }));
         }
-        if (result.fetched_at) summary.push(el("span", { class: "muted", text: when(result.fetched_at) + " 更新" }));
+        if (result.fetched_at)
+          summary.push(el("span", { class: "muted", text: "上次查询：" + when(result.fetched_at) }));
         const rows = result.quota;
         return el(
           "div",
@@ -6103,7 +6417,7 @@
         }
       }
 
-      function renderAdminAccess() {
+      function renderAdminConfiguration() {
         if (currentRole !== "admin") return;
         if (activeAdminTab() === "keys" && !routePicker.scope) renderKeys();
         if (activeAdminTab() === "settings") {
@@ -6191,11 +6505,11 @@
       async function copyAPIKey(button, view) {
         button.disabled = true;
         try {
-          const list = await api("GET", "/v0/management/api-keys", null, { raw: true });
+          const keys = await loadConfiguredAPIKeys();
           const salt = "cli-proxy-api:caller-scope:v1\u0000";
           let key = "";
-          for (const value of (list && list["api-keys"]) || []) {
-            const candidate = String(value || "").trim();
+          for (const value of keys) {
+            const candidate = value.trim();
             const scope = await sha256Hex(salt + candidate);
             if (scope === view.scope) {
               key = candidate;
@@ -6223,11 +6537,27 @@
         if (!Number.isSafeInteger(limit) || limit < 0 || limit > 10000) {
           throw new Error("并发限制必须是 0 到 10000 之间的整数");
         }
-        await mutateAdmin("POST", "/keys/concurrency", { scope: view.scope, concurrency_limit: limit });
-        notify(limit ? "并发限制已更新为 " + limit : "已取消并发限制");
+        await submitKeyChange(view.scope, async () => {
+          await mutateAdmin("POST", "/keys/concurrency", { scope: view.scope, concurrency_limit: limit });
+          notify(limit ? "并发限制已更新为 " + limit : "已取消并发限制");
+        });
+      }
+
+      async function submitKeyChange(scope, save) {
+        const owner = state;
+        if (owner.keySubmissions.has(scope)) return;
+        owner.keySubmissions.add(scope);
+        renderAdminConfiguration();
+        try {
+          await save();
+        } finally {
+          owner.keySubmissions.delete(scope);
+          if (owner === state) renderAdminConfiguration();
+        }
       }
 
       function renderKeys() {
+        const plansReady = !!detailLoads.adminPlans.cache && !detailLoads.adminPlans.error;
         const filter = $("key-filter").value.trim().toLowerCase();
         const keys = state.keys
           .filter((key) => !key.deleted_at || $("keys-include-deleted").checked)
@@ -6242,27 +6572,35 @@
           );
         renderCollection($("keys-body"), keys, {
           key: (view) => view.scope,
-          context: [state.plans, state.routes, state.credentials],
+          signature: (view) => [view, state.keySubmissions.has(view.scope)],
+          context: [state.plans, plansReady],
           headers: ["API Key", "订阅计划", "路由规则", "并发限制", "订阅额度", "状态", "操作"],
           render: (view) => {
             const deleted = !!view.deleted_at;
+            const saving = state.keySubmissions.has(view.scope);
             const name = apiKeyIdentity(view).primary;
             const select = el(
               "select",
               {
                 name: "plan_id",
-                disabled: deleted,
+                disabled: deleted || saving || !plansReady,
+                title: !plansReady ? detailLoads.adminPlans.error || "正在加载订阅计划…" : null,
                 "aria-label": name + " 的订阅计划",
                 onchange: (event) =>
                   guard(async () => {
                     const planID = event.target.value;
                     event.target.value = view.plan_id || "";
-                    if (planID) await mutateAdmin("POST", "/keys/bind", { scope: view.scope, plan_id: planID });
-                    else await mutateAdmin("POST", "/keys/unbind", { scope: view.scope });
-                    notify("订阅计划已更新");
+                    await submitKeyChange(view.scope, async () => {
+                      if (planID) await mutateAdmin("POST", "/keys/bind", { scope: view.scope, plan_id: planID });
+                      else await mutateAdmin("POST", "/keys/unbind", { scope: view.scope });
+                      notify("订阅计划已更新");
+                    });
                   }),
               },
               el("option", { value: "", text: "不限制" }),
+              view.plan_id && !state.plans.some((plan) => plan.id === view.plan_id)
+                ? el("option", { value: view.plan_id, selected: true, text: view.plan_name || view.plan_id })
+                : null,
               state.plans.map((plan) =>
                 el("option", { value: plan.id, selected: plan.id === view.plan_id }, plan.name || plan.id),
               ),
@@ -6278,20 +6616,19 @@
               "select",
               {
                 "aria-label": name + " 的最大并发请求数",
-                disabled: deleted,
+                disabled: deleted || saving,
                 title: "最大并发请求数；0 表示不限制",
                 onchange: (event) =>
                   guard(async () => {
                     const value = event.target.value;
                     event.target.value = String(currentConcurrencyLimit);
                     if (value === CUSTOM_CONCURRENCY) {
-                      const raw = await ask(
+                      openActionDialog(
                         "设置并发限制",
                         "请输入 0 到 10000 的整数，0 表示不限制。",
                         String(currentConcurrencyLimit),
+                        (raw) => saveConcurrency(view, raw),
                       );
-                      if (raw === null) return;
-                      await saveConcurrency(view, raw);
                       return;
                     }
                     await saveConcurrency(view, value);
@@ -6366,25 +6703,21 @@
                   text: "重置",
                   disabled: deleted || view.unlimited || undefined,
                   onclick: () =>
-                    guard(async () => {
-                      if (
-                        !(await confirmAction(
-                          "重置订阅额度？",
-                          "所有额度周期将结束，下一次放行会开启新周期。请求事件及其统计不受影响。",
-                        ))
-                      )
-                        return;
-                      await mutateAdmin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
-                      notify("订阅额度已重置");
-                    }),
+                    openActionDialog(
+                      "重置订阅额度？",
+                      "所有额度周期将结束，下一次放行会开启新周期。请求事件及其统计不受影响。",
+                      undefined,
+                      async () => {
+                        await mutateAdmin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
+                        notify("订阅额度已重置");
+                      },
+                    ),
                 }),
                 el("button", {
                   class: "link",
                   text: "备注",
                   onclick: () =>
-                    guard(async () => {
-                      const label = await ask("备注", name, view.label || "");
-                      if (label === null) return;
+                    openActionDialog("备注", name, view.label || "", async (label) => {
                       await mutateAdmin("POST", "/keys/label", { scope: view.scope, label });
                       notify("已保存备注");
                     }),
@@ -6395,14 +6728,13 @@
         });
       }
 
-      function routeName(id) {
-        const route = state.routes.find((entry) => entry.id === id);
-        return route ? route.name || route.id : "路由规则已不存在，请重新选择";
-      }
-
       function credentialLabel(item) {
         if (item.source === "auth-files") return item.provider + "·" + (item.display_name || "未提供邮箱");
         return item.provider + "·" + item.display_name;
+      }
+
+      function boundCredentialLabel(ref, labels) {
+        return labels[ref] || "指定上游凭证·" + ref.slice(-8);
       }
 
       function credentialSourceLabel(source) {
@@ -6450,7 +6782,11 @@
         const names = allRoutes
           ? [{ text: "全部路由", mono: false }]
           : routeIDs
-              .map((id) => ({ text: routeName(id), mono: false }))
+              .map((id) => ({
+                text:
+                  view.route_names[id] || (Object.hasOwn(view.route_names, id) ? id : "路由规则已不存在，请重新选择"),
+                mono: false,
+              }))
               .concat(models.map((model) => ({ text: "单模型·" + model, mono: true })))
               .concat(
                 providers.map((provider) => ({
@@ -6461,8 +6797,7 @@
               )
               .concat(
                 credentialIDs.map((ref) => {
-                  const credential = state.credentials.find((item) => item.ref === ref);
-                  return { text: credential ? credentialLabel(credential) : "上游凭证已不存在", mono: false };
+                  return { text: boundCredentialLabel(ref, view.credential_labels), mono: false };
                 }),
               );
         const parts = names.flatMap((entry, index) => [
@@ -6484,7 +6819,7 @@
       }
 
       function currentModelIDs() {
-        return [...(state.models || [])].sort(compareModelId);
+        return [...state.models].sort(compareModelId);
       }
 
       // Keep retired selections so a temporary provider outage cannot rewrite access.
@@ -6511,6 +6846,7 @@
       };
 
       function openRoutePicker(view, anchor) {
+        if (routePicker.saving) return;
         const bindings = view.route_bindings;
         routePicker = {
           scope: view.scope,
@@ -6523,17 +6859,56 @@
           searching: false,
           beforeSearch: null,
           anchor,
+          loading: true,
+          error: "",
         };
         $("route-picker-search").value = "";
+        $("route-picker-save").textContent = "保存";
         $("route-picker").classList.remove("hidden");
         renderRoutePicker();
         $("route-picker-search").focus();
+        guard(loadRoutePicker);
+      }
+
+      async function loadRoutePicker() {
+        const picker = routePicker;
+        picker.loading = true;
+        picker.error = "";
+        renderRoutePicker();
+        try {
+          while (picker === routePicker && picker.scope) {
+            try {
+              await loadRouteEditorData();
+              break;
+            } catch (error) {
+              if (!(error instanceof StaleRequestError)) throw error;
+            }
+          }
+          if (picker !== routePicker || !picker.scope) return;
+          const key = state.keys.find((entry) => entry.scope === picker.scope);
+          if (!key || key.deleted_at) throw new Error("API Key 已不存在，请关闭后刷新列表");
+          const bindings = key.route_bindings;
+          picker.routeIDs = new Set(bindings.route_ids);
+          picker.models = new Set(bindings.models);
+          picker.credentialIDs = new Set(bindings.credential_ids);
+          picker.credentialProviders = structuredClone(bindings.credential_providers);
+        } catch (error) {
+          if (error instanceof AuthError) throw error;
+          picker.error = error.message || String(error);
+        } finally {
+          if (picker === routePicker && picker.scope) {
+            picker.loading = false;
+            renderRoutePicker();
+          }
+        }
       }
 
       function closeRoutePicker() {
+        if (routePicker.saving) return;
         routePicker.scope = "";
         routePicker.anchor = null;
         $("route-picker").classList.add("hidden");
+        renderAdminConfiguration();
       }
 
       function positionRoutePicker() {
@@ -6579,9 +6954,34 @@
         );
       }
 
+      function updateRoutePickerControls() {
+        const saving = !!routePicker.saving;
+        $("route-picker-search").disabled = saving;
+        $("route-picker-list").inert = saving;
+        $("route-picker-cancel").disabled = saving;
+        $("route-picker-save").textContent = saving ? "正在保存…" : "保存";
+        $("route-picker-save").disabled = !!routePicker.loading || !!routePicker.error || !!routePicker.saving;
+        $("route-picker-clear").disabled = !!routePicker.loading || !!routePicker.error || !!routePicker.saving;
+      }
+
       function renderRoutePicker() {
         const term = $("route-picker-search").value.trim().toLowerCase();
         const list = $("route-picker-list");
+        updateRoutePickerControls();
+        if (routePicker.loading || routePicker.error) {
+          list.replaceChildren(
+            el(
+              "div",
+              { class: "empty" },
+              routePicker.loading ? "正在加载路由选项…" : routePicker.error,
+              routePicker.error
+                ? el("button", { class: "retry-button", onclick: () => guard(loadRoutePicker) }, "重试")
+                : null,
+            ),
+          );
+          positionRoutePicker();
+          return;
+        }
         const sections = [];
 
         const routeOptions = [];
@@ -6762,8 +7162,10 @@
       }
 
       async function saveRoutePicker() {
+        const picker = routePicker;
         const scope = routePicker.scope;
-        if (!scope) return;
+        if (!scope || picker.loading || picker.error || picker.saving) return;
+        picker.saving = true;
         const body = {
           scope,
           bindings: {
@@ -6773,17 +7175,17 @@
             credential_providers: routePicker.credentialProviders,
           },
         };
-        const button = $("route-picker-save");
-        button.disabled = true;
-        button.textContent = "正在保存…";
+        updateRoutePickerControls();
         try {
           await mutateAdmin("PUT", "/keys/routes", body);
           notify("API Key 路由规则已保存");
-          closeRoutePicker();
-          renderAdminAccess();
+          picker.saving = false;
+          if (picker === routePicker && picker.scope) closeRoutePicker();
         } finally {
-          button.disabled = false;
-          button.textContent = "保存";
+          if (picker === routePicker) {
+            picker.saving = false;
+            updateRoutePickerControls();
+          }
         }
       }
 
@@ -6831,6 +7233,7 @@
       }
 
       function renderPlans() {
+        if (renderConfigurationPending("plans", ["plans", "keys"])) return;
         const plans = state.plans.map((plan) => ({
           plan,
           boundKeys: state.keys.filter((key) => key.plan_id === plan.id),
@@ -6856,22 +7259,20 @@
                     class: "link danger",
                     text: "删除",
                     onclick: () =>
-                      guard(async () => {
-                        if (
-                          !(await confirmAction(
-                            "删除订阅计划「" + name + "」？",
-                            boundKeys.length
-                              ? "将解除 " +
-                                  bindingSummary(boundKeys) +
-                                  " 的套餐绑定。解除后不再限制套餐额度。" +
-                                  (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
-                              : "",
-                          ))
-                        )
-                          return;
-                        await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
-                        notify("订阅计划已删除");
-                      }),
+                      openActionDialog(
+                        "删除订阅计划「" + name + "」？",
+                        boundKeys.length
+                          ? "将解除 " +
+                              bindingSummary(boundKeys) +
+                              " 的套餐绑定。解除后不再限制套餐额度。" +
+                              (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
+                          : "",
+                        undefined,
+                        async () => {
+                          await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
+                          notify("订阅计划已删除");
+                        },
+                      ),
                   }),
                 ),
               ),
@@ -6893,10 +7294,27 @@
         });
       }
 
+      function renderConfigurationPending(name, dependencies) {
+        const missing = dependencies.filter((key) => !adminCollections[key].cache && !state[key].length);
+        if (!missing.length) return false;
+        const error = missing
+          .map((key) => adminCollections[key].error)
+          .filter(Boolean)
+          .join("；");
+        replaceContent(
+          $(name + "-body"),
+          el(
+            "div",
+            { class: "empty section-loading" },
+            el("div", { text: error || "正在加载…" }),
+            error ? el("button", { class: "retry-button", onclick: () => guard(() => loadView(false)) }, "重试") : null,
+          ),
+        );
+        return true;
+      }
+
       function renderRoutes() {
-        const inventoryError = state.access?.credential_inventory_error;
-        $("route-inventory-notice").textContent = inventoryError ? "凭证信息暂时无法加载：" + inventoryError : "";
-        $("route-inventory-notice").classList.toggle("hidden", !inventoryError);
+        if (renderConfigurationPending("routes", ["routes", "keys"])) return;
         const routes = state.routes.map((route) => ({
           route,
           boundKeys: state.keys.filter((key) => key.route_bindings.route_ids.includes(route.id)),
@@ -6905,7 +7323,6 @@
           key: ({ route }) => route.id,
           attrs: { class: "event-list settings-card-list", role: "list" },
           empty: "暂无路由规则",
-          context: state.credentials,
           render: ({ route, boundKeys }) => {
             const rule = route.rule;
             const models = rule.models;
@@ -6913,8 +7330,7 @@
               .map((item) => ({ text: credentialProviderLabel(item), tag: "整类" }))
               .concat(
                 rule.credential_ids.map((ref) => {
-                  const credential = state.credentials.find((item) => item.ref === ref);
-                  return { text: credential ? credentialLabel(credential) : "凭证已不存在" };
+                  return { text: boundCredentialLabel(ref, route.credential_labels) };
                 }),
               );
             const name = route.name || route.id;
@@ -6933,23 +7349,21 @@
                     class: "link danger",
                     text: "删除",
                     onclick: () =>
-                      guard(async () => {
-                        if (
-                          !(await confirmAction(
-                            "删除路由规则「" + name + "」？",
-                            boundKeys.length
-                              ? "将从 " +
-                                  bindingSummary(boundKeys) +
-                                  " 的绑定中解除此规则；其中 " +
-                                  (route.fully_unrestricted_keys || 0) +
-                                  " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
-                              : "此操作无法撤销。",
-                          ))
-                        )
-                          return;
-                        await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
-                        notify("路由规则已删除");
-                      }),
+                      openActionDialog(
+                        "删除路由规则「" + name + "」？",
+                        boundKeys.length
+                          ? "将从 " +
+                              bindingSummary(boundKeys) +
+                              " 的绑定中解除此规则；其中 " +
+                              (route.fully_unrestricted_keys || 0) +
+                              " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
+                          : "此操作无法撤销。",
+                        undefined,
+                        async () => {
+                          await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
+                          notify("路由规则已删除");
+                        },
+                      ),
                   }),
                 ),
               ),
@@ -7157,36 +7571,25 @@
         );
       }
 
-      function resetRouteForm() {
-        $("route-form-title").textContent = "新建路由规则";
-        $("route-save").textContent = "创建";
-        $("route-id").value = "";
-        $("route-name").value = "";
-        $("route-rule-search").value = "";
-        restoreChoice("admin", "route-credential-enabled-only", true);
-        routeModels = new Set();
-        routeCredentialIDs = new Set();
-        routeProviders = [];
-        renderRouteModelList();
-        renderRouteCredentialList();
-        renderRouteKeyList("");
-      }
-
       function editRoute(route) {
-        $("route-form-title").textContent = "编辑路由规则：" + (route.name || route.id);
-        $("route-id").value = route.id;
-        $("route-save").textContent = "保存";
-        $("route-name").value = route.name || "";
-        $("route-rule-search").value = "";
-        restoreChoice("admin", "route-credential-enabled-only", true);
-        routeModels = new Set(route.rule.models);
-        routeCredentialIDs = new Set(route.rule.credential_ids);
-        routeProviders = [...route.rule.credential_providers];
-        renderRouteModelList();
-        renderRouteCredentialList();
-        renderRouteKeyList(route.id);
-        $("route-dialog").showModal();
-        $("route-name").focus();
+        const id = route?.id;
+        openEditor("route-dialog", loadRouteEditorData, () => {
+          const current = id ? state.routes.find((entry) => entry.id === id) : null;
+          if (id && !current) throw new Error("路由规则已不存在，请关闭后刷新列表");
+          $("route-form-title").textContent = current ? "编辑路由规则：" + (current.name || id) : "新建路由规则";
+          $("route-id").value = id || "";
+          $("route-save").textContent = current ? "保存" : "创建";
+          $("route-name").value = current?.name || "";
+          $("route-rule-search").value = "";
+          restoreChoice("admin", "route-credential-enabled-only", true);
+          routeModels = new Set(current?.rule.models);
+          routeCredentialIDs = new Set(current?.rule.credential_ids);
+          routeProviders = structuredClone(current?.rule.credential_providers || []);
+          renderRouteModelList();
+          renderRouteCredentialList();
+          renderRouteKeyList(id || "");
+          return { route: structuredClone(current), scopes: selectedRouteScopes() };
+        });
       }
 
       function priceSourceTag(source) {
@@ -7240,8 +7643,15 @@
       }
 
       function renderPriceTable() {
+        if (!state.prices) {
+          replaceContent(
+            $("prices-body"),
+            el("div", { class: "empty", text: detailLoads.adminPrices.error || "正在加载模型价格…" }),
+          );
+          return;
+        }
         const filter = $("price-filter").value.trim().toLowerCase();
-        const rows = (state.prices || [])
+        const rows = state.prices
           .filter((row) => !filter || row.model_id.toLowerCase().includes(filter))
           .sort((a, b) => compareModelId(a.model_id, b.model_id));
         const renderRow = (row) => {
@@ -7273,7 +7683,7 @@
                 class: "link danger",
                 text: "删除",
                 disabled: row.source !== "custom",
-                onclick: () => guard(() => deleteCustomPrice(row)),
+                onclick: () => deleteCustomPrice(row),
               }),
             ),
           );
@@ -7441,11 +7851,10 @@
                 value: key.scope,
                 text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
               })),
+              ...(selected && !keys.some((key) => key.scope === selected)
+                ? [{ value: selected, text: select.selectedOptions[0]?.textContent || selected }]
+                : []),
             ]);
-            if (select.value !== selected) {
-              saveChoice("admin", "analysis-key");
-              resetEventViews(false);
-            }
           },
           undefined,
           { cacheKey: timeRangeCacheKey(false, range) },
@@ -8508,27 +8917,38 @@
         );
       }
 
-      function resetPlanForm() {
-        $("plan-form-title").textContent = "新建订阅计划";
-        $("plan-save").textContent = "创建";
-        $("plan-id").value = "";
-        $("plan-name").value = "";
-        $("plan-windows").replaceChildren();
-        $("plan-form-error").textContent = "";
-        addPlanWindow();
-        renderPlanKeyPicker("");
-      }
       function editPlan(plan) {
-        $("plan-form-title").textContent = "编辑订阅计划：" + (plan.name || plan.id);
-        $("plan-id").value = plan.id;
-        $("plan-save").textContent = "保存";
-        $("plan-name").value = plan.name || "";
-        $("plan-windows").replaceChildren();
-        $("plan-form-error").textContent = "";
-        plan.windows.forEach(addPlanWindow);
-        renderPlanKeyPicker(plan.id);
-        $("plan-dialog").showModal();
-        $("plan-name").focus();
+        const id = plan?.id;
+        openEditor(
+          "plan-dialog",
+          () => Promise.all([loadKeysForView(false), loadAdminCollection("plans")]),
+          () => {
+            const current = id ? state.plans.find((entry) => entry.id === id) : null;
+            if (id && !current) throw new Error("订阅计划已不存在，请关闭后刷新列表");
+            $("plan-form-title").textContent = current ? "编辑订阅计划：" + (current.name || id) : "新建订阅计划";
+            $("plan-id").value = id || "";
+            $("plan-save").textContent = current ? "保存" : "创建";
+            $("plan-name").value = current?.name || "";
+            $("plan-windows").replaceChildren();
+            (current?.windows || [{}]).forEach(addPlanWindow);
+            renderPlanKeyPicker(id || "");
+            return {
+              plan: current ? { ...structuredClone(current), windows: planFromForm().windows } : null,
+              scopes: selectedPlanScopes(),
+            };
+          },
+        );
+      }
+
+      function selectedPlanScopes() {
+        return Array.from(
+          $("plan-key-picker").querySelectorAll("input:checked:not(:disabled)"),
+          (input) => input.value,
+        );
+      }
+
+      function sameScopes(left, right) {
+        return JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
       }
       function planFromForm() {
         let firstInvalid = null;
@@ -8572,10 +8992,7 @@
         return {
           name: $("plan-name").value.trim(),
           windows,
-          scopes: Array.from(
-            $("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
-            (input) => input.value,
-          ),
+          scopes: selectedPlanScopes(),
         };
       }
 
@@ -8692,34 +9109,25 @@
       }
 
       function editPrice(row) {
-        const model = row.custom_price_model_id || row.model_id;
-        $("price-dialog-title").textContent = row.model_id ? "编辑模型定价" : "新增模型定价";
-        $("price-model").value = model;
-        $("price-model").readOnly = !!row.model_id;
-        fillPriceFields(row);
-        $("price-reference-search").value = row.model_id;
-        $("price-dlg").showModal();
-        $(row.model_id ? "price-reference-search" : "price-model").focus();
-        searchPriceReferences();
+        const modelID = row.model_id;
+        openEditor("price-dlg", null, () => {
+          $("price-dialog-title").textContent = modelID ? "编辑模型定价" : "新增模型定价";
+          $("price-save").textContent = "保存";
+          $("price-model").value = row.custom_price_model_id || modelID;
+          $("price-model").readOnly = !!modelID;
+          fillPriceFields(row);
+          $("price-reference-search").value = modelID;
+          searchPriceReferences();
+        });
       }
 
       async function autoSyncKeys() {
-        const summaries = [];
-        let keys = [];
-        try {
-          keys = await loadConfiguredAPIKeys();
-          if (!keys) throw new StaleRequestError();
-          const result = await plugin("POST", "/keys/sync", { keys, allow_empty: true });
-          if (result.added || result.deleted) {
-            summaries.push("API Key 同步完成：新增 " + result.added + " 个，删除 " + result.deleted + " 个");
-          } else if (!keys.length) {
-            summaries.push("CLIProxyAPI 尚未配置 API Key");
-          }
-        } catch (err) {
-          if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
-          notify("同步 API Key 失败：" + (err.message || err), "err");
+        const keys = await loadConfiguredAPIKeys();
+        const result = await plugin("POST", "/keys/sync", { keys, allow_empty: true });
+        if (result.added || result.deleted) {
+          return "API Key 同步完成：新增 " + result.added + " 个，删除 " + result.deleted + " 个";
         }
-        return summaries.join("；");
+        return keys.length ? "" : "CLIProxyAPI 尚未配置 API Key";
       }
 
       async function submitLogin() {
@@ -8997,6 +9405,7 @@
 
       const TABS = Array.from(document.querySelectorAll(".tabs button[data-tab]"));
       function setAdminTab(name) {
+        if (routePicker.saving) return;
         const selected = ADMIN_TAB_IDS.includes(name) ? name : "keys";
         if (selected !== "keys") closeRoutePicker();
         writePageRoute("admin", selected);
@@ -9047,47 +9456,38 @@
         renderKeys();
       });
       $("plan-window-add").onclick = () => addPlanWindow().querySelector("input").focus();
-      $("plan-new").onclick = () => {
-        resetPlanForm();
-        $("plan-dialog").showModal();
-        $("plan-name").focus();
-      };
-      $("plan-cancel").onclick = () => $("plan-dialog").close();
-      $("plan-save").onclick = async () => {
-        if ($("plan-save").disabled) return;
-        const plan = planFromForm();
-        if (!plan) return;
-        const id = $("plan-id").value;
-        const existing = state.plans.find((entry) => entry.id === id);
-        const affected = (existing?.windows || []).filter(
-          (old) =>
-            !plan.windows.some(
-              (quotaWindow) => quotaWindow.id === old.id && quotaWindow.period_seconds === old.period_seconds,
-            ),
-        );
-        $("plan-save").disabled = true;
-        $("plan-form-error").textContent = "";
-        try {
+      $("plan-new").onclick = () => editPlan();
+      $("plan-save").onclick = () =>
+        submitEditor("plan-dialog", async (editor) => {
+          const plan = planFromForm();
+          if (!plan) return false;
+          const id = $("plan-id").value;
+          const existing = editor.initial.plan;
+          const affected = (existing?.windows || []).filter(
+            (old) =>
+              !plan.windows.some(
+                (quotaWindow) => quotaWindow.id === old.id && quotaWindow.period_seconds === old.period_seconds,
+              ),
+          );
           if (
             affected.length &&
-            !(await confirmAction(
+            !(await openActionDialog(
               "更新额度周期？",
               "以下窗口的当前周期和消费将清零：" +
                 affected.map((quotaWindow) => quotaWindow.name).join("、") +
                 "。所有绑定 Key 均受影响，包括已删除 Key；请求事件及其统计不受影响。",
             ))
           )
-            return;
+            return false;
+          if (!editorCurrent(editor)) return false;
+          if (id && sameScopes(plan.scopes, editor.initial.scopes)) delete plan.scopes;
+          if (id && plan.name === existing.name) delete plan.name;
+          if (id && JSON.stringify(plan.windows) === JSON.stringify(existing.windows)) delete plan.windows;
+          if (id && !Object.keys(plan).length) return;
           if (id) await mutateAdmin("PATCH", "/plans", { id, ...plan });
           else await mutateAdmin("POST", "/plans", plan);
           notify(id ? "订阅计划已保存" : "订阅计划已创建");
-          $("plan-dialog").close();
-        } catch (error) {
-          $("plan-form-error").textContent = error.message || String(error);
-        } finally {
-          $("plan-save").disabled = false;
-        }
-      };
+        });
 
       $("route-picker-search").addEventListener("input", () => {
         const searching = !!$("route-picker-search").value.trim();
@@ -9153,50 +9553,40 @@
         renderRouteModelList();
         renderRouteCredentialList();
       };
-      $("route-new").onclick = () => {
-        resetRouteForm();
-        $("route-dialog").showModal();
-        $("route-name").focus();
-      };
-      $("route-cancel").onclick = () => $("route-dialog").close();
-      $("route-dialog").addEventListener("close", resetRouteForm);
+      $("route-new").onclick = () => editRoute();
       $("route-save").onclick = () =>
-        guard(async () => {
-          const button = $("route-save");
-          button.disabled = true;
-          const originalText = button.textContent;
-          button.textContent = "正在保存…";
-          try {
-            const name = $("route-name").value.trim();
-            if (!name) throw new Error("请输入规则名称");
-            const id = $("route-id").value;
-            const rule = {
-              models: [...routeModels],
-              credential_ids: [...routeCredentialIDs],
-              credential_providers: routeProviders,
-            };
-            const scopes = selectedRouteScopes();
-            if (id) {
-              const route = state.routes.find((item) => item.id === id);
-              if (
-                route?.bound_key_count &&
-                !(await confirmAction(
-                  "保存路由规则？",
-                  "保存后将更新所选 Key 的绑定及规则。" +
-                    (route.deleted_key_count
-                      ? "已删除 Key 也会按本次勾选结果保留或解除绑定；保留绑定的 Key 重新加入时使用更新后的规则。"
-                      : ""),
-                ))
-              )
-                return;
-              await mutateAdmin("PATCH", "/routes", { id, name, rule, scopes });
-            } else await mutateAdmin("POST", "/routes", { name, rule, scopes });
-            notify(id ? "路由规则已保存" : "路由规则已创建");
-            $("route-dialog").close();
-          } finally {
-            button.disabled = false;
-            if ($("route-dialog").open) button.textContent = originalText;
-          }
+        submitEditor("route-dialog", async (editor) => {
+          const name = $("route-name").value.trim();
+          if (!name) throw new Error("请输入规则名称");
+          const id = $("route-id").value;
+          const rule = {
+            models: [...routeModels],
+            credential_ids: [...routeCredentialIDs],
+            credential_providers: routeProviders,
+          };
+          const scopes = selectedRouteScopes();
+          const data = { name, rule, scopes };
+          if (id) {
+            const route = editor.initial.route;
+            if (
+              route?.bound_key_count &&
+              !(await openActionDialog(
+                "保存路由规则？",
+                "保存后将更新所选 Key 的绑定及规则。" +
+                  (route.deleted_key_count
+                    ? "已删除 Key 也会按本次勾选结果保留或解除绑定；保留绑定的 Key 重新加入时使用更新后的规则。"
+                    : ""),
+              ))
+            )
+              return false;
+            if (!editorCurrent(editor)) return false;
+            if (sameScopes(scopes, editor.initial.scopes)) delete data.scopes;
+            if (name === route.name) delete data.name;
+            if (JSON.stringify(rule) === JSON.stringify(route.rule)) delete data.rule;
+            if (!Object.keys(data).length) return;
+            await mutateAdmin("PATCH", "/routes", { id, ...data });
+          } else await mutateAdmin("POST", "/routes", data);
+          notify(id ? "路由规则已保存" : "路由规则已创建");
         });
 
       $("plugin-log-filter").addEventListener("input", renderPluginLogs);
@@ -9206,14 +9596,15 @@
         guard(() => pagedList("logs").load());
       });
       $("plugin-logs-clear").onclick = () =>
-        guard(async () => {
-          if (
-            !(await confirmAction("清空全部插件日志？", "该操作只清除插件自身的运行记录，不影响计费数据，且无法恢复。"))
-          )
-            return;
-          const result = await mutateAdmin("DELETE", "/plugin-logs");
-          notify("已清空 " + result.cleared + " 条插件日志");
-        });
+        openActionDialog(
+          "清空全部插件日志？",
+          "该操作只清除插件自身的运行记录，不影响计费数据，且无法恢复。",
+          undefined,
+          async () => {
+            const result = await mutateAdmin("DELETE", "/plugin-logs");
+            notify("已清空 " + result.cleared + " 条插件日志");
+          },
+        );
       for (const account of [false, true]) {
         const role = account ? "account" : "admin";
         const prefix = account ? "account-" : "";
@@ -9261,17 +9652,15 @@
         closeSharedTimePopover(true);
       });
       $("keys-reset-all").onclick = () =>
-        guard(async () => {
-          if (
-            !(await confirmAction(
-              "重置全员订阅额度？",
-              "所有未删除且绑定计划的 API Key 将结束全部额度周期，下一次放行开启新周期。请求事件及其统计不受影响。",
-            ))
-          )
-            return;
-          const result = await mutateAdmin("POST", "/keys/reset", { mode: "global" });
-          notify(result.keys ? "已重置 " + result.keys + " 个 API Key 的额度" : "没有需要重置的额度");
-        });
+        openActionDialog(
+          "重置全员订阅额度？",
+          "所有未删除且绑定计划的 API Key 将结束全部额度周期，下一次放行开启新周期。请求事件及其统计不受影响。",
+          undefined,
+          async () => {
+            const result = await mutateAdmin("POST", "/keys/reset", { mode: "global" });
+            notify(result.keys ? "已重置 " + result.keys + " 个 API Key 的额度" : "没有需要重置的额度");
+          },
+        );
       $("price-filter").addEventListener("input", renderPriceTable);
       $("price-reference-search").addEventListener("input", () => {
         priceReferenceRequest++;
@@ -9288,18 +9677,18 @@
         priceReferenceTimer = 0;
         priceReferenceRequest++;
       });
-      async function deleteCustomPrice(row) {
+      function deleteCustomPrice(row) {
         const model = row.custom_price_model_id || row.model_id;
         const message = "删除 " + model + " 的自定义价后，使用该定价的模型将改用参考价。若无参考价，将无法使用。";
-        if (!(await confirmAction("删除自定义价？", message))) return;
-        await mutateAdmin("DELETE", "/prices?model_id=" + encodeURIComponent(model));
-        notify("已删除自定义价");
+        openActionDialog("删除自定义价？", message, undefined, async () => {
+          await mutateAdmin("DELETE", "/prices?model_id=" + encodeURIComponent(model));
+          notify("已删除自定义价");
+        });
       }
 
       $("price-add").onclick = () => editPrice({ model_id: "", input_per_1m: 0, output_per_1m: 0 });
-      $("price-cancel").onclick = () => $("price-dlg").close();
       $("price-save").onclick = () =>
-        guard(async () => {
+        submitEditor("price-dlg", async () => {
           const model = $("price-model").value.trim();
           if (!model) throw new Error("请输入模型 ID");
           const price = {
@@ -9321,7 +9710,6 @@
             };
           }
           await mutateAdmin("PUT", "/prices", price);
-          $("price-dlg").close();
           notify("已保存 " + model + " 的定价");
         });
       $("price-reference-refresh").onclick = () =>
@@ -9334,8 +9722,8 @@
           } catch (err) {
             if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
             try {
-              const status = await plugin("GET", "/prices/reference/status");
-              renderReferencePriceStatus(status.metadata);
+              resetLoadState(detailLoads.adminPriceStatus);
+              await loadAdminPriceStatus();
             } catch (statusError) {
               if (statusError instanceof AuthError || statusError instanceof StaleRequestError) throw statusError;
               throw new Error((err.message || err) + "；参考价状态获取失败：" + (statusError.message || statusError));

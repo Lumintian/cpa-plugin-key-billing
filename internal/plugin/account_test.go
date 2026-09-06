@@ -78,19 +78,19 @@ func TestUsageCreatesKeyIdentityBeforeAnyFrontendSync(t *testing.T) {
 	}
 }
 
-func TestAccountAccessAuthenticatesByAPIKeyScope(t *testing.T) {
+func TestAccountProfileAuthenticatesByAPIKeyScope(t *testing.T) {
 	app := configuredAccountApp(t)
 
-	response := callAccount(t, app, routeAccess, accountTestKeyA, nil)
+	response := callAccount(t, app, routeProfile, accountTestKeyA, nil)
 	if response.StatusCode != http.StatusOK || response.Headers.Get("Cache-Control") != "private, no-store" ||
 		response.Headers.Get("Vary") != "Authorization" {
 		t.Fatalf("response = %+v", response)
 	}
-	var access accountAccessResponse
+	var access accountProfileResponse
 	if errDecode := json.Unmarshal(response.Body, &access); errDecode != nil {
 		t.Fatal(errDecode)
 	}
-	if !access.Tracked || access.Identity.Label != "Alice" || !access.Subscription.Unlimited {
+	if !access.Tracked || access.Identity.Label != "Alice" {
 		t.Fatalf("access = %+v", access)
 	}
 	body := string(response.Body)
@@ -100,8 +100,8 @@ func TestAccountAccessAuthenticatesByAPIKeyScope(t *testing.T) {
 		}
 	}
 
-	unknown := callAccount(t, app, routeAccess, "sk-valid-but-untracked-0003", nil)
-	var unknownAccess accountAccessResponse
+	unknown := callAccount(t, app, routeProfile, "sk-valid-but-untracked-0003", nil)
+	var unknownAccess accountProfileResponse
 	if errDecode := json.Unmarshal(unknown.Body, &unknownAccess); errDecode != nil || unknownAccess.Tracked {
 		t.Fatalf("unknown access = %+v, err = %v", unknownAccess, errDecode)
 	}
@@ -109,13 +109,13 @@ func TestAccountAccessAuthenticatesByAPIKeyScope(t *testing.T) {
 
 func TestAccountRoutesRejectMissingOrAmbiguousBearer(t *testing.T) {
 	app := configuredAccountApp(t)
-	if response := callAccount(t, app, routeAccess, "", nil); response.StatusCode != http.StatusUnauthorized ||
+	if response := callAccount(t, app, routeProfile, "", nil); response.StatusCode != http.StatusUnauthorized ||
 		response.Headers.Get("WWW-Authenticate") == "" {
 		t.Fatalf("missing bearer response = %+v", response)
 	}
 
 	raw, errHandle := app.HandleMethod(MethodManagementHandle, mustMarshal(t, ManagementRequest{
-		Method: http.MethodGet, Path: resourceBase + routeAccess,
+		Method: http.MethodGet, Path: resourceBase + routeProfile,
 		Headers: http.Header{"Authorization": {"Bearer " + accountTestKeyA, "Bearer " + accountTestKeyB}},
 	}))
 	if errHandle != nil {
@@ -244,9 +244,11 @@ func TestAccountRequestEventsUseTheAdministratorSource(t *testing.T) {
 	}
 }
 
-func TestAccountAccessAggregatesRoutesAndPricesReturnSharedReferencePrices(t *testing.T) {
+func TestAccountRoutingAndPricesRespectItsScope(t *testing.T) {
 	app := configuredAccountApp(t)
+	hostCalls := 0
 	app.SetHostCaller(func(method string, _ any) (json.RawMessage, error) {
+		hostCalls++
 		if method != hostAuthList {
 			t.Fatalf("host method=%q", method)
 		}
@@ -263,6 +265,18 @@ func TestAccountAccessAggregatesRoutesAndPricesReturnSharedReferencePrices(t *te
 	if errRoute != nil {
 		t.Fatal(errRoute)
 	}
+	for _, path := range []string{routeProfile, routeSubscription} {
+		response := callAccount(t, app, path, accountTestKeyA, nil)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s status=%d", path, response.StatusCode)
+		}
+		if strings.Contains(string(response.Body), `"credentials"`) {
+			t.Fatalf("%s included routing details", path)
+		}
+	}
+	if hostCalls != 0 {
+		t.Fatalf("profile/subscription made %d host calls", hostCalls)
+	}
 	response := callAccount(t, app, routePrices, accountTestKeyA, url.Values{"model": {"gpt-5.5"}})
 	var prices []billing.PriceRow
 	if errDecode := json.Unmarshal(response.Body, &prices); errDecode != nil {
@@ -275,8 +289,11 @@ func TestAccountAccessAggregatesRoutesAndPricesReturnSharedReferencePrices(t *te
 	if !strings.Contains(string(response.Body), `"source"`) {
 		t.Fatalf("account prices did not use management response shape: %s", response.Body)
 	}
-	response = callAccount(t, app, routeAccess, accountTestKeyA, nil)
-	var access accountAccessResponse
+	response = callAccount(t, app, routeRouting, accountTestKeyA, nil)
+	if hostCalls != 1 {
+		t.Fatalf("routing made %d host calls", hostCalls)
+	}
+	var access accountRoutingResponse
 	if errDecode := json.Unmarshal(response.Body, &access); errDecode != nil {
 		t.Fatal(errDecode)
 	}
@@ -297,8 +314,8 @@ func TestDeletedAccountCannotReadItsHistory(t *testing.T) {
 	if _, errSync := app.store.SyncKeys([]string{accountTestKeyB}, false); errSync != nil {
 		t.Fatal(errSync)
 	}
-	response := callAccount(t, app, routeAccess, accountTestKeyA, nil)
-	var access accountAccessResponse
+	response := callAccount(t, app, routeProfile, accountTestKeyA, nil)
+	var access accountProfileResponse
 	if errDecode := json.Unmarshal(response.Body, &access); errDecode != nil {
 		t.Fatal(errDecode)
 	}

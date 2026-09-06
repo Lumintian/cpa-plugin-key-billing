@@ -92,7 +92,7 @@ func TestManagementRegistrationExposesOnlyCurrentEndpoints(t *testing.T) {
 	registration := managementRegistration()
 	wantRoutes := map[string]bool{}
 	for _, value := range []string{
-		"GET /access", "GET /prices", "GET /prices/reference",
+		"GET /keys", "GET /plans", "GET /routes", "GET /credentials", "GET /prices", "GET /prices/reference",
 		"POST /prices/reference/refresh", "PUT /prices", "DELETE /prices", "GET /prices/reference/status",
 		"POST /plans", "PATCH /plans", "DELETE /plans",
 		"POST /routes", "PATCH /routes", "DELETE /routes", "PUT /keys/routes",
@@ -122,7 +122,7 @@ func TestManagementRegistrationExposesOnlyCurrentEndpoints(t *testing.T) {
 	}
 
 	wantResources := map[string]bool{
-		"/ui": false, "/access": false, "/prices": false,
+		"/ui": false, "/profile": false, "/subscription": false, "/routing": false, "/prices": false,
 		"/analysis": false, "/events": false, "/errors": false,
 		"/auth-files": false, "/auth-files/quota": false,
 	}
@@ -150,7 +150,7 @@ func TestManagementRegistrationExposesOnlyCurrentEndpoints(t *testing.T) {
 
 func TestManagementRejectsLookalikeRoutePrefixes(t *testing.T) {
 	app := newTestApp(t)
-	for _, path := range []string{managementBase + "-other/access", resourceBase + "-other/ui"} {
+	for _, path := range []string{managementBase + "-other/keys", resourceBase + "-other/ui"} {
 		raw, errHandle := app.handleManagement(mustMarshal(t, ManagementRequest{
 			Method: http.MethodGet,
 			Path:   path,
@@ -178,7 +178,7 @@ func TestHandleMethodRecoversFromPanic(t *testing.T) {
 	app.store = nil
 	_, errHandle := app.HandleMethod(MethodManagementHandle, mustMarshal(t, ManagementRequest{
 		Method: http.MethodGet,
-		Path:   managementBase + routeAccess,
+		Path:   managementBase + routeKeys,
 	}))
 	if errHandle == nil {
 		t.Fatal("a panicking handler returned no error")

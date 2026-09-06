@@ -549,7 +549,7 @@ assert_route_model_policy() {
     -H "Content-Type: application/json" \
     --data '{"keys":["e2e-downstream-key"]}' \
     >/dev/null
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$runtime_dir/access.json"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$runtime_dir/access.json"
   scope="$(jq -er 'first(.keys[] | select(.in_config) | .scope)' "$runtime_dir/access.json")"
   if ! jq -e --arg scope "$scope" 'first(.keys[] | select(.scope == $scope)) | all(.route_bindings[]; length == 0)' \
     "$runtime_dir/access.json" >/dev/null; then
@@ -634,7 +634,7 @@ assert_route_credential_policy() {
   events_file="$runtime_dir/credential-route-events.json"
   plugin_logs_file="$runtime_dir/credential-route-plugin-logs.json"
 
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$access_file"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$access_file"
   scope="$(jq -er 'first(.keys[] | select(.in_config) | .scope)' "$access_file")"
   management_call POST "$port" "/v0/management/plugins/cpa-key-billing/routes" \
     -H "Content-Type: application/json" \
@@ -658,7 +658,7 @@ assert_route_credential_policy() {
 
   # scheduler.pick has now observed both config-backed candidates, so the safe
   # inventory contains the opaque reference needed to test an exact binding.
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$access_file"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/credentials" >"$access_file"
   if ! jq -e '
       first(.credentials[] | select(.source == "ai-providers" and .provider == "openai-compatible-route-allowed-e2e")) |
       .display_name == "e2e-ro…1111"
@@ -753,14 +753,14 @@ assert_concurrency_limit() {
     -H "Content-Type: application/json" \
     --data '{"keys":["e2e-downstream-key"]}' \
     >/dev/null
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$access_file"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$access_file"
   scope="$(jq -er 'first(.keys[] | select(.in_config) | .scope)' "$access_file")"
   management_call POST "$port" "/v0/management/plugins/cpa-key-billing/keys/concurrency" \
     -H "Content-Type: application/json" \
     --data "$(jq -nc --arg scope "$scope" '{scope: $scope, concurrency_limit: 1}')" \
     >/dev/null
 
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$access_file"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$access_file"
   if ! jq -e --arg scope "$scope" '
       first(.keys[] | select(.scope == $scope)) |
       .concurrency_limit == 1 and .current_concurrency == 0
@@ -777,7 +777,7 @@ assert_concurrency_limit() {
 
   current=0
   for ((attempt = 0; attempt < 100; attempt++)); do
-    management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$access_file"
+    management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$access_file"
     current="$(jq -er --arg scope "$scope" 'first(.keys[] | select(.scope == $scope)).current_concurrency' "$access_file")"
     if [[ "$current" == "1" ]]; then
       break
@@ -821,7 +821,7 @@ assert_concurrency_limit() {
   fi
   current=1
   for ((attempt = 0; attempt < 100; attempt++)); do
-    management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$access_file"
+    management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$access_file"
     current="$(jq -er --arg scope "$scope" 'first(.keys[] | select(.scope == $scope)).current_concurrency' "$access_file")"
     if [[ "$current" == "0" ]]; then
       break
@@ -867,7 +867,7 @@ assert_quota_exhausted() {
   request_events_file="$runtime_dir/quota-request-events.json"
   plugin_logs_file="$runtime_dir/quota-plugin-logs.json"
 
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$runtime_dir/access.json"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$runtime_dir/access.json"
   scope="$(jq -er 'first(.keys[] | select(.in_config) | .scope)' "$runtime_dir/access.json")"
 
   # A budget below what one request costs. Nothing has been spent when the
@@ -889,7 +889,7 @@ assert_quota_exhausted() {
     "gpt-5.6-sol" "gpt-5.6-sol" "$runtime_dir/quota-spend-request-events.json" \
     "$runtime_dir/responses/quota-spend.json" false
 
-  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$runtime_dir/quota-access.json"
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$runtime_dir/quota-access.json"
   if ! jq -e --arg scope "$scope" \
       --slurpfile events "$runtime_dir/quota-spend-request-events.json" '
       $events[0].entries[0].cost.total_usd as $cost |
@@ -1328,17 +1328,19 @@ run_target() {
   account_access_file="$runtime_dir/account-access.json"
   account_prices_file="$runtime_dir/account-prices.json"
   account_events_file="$runtime_dir/account-events.json"
-  account_call "$port" "/v0/resource/plugins/cpa-key-billing/access" >"$account_access_file"
+  account_call "$port" "/v0/resource/plugins/cpa-key-billing/profile" >"$account_access_file"
+  account_call "$port" "/v0/resource/plugins/cpa-key-billing/subscription" >"$runtime_dir/account-subscription.json"
+  account_call "$port" "/v0/resource/plugins/cpa-key-billing/routing" >"$runtime_dir/account-routing.json"
   account_call "$port" "/v0/resource/plugins/cpa-key-billing/prices?model=gpt-5.6-sol" >"$account_prices_file"
   account_call "$port" "/v0/resource/plugins/cpa-key-billing/events?limit=100" >"$account_events_file"
   if ! jq -e '
       .tracked == true and
-      has("identity") and has("subscription") and has("concurrency") and
-      (.models | length) == 0 and (.credentials | length) == 0 and
-      .routing_valid == true and (.warnings | length) == 0 and
+      has("identity") and (has("subscription") | not) and (has("credentials") | not) and
       (has("keys") | not) and (has("plans") | not) and (has("prices") | not) and
       (has("routing") | not) and (has("bindings") | not)
     ' "$account_access_file" >/dev/null ||
+    ! jq -e 'has("subscription") and has("concurrency") and (has("credentials") | not)' "$runtime_dir/account-subscription.json" >/dev/null ||
+    ! jq -e '(.models | length) == 0 and (.credentials | length) == 0 and .routing_valid == true and (.warnings | length) == 0' "$runtime_dir/account-routing.json" >/dev/null ||
     ! jq -e 'length > 0 and all(.[]; has("model_id") and has("source") and (has("operation") | not))' \
       "$account_prices_file" >/dev/null ||
     ! jq -e --argjson expected "$expected_requests" '

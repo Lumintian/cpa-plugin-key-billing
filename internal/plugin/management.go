@@ -20,7 +20,11 @@ const (
 var uiHTML []byte
 
 const (
-	routeAccess                 = "/access"
+	routeKeys                   = "/keys"
+	routeCredentials            = "/credentials"
+	routeProfile                = "/profile"
+	routeSubscription           = "/subscription"
+	routeRouting                = "/routing"
 	routePrices                 = "/prices"
 	routeReferencePrices        = "/prices/reference"
 	routeReferencePricesStatus  = "/prices/reference/status"
@@ -50,7 +54,16 @@ type managementEndpoint struct {
 }
 
 var managementEndpoints = []managementEndpoint{
-	{http.MethodGet, routeAccess, "查看 API Key、订阅计划和路由规则", func(a *App, _ ManagementRequest) ManagementResponse { return a.access() }},
+	{http.MethodGet, routeKeys, "查看 API Key 状态", func(a *App, _ ManagementRequest) ManagementResponse {
+		return JSONResponse(http.StatusOK, map[string]any{"keys": a.keyRows()})
+	}},
+	{http.MethodGet, routePlans, "查看订阅计划", func(a *App, _ ManagementRequest) ManagementResponse {
+		return JSONResponse(http.StatusOK, map[string]any{"plans": a.store.Plans()})
+	}},
+	{http.MethodGet, routeRoutes, "查看路由规则", func(a *App, _ ManagementRequest) ManagementResponse {
+		return JSONResponse(http.StatusOK, map[string]any{"routes": a.routeRows()})
+	}},
+	{http.MethodGet, routeCredentials, "查看路由凭证选项", (*App).listCredentials},
 	{http.MethodGet, routePrices, "查看模型定价", func(a *App, req ManagementRequest) ManagementResponse { return a.listPrices(req, viewAccess{}) }},
 	{http.MethodGet, routeReferencePrices, "搜索模型参考价", (*App).searchReferencePrices},
 	{http.MethodGet, routeReferencePricesStatus, "查看参考价状态", func(a *App, _ ManagementRequest) ManagementResponse { return a.referencePriceStatus() }},
@@ -91,8 +104,14 @@ type resourceEndpoint struct {
 }
 
 var resourceEndpoints = []resourceEndpoint{
-	{routeAccess, func(a *App, _ ManagementRequest, access viewAccess) ManagementResponse {
-		return a.accountAccess(access)
+	{routeProfile, func(a *App, _ ManagementRequest, access viewAccess) ManagementResponse {
+		return a.accountProfile(access)
+	}},
+	{routeSubscription, func(a *App, _ ManagementRequest, access viewAccess) ManagementResponse {
+		return a.accountSubscription(access)
+	}},
+	{routeRouting, func(a *App, _ ManagementRequest, access viewAccess) ManagementResponse {
+		return a.accountRouting(access)
 	}},
 	{routePrices, (*App).listPrices},
 	{routeAnalysis, (*App).analysis},

@@ -23,11 +23,17 @@ type accountConcurrency struct {
 	Current int `json:"current"`
 }
 
-type accountAccessResponse struct {
-	Tracked      bool                     `json:"tracked"`
-	Identity     accountIdentity          `json:"identity"`
-	Subscription accountSubscription      `json:"subscription"`
-	Concurrency  accountConcurrency       `json:"concurrency"`
+type accountProfileResponse struct {
+	Tracked  bool            `json:"tracked"`
+	Identity accountIdentity `json:"identity"`
+}
+
+type accountSubscriptionResponse struct {
+	Subscription accountSubscription `json:"subscription"`
+	Concurrency  accountConcurrency  `json:"concurrency"`
+}
+
+type accountRoutingResponse struct {
 	Models       []string                 `json:"models"`
 	Credentials  []accountRouteCredential `json:"credentials"`
 	RoutingValid bool                     `json:"routing_valid"`
@@ -42,18 +48,33 @@ type accountRouteCredential struct {
 	ProviderWide bool   `json:"provider_wide,omitempty"`
 }
 
-func (a *App) accountAccess(access viewAccess) ManagementResponse {
-	response := accountAccessResponse{
-		Tracked: access.Tracked, Models: []string{}, Credentials: []accountRouteCredential{},
-		RoutingValid: true, Warnings: []string{},
+func (a *App) accountProfile(access viewAccess) ManagementResponse {
+	response := accountProfileResponse{Tracked: access.Tracked}
+	if access.Tracked {
+		response.Identity = accountIdentity{Preview: access.Key.Preview, Label: access.Key.Label}
 	}
+	return apiKeyJSON(http.StatusOK, response)
+}
+
+func (a *App) accountSubscription(access viewAccess) ManagementResponse {
 	if !access.Tracked {
-		return apiKeyJSON(http.StatusOK, response)
+		return apiKeyUnauthorized()
 	}
 	view := access.Key
-	response.Identity = accountIdentity{Preview: view.Preview, Label: view.Label}
-	response.Subscription = accountSubscription{Name: view.PlanName, QuotaView: view.QuotaView}
-	response.Concurrency = accountConcurrency{Limit: view.ConcurrencyLimit, Current: view.CurrentConcurrency}
+	return apiKeyJSON(http.StatusOK, accountSubscriptionResponse{
+		Subscription: accountSubscription{Name: view.PlanName, QuotaView: view.QuotaView},
+		Concurrency:  accountConcurrency{Limit: view.ConcurrencyLimit, Current: view.CurrentConcurrency},
+	})
+}
+
+func (a *App) accountRouting(access viewAccess) ManagementResponse {
+	if !access.Tracked {
+		return apiKeyUnauthorized()
+	}
+	response := accountRoutingResponse{
+		Models: []string{}, Credentials: []accountRouteCredential{},
+		RoutingValid: true, Warnings: []string{},
+	}
 	decision := a.store.ResolveRouting(access.Scope, "", "")
 	response.Models = decision.ModelScope
 	response.RoutingValid = decision.ConfigurationError == ""

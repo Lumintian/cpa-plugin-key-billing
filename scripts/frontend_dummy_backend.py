@@ -779,8 +779,7 @@ def account_routing(index):
     return models, credential_refs, credential_providers
 
 
-def account_access(index):
-    key = LIVE_KEYS[index]
+def account_routing_view(index):
     models, credential_refs, credential_providers = account_routing(index)
 
     credentials = [
@@ -795,13 +794,6 @@ def account_access(index):
         or (credential["source"], credential["provider"]) in credential_providers
     ]
     return {
-        "tracked": True,
-        "identity": {"preview": key["preview"], "label": key["label"]},
-        "subscription": {
-            "name": key["plan_name"], "unlimited": key["unlimited"], "blocked": key["blocked"],
-            "windows": key["windows"], "retry_at": key.get("retry_at"),
-        },
-        "concurrency": {"limit": key["concurrency_limit"], "current": key["current_concurrency"]},
         "models": sorted(models),
         "credentials": credentials,
         "routing_valid": True,
@@ -1155,10 +1147,32 @@ def model_prices(query, include_custom):
                  in_models=model in models) for model in sorted(names)]
 
 
+def credential_labels(refs):
+    return {item["ref"]: item["provider"] + "·" + item["display_name"]
+            for item in CREDENTIALS if item["ref"] in refs}
+
+
+def key_rows():
+    return [dict(key, route_names={route["id"]: route["name"] for route in ROUTES
+                                  if route["id"] in key["route_bindings"]["route_ids"]},
+                 credential_labels=credential_labels(key["route_bindings"]["credential_ids"])) for key in KEYS]
+
+
+def route_rows():
+    return [dict(route, credential_labels=credential_labels(route["rule"]["credential_ids"])) for route in ROUTES]
+
+
 def payload_for(path, query):
-    if path == f"{API_BASE}/access":
+    if path == f"{API_BASE}/keys":
         refresh_route_counts()
-        return {"keys": KEYS, "plans": PLANS, "routes": ROUTES, "credentials": CREDENTIALS}
+        return {"keys": key_rows()}
+    if path == f"{API_BASE}/plans":
+        return {"plans": PLANS}
+    if path == f"{API_BASE}/routes":
+        refresh_route_counts()
+        return {"routes": route_rows()}
+    if path == f"{API_BASE}/credentials":
+        return {"credentials": CREDENTIALS}
     if path == f"{API_BASE}/prices/reference/status":
         return price_status()
     if path == f"{API_BASE}/prices":
@@ -1240,7 +1254,11 @@ class Handler(BaseHTTPRequestHandler):
             view = {}
             if path in {f"{API_BASE}/plans", f"{API_BASE}/routes"} or path.startswith(f"{API_BASE}/keys/"):
                 refresh_route_counts()
-                view["configuration"] = {"keys": KEYS, "plans": PLANS, "routes": ROUTES}
+                view["keys"] = key_rows()
+                if path == f"{API_BASE}/plans":
+                    view["plans"] = PLANS
+                if path in {f"{API_BASE}/routes", f"{API_BASE}/keys/routes"}:
+                    view["routes"] = route_rows()
             elif path in {f"{API_BASE}/prices", f"{API_BASE}/prices/reference/refresh"}:
                 view["prices"] = model_prices({"model": self.mutation_view.get("models", [])}, include_custom=True)
                 view["metadata"] = price_status()["metadata"]
@@ -1287,7 +1305,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(401, {"error": {"message": "API Key 无效"}})
                 return
         resource_paths = {
-            f"{RESOURCE_BASE}/access",
+            f"{RESOURCE_BASE}/profile",
+            f"{RESOURCE_BASE}/subscription",
+            f"{RESOURCE_BASE}/routing",
             f"{RESOURCE_BASE}/prices",
             f"{RESOURCE_BASE}/events",
             f"{RESOURCE_BASE}/errors",
@@ -1300,8 +1320,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(401, {"error": {"message": "API Key 无效"}})
                 return
             index = api_keys.index(authorization[7:])
-            if parsed.path.endswith("/access"):
-                self.send_json(200, account_access(index))
+            if parsed.path.endswith("/profile"):
+                key = LIVE_KEYS[index]
+                self.send_json(200, {"tracked": True, "identity": {"preview": key["preview"], "label": key["label"]}})
+            elif parsed.path.endswith("/subscription"):
+                key = LIVE_KEYS[index]
+                self.send_json(200, {"subscription": {"name": key["plan_name"], "unlimited": key["unlimited"], "blocked": key["blocked"], "windows": key["windows"], "retry_at": key.get("retry_at")}, "concurrency": {"limit": key["concurrency_limit"], "current": key["current_concurrency"]}})
+            elif parsed.path.endswith("/routing"):
+                self.send_json(200, account_routing_view(index))
             elif parsed.path.endswith("/prices"):
                 self.send_json(200, model_prices(parse_qs(parsed.query), include_custom=False))
             elif parsed.path.endswith("/analysis"):

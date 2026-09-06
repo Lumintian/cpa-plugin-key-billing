@@ -13,23 +13,39 @@ import (
 	"cpa-key-billing/internal/billing"
 )
 
-type accessResponse struct {
-	Keys                     []billing.KeyView   `json:"keys"`
-	Plans                    []billing.Plan      `json:"plans"`
-	Routes                   []billing.RouteView `json:"routes"`
-	Credentials              []credentialView    `json:"credentials"`
-	CredentialInventoryError string              `json:"credential_inventory_error,omitempty"`
+type keyRow struct {
+	billing.KeyView
+	RouteNames       map[string]string `json:"route_names"`
+	CredentialLabels map[string]string `json:"credential_labels"`
 }
 
-func (a *App) access() ManagementResponse {
-	credentialError := ""
-	if err := a.refreshCredentialInventory(); err != nil {
-		credentialError = err.Error()
+type routeRow struct {
+	billing.RouteView
+	CredentialLabels map[string]string `json:"credential_labels"`
+}
+
+func (a *App) keyRows() []keyRow {
+	keys := a.store.KeyViews()
+	rows := make([]keyRow, 0, len(keys))
+	for _, key := range keys {
+		names := make(map[string]string)
+		for _, id := range key.RouteBindings.RouteIDs {
+			if route, ok := a.store.Route(id); ok {
+				names[id] = route.Name
+			}
+		}
+		rows = append(rows, keyRow{KeyView: key, RouteNames: names, CredentialLabels: a.credentialLabels(key.RouteBindings.CredentialIDs)})
 	}
-	return JSONResponse(http.StatusOK, accessResponse{
-		Keys: a.store.KeyViews(), Plans: a.store.Plans(), Routes: a.store.RouteViews(),
-		Credentials: a.credentialInventory(), CredentialInventoryError: credentialError,
-	})
+	return rows
+}
+
+func (a *App) routeRows() []routeRow {
+	routes := a.store.RouteViews()
+	rows := make([]routeRow, 0, len(routes))
+	for _, route := range routes {
+		rows = append(rows, routeRow{RouteView: route, CredentialLabels: a.credentialLabels(route.Rule.CredentialIDs)})
+	}
+	return rows
 }
 
 func (a *App) createPlan(req ManagementRequest) ManagementResponse {
