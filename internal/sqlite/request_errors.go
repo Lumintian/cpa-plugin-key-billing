@@ -33,7 +33,7 @@ const requestErrorSource = `
 	WHERE r.at >= ?`
 
 func requestErrorFilter(query billing.RequestErrorQuery, since time.Time) (string, []any) {
-	where, args := eventTimeFilter(requestErrorSource, query.From, query.To, since)
+	where, args := eventPageFilter(requestErrorSource, query.From, query.To, since, query.SnapshotID)
 	if value := strings.TrimSpace(query.Scope); value != "" {
 		where += " AND r.scope = ?"
 		args = append(args, value)
@@ -73,6 +73,12 @@ func requestErrorFilter(query billing.RequestErrorQuery, since time.Time) (strin
 
 func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (billing.RequestErrorView, error) {
 	view := billing.RequestErrorView{Entries: []billing.RequestErrorRow{}}
+	var err error
+	view.SnapshotID, err = d.requestEventSnapshot(query.SnapshotID)
+	if err != nil {
+		return view, err
+	}
+	query.SnapshotID = &view.SnapshotID
 	countQuery := query
 	countQuery.ErrorType = ""
 	countQuery.ErrorTypeEmpty = false
@@ -144,7 +150,7 @@ func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (bi
 }
 
 func (d *DB) requestErrorFilterValues(query billing.RequestErrorQuery, since time.Time) (*billing.RequestErrorFilterValues, error) {
-	where, args := eventTimeFilter(requestErrorSource, query.From, query.To, since)
+	where, args := eventPageFilter(requestErrorSource, query.From, query.To, since, query.SnapshotID)
 	if scope := strings.TrimSpace(query.Scope); scope != "" {
 		where += " AND r.scope = ?"
 		args = append(args, scope)

@@ -39,10 +39,12 @@ type RequestErrorQuery struct {
 	ErrorTypeEmpty                                                bool
 	From, To                                                      time.Time
 	IncludeFilters                                                bool
+	SnapshotID                                                    *int64
 	Offset, Limit                                                 int
 }
 
 type RequestErrorView struct {
+	SnapshotID      int64                     `json:"snapshot_id,string"`
 	ErrorTypeCounts map[string]int            `json:"error_type_counts"`
 	Entries         []RequestErrorRow         `json:"entries"`
 	Total           int                       `json:"total"`

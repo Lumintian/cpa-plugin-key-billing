@@ -68,6 +68,12 @@ const requestEventSource = `
 
 func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (billing.RequestEventView, error) {
 	view := billing.RequestEventView{Entries: []billing.RequestEventRow{}}
+	var err error
+	view.SnapshotID, err = d.requestEventSnapshot(query.SnapshotID)
+	if err != nil {
+		return view, err
+	}
+	query.SnapshotID = &view.SnapshotID
 	where, args := requestEventFilter(query, since)
 	if query.IncludeFilters {
 		filters, errFilters := d.requestEventFilterValues(query, since)
@@ -135,7 +141,7 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 }
 
 func requestEventFilter(query billing.RequestEventQuery, since time.Time) (string, []any) {
-	where, args := eventTimeFilter(requestEventSource, query.From, query.To, since)
+	where, args := eventPageFilter(requestEventSource, query.From, query.To, since, query.SnapshotID)
 	if scope := strings.TrimSpace(query.Scope); scope != "" {
 		where += " AND r.scope = ?"
 		args = append(args, scope)
@@ -163,6 +169,28 @@ func requestEventFilter(query billing.RequestEventQuery, since time.Time) (strin
 	return where, args
 }
 
+// Usage arrives on completion, but rows sort by request start time. Pin the
+// inserted ID range so late completions cannot shift subsequent pages.
+func (d *DB) requestEventSnapshot(snapshot *int64) (int64, error) {
+	if snapshot != nil {
+		return *snapshot, nil
+	}
+	var id int64
+	if err := d.db.QueryRow("SELECT coalesce(max(id), 0) FROM request_events").Scan(&id); err != nil {
+		return 0, fmt.Errorf("读取请求事件快照：%w", err)
+	}
+	return id, nil
+}
+
+func eventPageFilter(source string, from, to, since time.Time, snapshot *int64) (string, []any) {
+	where, args := eventTimeFilter(source, from, to, since)
+	if snapshot != nil {
+		where += " AND r.id <= ?"
+		args = append(args, *snapshot)
+	}
+	return where, args
+}
+
 func eventTimeFilter(source string, from, to, since time.Time) (string, []any) {
 	if !from.IsZero() && from.After(since) {
 		since = from
@@ -177,7 +205,7 @@ func eventTimeFilter(source string, from, to, since time.Time) (string, []any) {
 }
 
 func (d *DB) requestEventFilterValues(query billing.RequestEventQuery, since time.Time) (*billing.RequestEventFilterValues, error) {
-	where, args := eventTimeFilter(requestEventSource, query.From, query.To, since)
+	where, args := eventPageFilter(requestEventSource, query.From, query.To, since, query.SnapshotID)
 	if scope := strings.TrimSpace(query.Scope); scope != "" {
 		where += " AND r.scope = ?"
 		args = append(args, scope)

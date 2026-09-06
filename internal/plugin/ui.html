@@ -3221,6 +3221,10 @@
       };
 
       // Views describe their API and markup; the controller owns paging and refresh state.
+      function nextEventPage(page, entries) {
+        return entries.length < page.total ? { offset: entries.length, snapshot_id: page.snapshot_id } : null;
+      }
+
       const PAGED_LIST_VIEWS = {
         events: {
           tab: "request-events",
@@ -3228,8 +3232,8 @@
           label: "请求事件",
           scrollers: ["request-events-body", "account-request-events-body"],
           timed: true,
-          path: (account, range, cursor) => requestEventPath(cursor || 0, LIST_PAGE_SIZE, account, range),
-          next: (page, entries) => (entries.length < Number(page.total || 0) ? entries.length : null),
+          path: (account, range, cursor) => requestEventPath(cursor, LIST_PAGE_SIZE, account, range),
+          next: nextEventPage,
           render: renderRequestEvents,
         },
         errors: {
@@ -3240,10 +3244,10 @@
           timed: true,
           path: (account, range, cursor) => {
             const params = errorParams(account, range);
-            params.set("offset", String(cursor || 0));
+            for (const [key, value] of Object.entries(cursor || {})) params.set(key, value);
             return "/errors?" + params;
           },
-          next: (page, entries) => (entries.length < Number(page.total || 0) ? entries.length : null),
+          next: nextEventPage,
           render: renderErrors,
         },
         logs: {
@@ -7448,9 +7452,9 @@
         );
       }
 
-      function requestEventPath(offset, limit, account, range = selectedRange(account)) {
+      function requestEventPath(cursor, limit, account, range = selectedRange(account)) {
         const params = new URLSearchParams({
-          offset: String(offset),
+          ...cursor,
           limit: String(limit || LIST_PAGE_SIZE),
         });
         const prefix = account ? "account-request-event" : "request-event";
@@ -8044,7 +8048,7 @@
         const range = selectedRange(account);
         range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
         const params = new URLSearchParams(
-          requestEventPath(0, REQUEST_EVENT_EXPORT_BATCH_SIZE, account, range).split("?")[1],
+          requestEventPath(null, REQUEST_EVENT_EXPORT_BATCH_SIZE, account, range).split("?")[1],
         );
         try {
           const entries = [];
@@ -8053,6 +8057,7 @@
             params.set("offset", String(entries.length));
             const path = "/events?" + params;
             const page = account ? await accountAPI(path) : await plugin("GET", path);
+            params.set("snapshot_id", page.snapshot_id);
             const incoming = page.entries || [];
             total = Number(page.total || 0);
             entries.push(...incoming);

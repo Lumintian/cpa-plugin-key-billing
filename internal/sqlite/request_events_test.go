@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -55,7 +56,8 @@ func mustQueryRequestEvents(t *testing.T, database *DB, query billing.RequestEve
 }
 
 func TestRequestEventsPageOverTheWholeMatch(t *testing.T) {
-	database, _ := requestEventDatabase(t)
+	database, state := requestEventDatabase(t)
+	original := mustQueryRequestEvents(t, database, billing.RequestEventQuery{})
 
 	view := mustQueryRequestEvents(t, database, billing.RequestEventQuery{Limit: 2})
 	if len(view.Entries) != 2 || view.Total != 6 || !view.Entries[0].At.Equal(eventStart.Add(5*time.Minute)) {
@@ -64,11 +66,23 @@ func TestRequestEventsPageOverTheWholeMatch(t *testing.T) {
 	if view.Statuses != (billing.RequestEventStatusCounts{All: 6, Normal: 4, Failed: 2}) {
 		t.Fatalf("statuses = %+v", view.Statuses)
 	}
-	if view = mustQueryRequestEvents(t, database, billing.RequestEventQuery{Offset: 4, Limit: 2}); len(view.Entries) != 2 ||
+	snapshot := view.SnapshotID
+	late := requestEvent("scope-a", eventStart.Add(5*time.Minute+30*time.Second))
+	late.BillingModel = "late-model"
+	mustSave(t, database, state, billing.Changes{NormalRequestEvents: []billing.RequestEvent{late}})
+	page := mustQueryRequestEvents(t, database, billing.RequestEventQuery{SnapshotID: &snapshot, Offset: 2, IncludeFilters: true})
+	if !reflect.DeepEqual(page.Entries, original.Entries[2:]) || page.Statuses != original.Statuses ||
+		page.Total != original.Total || len(page.Filters.Models) != 1 {
+		t.Fatalf("late completion changed the snapshot: %+v", page)
+	}
+	if fresh := mustQueryRequestEvents(t, database, billing.RequestEventQuery{}); fresh.Total != 7 || fresh.Entries[0].BillingModel != "late-model" {
+		t.Fatalf("refresh did not include the late completion: %+v", fresh)
+	}
+	if view = mustQueryRequestEvents(t, database, billing.RequestEventQuery{SnapshotID: &snapshot, Offset: 4, Limit: 2}); len(view.Entries) != 2 ||
 		!view.Entries[1].At.Equal(eventStart) {
 		t.Fatalf("last page = %+v, want the two oldest entries", view.Entries)
 	}
-	if view = mustQueryRequestEvents(t, database, billing.RequestEventQuery{Offset: 20, Limit: 2}); len(view.Entries) != 0 || view.Total != 6 {
+	if view = mustQueryRequestEvents(t, database, billing.RequestEventQuery{SnapshotID: &snapshot, Offset: 20, Limit: 2}); len(view.Entries) != 0 || view.Total != 6 {
 		t.Fatalf("view = %+v, want an empty page over the counted events", view)
 	}
 }

@@ -695,7 +695,11 @@ def make_request_events():
 
 REQUEST_EVENTS = make_request_events()
 
+def event_snapshot(query):
+    return int(query.get("snapshot_id", [str(max((int(entry["id"]) for entry in REQUEST_EVENTS), default=0))])[0])
+
 def request_event_view(query, scope=""):
+    snapshot = event_snapshot(query)
     selected_key = "" if scope else query.get("api_key", [""])[0]
     selected_model = query.get("model", [""])[0]
     selected_source = query.get("source", [""])[0]
@@ -704,7 +708,9 @@ def request_event_view(query, scope=""):
     selected_failed = query.get("failed", [""])[0]
     offset = max(0, int(query.get("offset", ["0"])[0] or 0))
     limit = max(0, int(query.get("limit", ["0"])[0] or 0))
-    time_matched = filter_event_time([entry for entry in REQUEST_EVENTS if not scope or entry["scope"] == scope], query)
+    time_matched = filter_event_time([entry for entry in REQUEST_EVENTS
+                                     if int(entry["id"]) <= snapshot and (not scope or entry["scope"] == scope)], query)
+    time_matched.sort(key=lambda entry: (entry["at"], int(entry["id"])), reverse=True)
     filter_options = {
         "models": sorted({entry.get("billing_model") or entry.get("upstream_model", "")
                           for entry in time_matched} - {""}, key=str.lower),
@@ -735,7 +741,7 @@ def request_event_view(query, scope=""):
     if scope:
         page = [{key: value for key, value in entry.items()
                  if key not in {"scope", "auth_index", "preview", "label"}} for entry in page]
-    result = {"entries": page, "total": len(matched), "offset": offset, "status_counts": counts}
+    result = {"entries": page, "total": len(matched), "snapshot_id": str(snapshot), "status_counts": counts}
     if offset == 0:
         result["filter_options"] = filter_options
     return result
@@ -908,8 +914,10 @@ PLUGIN_LOGS = [
 
 
 def error_view(query, scope=""):
-    rows = filter_event_time([entry for entry in ERRORS if not scope or entry["scope"] == scope], query)
-    rows.sort(key=lambda entry: entry["at"], reverse=True)
+    snapshot = event_snapshot(query)
+    rows = filter_event_time([entry for entry in ERRORS
+                             if int(entry["id"]) <= snapshot and (not scope or entry["scope"] == scope)], query)
+    rows.sort(key=lambda entry: (entry["at"], int(entry["id"])), reverse=True)
     selected = {
         "api_key": "" if scope else query.get("api_key", [""])[0],
         "model": query.get("model", [""])[0],
@@ -949,7 +957,7 @@ def error_view(query, scope=""):
     if scope:
         page = [{key: value for key, value in entry.items()
                  if key not in {"scope", "preview", "label", "auth_index"}} for entry in page]
-    result = {"entries": page, "total": len(filtered), "error_type_counts": counts}
+    result = {"entries": page, "total": len(filtered), "snapshot_id": str(snapshot), "error_type_counts": counts}
     if offset == 0:
         result["filter_options"] = {
             "models": sorted({entry["billing_model"] for entry in rows}),

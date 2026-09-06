@@ -287,6 +287,7 @@ func TestRequestEventQueryReachesTheStore(t *testing.T) {
 
 	for _, query := range []url.Values{
 		{"failed": {"unknown"}}, {"offset": {"-1"}}, {"limit": {"0"}},
+		{"snapshot_id": {"-1"}}, {"snapshot_id": {"9223372036854775808"}},
 		{"limit": {"1001"}}, {"limit": {"one page"}}, {"from": {"yesterday"}},
 		{"from": {"2026-09-01T02:00:00Z"}, "to": {"2026-09-01T01:00:00Z"}},
 	} {

@@ -69,6 +69,33 @@ func TestEveryFailedRequestHasAnErrorEventEvenWithoutDetails(t *testing.T) {
 	}
 }
 
+func TestRequestErrorsPaginationExcludesLateCompletions(t *testing.T) {
+	database, state := requestEventDatabase(t)
+	query := billing.RequestErrorQuery{Scope: "scope-b", Limit: 1, To: eventStart.Add(time.Hour)}
+	first, err := database.RequestErrors(query, eventStart.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustSave(t, database, state, billing.Changes{RequestErrorEvents: []billing.RequestErrorEvent{{
+		Event: requestEvent("scope-b", eventStart.Add(5*time.Minute+30*time.Second)),
+		Error: billing.RequestError{ErrorType: "late-error"},
+	}}})
+	query.SnapshotID, query.Offset, query.IncludeFilters = &first.SnapshotID, 1, true
+	second, err := database.RequestErrors(query, eventStart.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Total != 2 || len(second.Entries) != 1 || !second.Entries[0].At.Equal(eventStart.Add(4*time.Minute)) ||
+		!maps.Equal(second.ErrorTypeCounts, first.ErrorTypeCounts) || len(second.Filters.ErrorTypes) != 0 {
+		t.Fatalf("late completion changed the snapshot: %+v", second)
+	}
+	query.SnapshotID, query.Offset = nil, 0
+	fresh, err := database.RequestErrors(query, eventStart.Add(-time.Hour))
+	if err != nil || fresh.Total != 3 || fresh.Entries[0].ErrorType != "late-error" {
+		t.Fatalf("refresh = %+v, error = %v", fresh, err)
+	}
+}
+
 func TestRequestErrorTypeCountsIgnoreTypeAndPagination(t *testing.T) {
 	database := requestErrorDatabase(t)
 	mustSave(t, database, billing.NewState(), billing.Changes{RequestErrorEvents: []billing.RequestErrorEvent{

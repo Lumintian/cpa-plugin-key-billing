@@ -54,6 +54,7 @@ type RequestEventQuery struct {
 	To             time.Time
 	Timezone       *time.Location
 	IncludeFilters bool
+	SnapshotID     *int64
 	Offset         int
 	// Limit is the page size; a non-positive limit returns every match.
 	Limit int
@@ -61,10 +62,11 @@ type RequestEventQuery struct {
 
 // RequestEventView is one page plus totals that cannot be inferred from it.
 type RequestEventView struct {
-	Entries  []RequestEventRow         `json:"entries"`
-	Total    int                       `json:"total"`
-	Statuses RequestEventStatusCounts  `json:"status_counts"`
-	Filters  *RequestEventFilterValues `json:"filter_options,omitempty"`
+	SnapshotID int64                     `json:"snapshot_id,string"`
+	Entries    []RequestEventRow         `json:"entries"`
+	Total      int                       `json:"total"`
+	Statuses   RequestEventStatusCounts  `json:"status_counts"`
+	Filters    *RequestEventFilterValues `json:"filter_options,omitempty"`
 }
 
 type RequestEventFilterValues struct {

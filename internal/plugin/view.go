@@ -74,7 +74,7 @@ func (a *App) listRequestEvents(req ManagementRequest, access viewAccess) Manage
 	default:
 		return viewJSONError(access, http.StatusBadRequest, "invalid", "failed 必须是 true 或 false")
 	}
-	if errQuery := requestPageParams(req.Query, &query.Offset, &query.Limit, &query.From, &query.To); errQuery != nil {
+	if errQuery := requestPageParams(req.Query, &query.Offset, &query.Limit, &query.From, &query.To, &query.SnapshotID); errQuery != nil {
 		return viewErrorResponse(access, errQuery)
 	}
 	query.IncludeFilters = query.Offset == 0
@@ -114,7 +114,7 @@ func (a *App) listRequestErrors(req ManagementRequest, access viewAccess) Manage
 	if !access.APIKey {
 		query.KeyScope = strings.TrimSpace(req.Query.Get("api_key"))
 	}
-	if err := requestPageParams(req.Query, &query.Offset, &query.Limit, &query.From, &query.To); err != nil {
+	if err := requestPageParams(req.Query, &query.Offset, &query.Limit, &query.From, &query.To, &query.SnapshotID); err != nil {
 		return viewErrorResponse(access, err)
 	}
 	query.IncludeFilters = query.Offset == 0
@@ -169,7 +169,14 @@ func (a *App) analysis(req ManagementRequest, access viewAccess) ManagementRespo
 	return viewJSON(access, http.StatusOK, view)
 }
 
-func requestPageParams(values url.Values, offset, limit *int, from, to *time.Time) error {
+func requestPageParams(values url.Values, offset, limit *int, from, to *time.Time, snapshot **int64) error {
+	if raw := strings.TrimSpace(values.Get("snapshot_id")); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id < 0 {
+			return &billing.Error{Kind: billing.KindInvalid, Msg: "snapshot_id 必须是非负整数"}
+		}
+		*snapshot = &id
+	}
 	if errOffset := countParam(values, "offset", offset); errOffset != nil {
 		return errOffset
 	}
