@@ -1625,7 +1625,7 @@
       #price-filter { max-width: 220px; }
       .section-actions { min-width: 0; }
       .event-list-card {
-        height: clamp(560px, calc(100dvh - 32px), 840px);
+        height: calc(100dvh - var(--event-list-top) - 16px);
         min-height: 0;
         border-radius: 12px;
         display: flex;
@@ -1633,7 +1633,7 @@
         margin-bottom: 0;
       }
       .event-list-card.plugin-log-card { height: auto; }
-      .plugin-log-card .plugin-log-region { flex: none; height: clamp(180px, calc(100dvh - 240px), 420px); }
+      .plugin-log-card .plugin-log-region { flex: none; height: clamp(240px, calc(100dvh - 240px), 560px); }
       .event-list-title-row { margin-bottom: 9px; }
       .time-range-control { position: relative; min-width: 0; }
       .time-range-trigger {
@@ -1863,8 +1863,6 @@
         white-space: pre-wrap;
         overflow-wrap: anywhere;
       }
-      .request-event-status { max-width: 118px; }
-      .request-event-status .tag { display: inline-block; margin: 0 4px 2px 0; }
       .event-list-region { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
       .event-list-footer {
         display: flex;
@@ -1901,8 +1899,9 @@
       .cost-tooltip {
         position: fixed;
         z-index: 1000;
-        width: min(430px, calc(100vw - 24px));
-        padding: 12px 14px;
+        width: max-content;
+        max-width: calc(100vw - 24px);
+        padding: 10px 12px;
         border: 1px solid var(--border-color);
         border-radius: 10px;
         background: var(--floating-surface);
@@ -1918,17 +1917,16 @@
       .cost-tooltip.show { opacity: 1; visibility: visible; }
       .cost-tooltip-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
       .cost-tooltip-summary {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 3px 12px;
-        margin-bottom: 9px;
+        display: flex;
+        gap: 10px;
+        margin-bottom: 8px;
         color: var(--text-secondary);
       }
-      .cost-tooltip-summary b { color: var(--text-primary); font-weight: 500; text-align: right; }
+      .cost-tooltip-summary b { color: var(--text-primary); font-weight: 500; }
       .cost-tooltip-grid {
         display: grid;
-        grid-template-columns: minmax(90px, 1fr) auto auto;
-        gap: 5px 14px;
+        grid-template-columns: auto auto auto;
+        gap: 4px 10px;
         align-items: center;
         font-variant-numeric: tabular-nums;
       }
@@ -1981,7 +1979,7 @@
           min-width: 0;
         }
         .auth-file-grid { grid-template-columns: 1fr; }
-        .event-list-card { height: clamp(560px, calc(100dvh - 20px), 760px); }
+        .event-list-card { height: calc(100dvh - var(--event-list-top) - 12px); }
         .section-actions.event-card-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .section-actions.event-card-actions .native-select,
         .section-actions.event-card-actions select {
@@ -2264,9 +2262,8 @@
         .price-reference-prices { text-align: left; }
       }
       @media (max-width: 360px) {
-        .cost-tooltip { width: calc(100vw - 16px); padding: 10px; font-size: 11px; }
-        .cost-tooltip-summary { gap: 3px 8px; }
-        .cost-tooltip-grid { grid-template-columns: minmax(62px, 1fr) auto auto; gap: 4px 6px; font-size: 11px; }
+        .cost-tooltip { max-width: calc(100vw - 16px); padding: 10px; font-size: 11px; }
+        .cost-tooltip-grid { gap: 4px 6px; }
       }
       #keys-body tr.key-deleted {
         background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
@@ -2451,7 +2448,7 @@
                 <div id="shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
               </div>
             </div>
-            <button id="request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
+            <button id="events-export" class="labeled-icon-button hidden" type="button">导出</button>
           </div>
           <button type="button" class="icon-action tab-refresh" data-page-action="refresh" aria-label="刷新"></button>
         </div>
@@ -2584,9 +2581,9 @@
                   <select id="request-event-source" aria-label="按来源筛选"> <option value="">全部来源</option> </select>
                 </span>
                 <span class="native-select">
-                  <select id="request-event-status" aria-label="按状态筛选">
-                    <option value="">全部状态</option>
-                    <option value="false">正常</option>
+                  <select id="request-event-status" aria-label="按结果筛选">
+                    <option value="">全部结果</option>
+                    <option value="false">成功</option>
                     <option value="true">失败</option>
                   </select>
                 </span>
@@ -2719,7 +2716,7 @@
                     aria-label="选择时间范围"></div>
                 </div>
               </div>
-              <button id="account-request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
+              <button id="account-events-export" class="labeled-icon-button hidden" type="button">导出</button>
             </div>
             <button type="button" class="icon-action tab-refresh" data-page-action="refresh" aria-label="刷新"></button>
           </div>
@@ -2765,9 +2762,9 @@
                     </select>
                   </span>
                   <span class="native-select">
-                    <select id="account-request-event-status" aria-label="按状态筛选">
-                      <option value="">全部状态</option>
-                      <option value="false">正常</option>
+                    <select id="account-request-event-status" aria-label="按结果筛选">
+                      <option value="">全部结果</option>
+                      <option value="false">成功</option>
                       <option value="true">失败</option>
                     </select>
                   </span>
@@ -3131,61 +3128,43 @@
         [1, "秒"],
       ];
       const LIST_PAGE_SIZE = 50;
-      const REQUEST_EVENT_EXPORT_BATCH_SIZE = 1000;
+      const EVENT_EXPORT_BATCH_SIZE = 1000;
       const EVENT_LOAD_MORE_THRESHOLD_PX = 320;
-      const REQUEST_EVENT_CSV_COLUMNS = [
-        "at",
-        "scope",
-        "auth_index",
-        "executor_type",
-        "reasoning_effort",
-        "service_tier",
-        "upstream_model",
-        "billing_model",
-        "failed",
-        "latency_ms",
-        "ttft_ms",
-        "accounting_quality",
-        "price_source",
-        "reasoning_tokens",
-        "total_usd",
-        "uncached_input_usd",
-        "cache_read_usd",
-        "cache_write_usd",
-        "output_usd",
-        "uncached_input_tokens",
-        "cache_read_tokens",
-        "cache_write_tokens",
-        "billed_output_tokens",
-        "tiered",
-        "long_context",
-        "threshold_input_tokens",
-        "applied_input_per_1m",
-        "applied_output_per_1m",
-        "applied_cache_read_per_1m",
-        "applied_cache_write_per_1m",
-        "preview",
-        "label",
-        "source",
-      ];
-      const ACCOUNT_REQUEST_EVENT_CSV_COLUMNS = [
-        "at",
-        "billing_model",
-        "executor_type",
-        "source",
-        "reasoning_effort",
-        "service_tier",
-        "failed",
-        "latency_ms",
-        "ttft_ms",
-        "accounting_quality",
-        "total_usd",
-        "uncached_input_tokens",
-        "cache_read_tokens",
-        "cache_write_tokens",
-        "billed_output_tokens",
-        "reasoning_tokens",
-      ];
+      const EVENT_CSV_COLUMNS = {
+        events: [
+          "at",
+          "preview",
+          "label",
+          "billing_model",
+          "upstream_model",
+          "executor_type",
+          "source",
+          "reasoning_effort",
+          "service_tier",
+          "failed",
+          "ttft_ms",
+          "latency_ms",
+          "output_tps",
+          "input_tokens",
+          "billed_output_tokens",
+          "reasoning_tokens",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "total_usd",
+        ],
+        errors: [
+          "at",
+          "preview",
+          "label",
+          "billing_model",
+          "upstream_model",
+          "source",
+          "status_code",
+          "error_type",
+          "reason",
+          "body",
+        ],
+      };
       const REQUEST_EVENT_FILTER_IDS = {
         admin: ["request-event-model", "request-event-source", "request-event-status"],
         account: ["account-request-event-model", "account-request-event-source", "account-request-event-status"],
@@ -3231,7 +3210,6 @@
         adminKeySync: emptyLoadState(CONFIG_CACHE_MS),
       };
 
-      // Views describe their API and markup; the controller owns paging and refresh state.
       function nextEventPage(page, entries) {
         return entries.length < page.total ? { offset: entries.length, snapshot_id: page.snapshot_id } : null;
       }
@@ -3243,7 +3221,7 @@
           label: "请求事件",
           scrollers: ["request-events-body", "account-request-events-body"],
           timed: true,
-          path: (account, range, cursor) => requestEventPath(cursor, LIST_PAGE_SIZE, account, range),
+          path: requestEventPath,
           next: nextEventPage,
           render: renderRequestEvents,
         },
@@ -3253,11 +3231,7 @@
           label: "错误事件",
           scrollers: ["errors-body", "account-errors"],
           timed: true,
-          path: (account, range, cursor) => {
-            const params = errorParams(account, range);
-            for (const [key, value] of Object.entries(cursor || {})) params.set(key, value);
-            return "/errors?" + params;
-          },
+          path: errorEventPath,
           next: nextEventPage,
           render: renderErrors,
         },
@@ -3435,7 +3409,6 @@
         return pagedLists[account ? "account" : "admin"][kind];
       }
 
-      let requestEventExporting = false;
       let sharedTimeRanges = { admin: { mode: "30d" }, account: { mode: "30d" } };
 
       function viewPreferenceKey(role, name) {
@@ -3692,17 +3665,10 @@
         return (milliseconds / 1000).toFixed(2) + " s";
       }
       function outputTPS(cost, latencyMS, measured) {
-        const totalLatency = Number(latencyMS || 0);
-        const totalOutputTokens = Number(cost.billed_output_tokens || 0);
-        if (
-          !measured ||
-          !Number.isFinite(totalLatency) ||
-          totalLatency <= 0 ||
-          !Number.isFinite(totalOutputTokens) ||
-          totalOutputTokens < 0
-        )
-          return "—";
-        return ((totalOutputTokens * 1000) / totalLatency).toFixed(1) + " t/s";
+        return measured && latencyMS > 0 ? (cost.billed_output_tokens * 1000) / latencyMS : null;
+      }
+      function requestInputTokens(cost) {
+        return cost.uncached_input_tokens + cost.cache_read_tokens + cost.cache_write_tokens;
       }
       function cacheReadRate(cacheRead, totalInput) {
         const input = Number(totalInput || 0);
@@ -4614,16 +4580,13 @@
         );
       }
 
-      function errorParams(account, range = selectedRange(account)) {
+      function errorEventPath(account, range, cursor) {
         const prefix = account ? "account-" : "";
-        const params = new URLSearchParams({ ...range, limit: String(LIST_PAGE_SIZE) });
-        const fields = ["model", "source"];
+        const params = new URLSearchParams({ ...range, ...cursor, limit: String(LIST_PAGE_SIZE) });
         if (!account && $("analysis-key").value) params.set("api_key", $("analysis-key").value);
-        for (const field of fields) {
+        for (const field of ["model", "source"]) {
           const value = $(prefix + "error-" + field).value;
-          if (value) {
-            params.set(field, value);
-          }
+          if (value) params.set(field, value);
         }
         const typeChoice = $(prefix + "error-type").value;
         if (typeChoice) {
@@ -4631,7 +4594,7 @@
           if (errorType) params.set("error_type", errorType);
           else params.set("error_type_empty", "true");
         }
-        return params;
+        return "/errors?" + params;
       }
 
       function activeAdminTab() {
@@ -4659,6 +4622,9 @@
           if (hasControls && (tabBar.scrollWidth > tabBar.clientWidth + 1 || actionsOverflow)) {
             row.classList.remove("controls-inline");
           }
+          const contentTop =
+            row.getBoundingClientRect().bottom + scrollY + parseFloat(getComputedStyle(row).marginBottom);
+          row.parentElement.style.setProperty("--event-list-top", contentTop + "px");
           updateTabScrollHint(tabBar);
         }
       }
@@ -4970,7 +4936,7 @@
           "hidden",
           !["analysis", "request-events", "errors"].includes(accountTab),
         );
-        $("account-request-events-export").classList.toggle("hidden", accountTab !== "request-events");
+        $("account-events-export").classList.toggle("hidden", !["request-events", "errors"].includes(accountTab));
         if (!["analysis", "request-events", "errors"].includes(accountTab)) {
           closeSharedTimePopover(true);
         }
@@ -7709,33 +7675,21 @@
         return cost.long_context ? "长上下文 >" + threshold : "标准上下文 ≤" + threshold;
       }
 
-      function showCostTooltip(anchor, cost, reasoningTokens) {
+      function showCostTooltip(anchor, cost, hasCacheWrite) {
         const tooltip = $("cost-tooltip");
-        const input =
-          Number(cost.uncached_input_tokens || 0) +
-          Number(cost.cache_read_tokens || 0) +
-          Number(cost.cache_write_tokens || 0);
-        const output = Number(cost.billed_output_tokens || 0);
         const rows = [
           ["未缓存输入", cost.uncached_input_tokens, cost.applied_input_per_1m, cost.uncached_input_usd],
           ["缓存读", cost.cache_read_tokens, cost.applied_cache_read_per_1m, cost.cache_read_usd],
-          ["缓存写", cost.cache_write_tokens, cost.applied_cache_write_per_1m, cost.cache_write_usd],
-          ["输出", output, cost.applied_output_per_1m, cost.output_usd],
+          ...(hasCacheWrite
+            ? [["缓存写", cost.cache_write_tokens, cost.applied_cache_write_per_1m, cost.cache_write_usd]]
+            : []),
+          ["输出", cost.billed_output_tokens, cost.applied_output_per_1m, cost.output_usd],
         ];
         tooltip.replaceChildren(
-          el("div", { class: "cost-tooltip-title", text: "计价详情" }),
-          el(
-            "div",
-            { class: "cost-tooltip-summary" },
-            cost.tiered ? el("span", {}, "档位") : null,
-            cost.tiered ? el("b", {}, costTierText(cost)) : null,
-            el("span", {}, "输入 Token"),
-            el("b", {}, exactTokens(input)),
-            el("span", {}, "输出 Token"),
-            el("b", {}, exactTokens(output)),
-            reasoningTokens ? el("span", {}, "其中推理 Token") : null,
-            reasoningTokens ? el("b", {}, exactTokens(reasoningTokens)) : null,
-          ),
+          el("div", { class: "cost-tooltip-title", text: "成本明细" }),
+          ...(cost.tiered
+            ? [el("div", { class: "cost-tooltip-summary" }, el("span", {}, "档位"), el("b", {}, costTierText(cost)))]
+            : []),
           el(
             "div",
             { class: "cost-tooltip-grid" },
@@ -7777,8 +7731,8 @@
       }
 
       const REQUEST_EVENT_STATUS_OPTIONS = {
-        "": { label: "全部状态", count: "all" },
-        false: { label: "正常", count: "normal" },
+        "": { label: "全部结果", count: "all" },
+        false: { label: "成功", count: "normal" },
         true: { label: "失败", count: "failed" },
       };
 
@@ -7861,10 +7815,10 @@
         );
       }
 
-      function requestEventPath(cursor, limit, account, range = selectedRange(account)) {
+      function requestEventPath(account, range, cursor) {
         const params = new URLSearchParams({
           ...cursor,
-          limit: String(limit || LIST_PAGE_SIZE),
+          limit: String(LIST_PAGE_SIZE),
         });
         const prefix = account ? "account-request-event" : "request-event";
         const key = account ? "" : $("analysis-key").value;
@@ -8424,16 +8378,22 @@
 
       function csvCell(value) {
         if (value === undefined || value === null) return "";
-        let text = String(value);
-        if (/^[=+\-@]/.test(text)) text = "'" + text;
-        return '"' + text.replaceAll('"', '""') + '"';
+        return '"' + String(value).replaceAll('"', '""') + '"';
       }
 
-      function requestEventCSV(entries, account) {
-        const columns = account ? ACCOUNT_REQUEST_EVENT_CSV_COLUMNS : REQUEST_EVENT_CSV_COLUMNS;
+      function eventCSV(entries, kind, account) {
+        const columns = EVENT_CSV_COLUMNS[kind].filter((column) => !account || !["preview", "label"].includes(column));
         const lines = [columns.map(csvCell).join(",")];
         for (const entry of entries) {
-          const row = { ...entry, ...entry.cost };
+          const row =
+            kind === "events"
+              ? {
+                  ...entry,
+                  ...entry.cost,
+                  input_tokens: requestInputTokens(entry.cost),
+                  output_tps: outputTPS(entry.cost, entry.latency_ms, entry.accounting_quality === "complete"),
+                }
+              : entry;
           lines.push(columns.map((column) => csvCell(row[column])).join(","));
         }
         return "\ufeff" + lines.join("\r\n") + "\r\n";
@@ -8448,36 +8408,34 @@
         setTimeout(() => URL.revokeObjectURL(url), 0);
       }
 
-      async function exportRequestEvents(account) {
-        if (requestEventExporting) return;
-        requestEventExporting = true;
-        const button = $(account ? "account-request-events-export" : "request-events-export");
+      async function exportEvents(kind, account) {
+        const button = $(account ? "account-events-export" : "events-export");
+        if (button.disabled) return;
         button.disabled = true;
         setLabeledActionIcon(button, "download", "正在导出…");
         const range = selectedRange(account);
         range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
-        const params = new URLSearchParams(
-          requestEventPath(null, REQUEST_EVENT_EXPORT_BATCH_SIZE, account, range).split("?")[1],
-        );
+        const view = PAGED_LIST_VIEWS[kind];
+        const [endpoint, query] = view.path(account, range, null).split("?");
+        const params = new URLSearchParams(query);
+        params.set("limit", String(EVENT_EXPORT_BATCH_SIZE));
         try {
           const entries = [];
           let total = Infinity;
           while (entries.length < total) {
             params.set("offset", String(entries.length));
-            const path = "/events?" + params;
+            const path = endpoint + "?" + params;
             const page = account ? await accountAPI(path) : await plugin("GET", path);
             params.set("snapshot_id", page.snapshot_id);
-            const incoming = page.entries || [];
-            total = Number(page.total || 0);
-            entries.push(...incoming);
-            if (!incoming.length) break;
+            total = page.total;
+            entries.push(...page.entries);
+            if (!page.entries.length) break;
           }
           const stamp = new Date().toISOString().replaceAll(":", "-").slice(0, 19);
-          const name = account ? "cpa-key-billing-account-request-events-" : "cpa-key-billing-request-events-";
-          downloadCSV(name + stamp + ".csv", requestEventCSV(entries, account));
-          notify("已导出 " + int(entries.length) + " 条请求事件");
+          const name = "cpa-key-billing-" + (account ? "account-" : "") + view.tab + "-";
+          downloadCSV(name + stamp + ".csv", eventCSV(entries, kind, account));
+          notify("已导出 " + int(entries.length) + " 条" + view.label);
         } finally {
-          requestEventExporting = false;
           button.disabled = false;
           setLabeledActionIcon(button, "download", "导出");
         }
@@ -8499,32 +8457,16 @@
         populateRequestEventFilters(view.filter_options, account);
         labelRequestEventStatuses($(prefix + "-status"), view.status_counts);
         updateFilterClearButton($(account ? "account-request-events-filter-clear" : "request-events-filter-clear"));
-        const entries = view.entries || [];
-        const hasCacheWrite = entries.some((entry) => Number(entry.cost?.cache_write_tokens || 0) !== 0);
+        const entries = view.entries;
+        const hasCacheWrite = entries.some((entry) => entry.cost.cache_write_tokens !== 0);
         note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
         const renderRow = (entry) => {
-          const cost = entry.cost || {};
-          const statusMarks = [];
-          if (entry.failed) statusMarks.push(el("span", { class: "tag bad", text: "失败" }));
-          if (entry.accounting_quality && entry.accounting_quality !== "complete") {
-            statusMarks.push(
-              el("span", {
-                class: "tag warn",
-                text: entry.accounting_quality === "inconsistent" ? "Token 明细异常" : "Token 未分类",
-              }),
-            );
-          }
-          if (entry.price_source === "none" && entry.accounting_quality === "complete") {
-            statusMarks.push(el("span", { class: "tag warn", text: "未定价" }));
-          }
-          if (!statusMarks.length) statusMarks.push(el("span", { class: "tag ok", text: "正常" }));
-
-          const input =
-            (cost.uncached_input_tokens || 0) + (cost.cache_read_tokens || 0) + (cost.cache_write_tokens || 0);
-          const output = cost.billed_output_tokens || 0;
-          // Without an observed breakdown the counts are unknown, not zero, and a
-          // column of zeroes would read as "this request used nothing".
+          const cost = entry.cost;
+          const input = requestInputTokens(cost);
+          const output = cost.billed_output_tokens;
+          // Missing usage details mean unknown counts, not zero usage.
           const measured = entry.accounting_quality === "complete";
+          const tps = outputTPS(cost, entry.latency_ms, measured);
           const tokens = (value) => (measured ? exactTokens(value) : "—");
           const hasTTFT = Number(entry.ttft_ms || 0) > 0;
 
@@ -8559,11 +8501,15 @@
               el("div", { class: "request-event-cell-line mono" }, entry.reasoning_effort || "—"),
               el("div", { class: "request-event-cell-line muted" }, entry.service_tier || "—"),
             ),
-            el("td", { class: "request-event-status" }, statusMarks),
+            el(
+              "td",
+              {},
+              el("span", { class: "tag " + (entry.failed ? "bad" : "ok"), text: entry.failed ? "失败" : "成功" }),
+            ),
             el(
               "td",
               { class: "num" },
-              el("div", {}, outputTPS(cost, entry.latency_ms, measured)),
+              el("div", {}, tps === null ? "—" : tps.toFixed(1) + " t/s"),
               el(
                 "div",
                 { class: "muted small", title: hasTTFT ? "首字延迟 · 总延迟" : "总延迟" },
@@ -8598,10 +8544,10 @@
                       {
                         class: "cost-value",
                         tabindex: "0",
-                        "aria-label": "查看计价详情",
-                        onmouseenter: (event) => showCostTooltip(event.currentTarget, cost, entry.reasoning_tokens),
+                        "aria-label": "查看成本明细",
+                        onmouseenter: (event) => showCostTooltip(event.currentTarget, cost, hasCacheWrite),
                         onmouseleave: hideCostTooltip,
-                        onfocus: (event) => showCostTooltip(event.currentTarget, cost, entry.reasoning_tokens),
+                        onfocus: (event) => showCostTooltip(event.currentTarget, cost, hasCacheWrite),
                         onblur: hideCostTooltip,
                       },
                       usd(cost.total_usd),
@@ -8623,13 +8569,13 @@
             "模型",
             "执行器 / 来源",
             "推理 / 速度",
-            "状态",
+            "结果",
             { label: "TPS / 延迟", num: true },
             { label: "输入", num: true },
             { label: "缓存读", num: true },
             ...(hasCacheWrite ? [{ label: "缓存写", num: true }] : []),
             { label: "输出", num: true },
-            { label: "费用", num: true },
+            { label: "成本", num: true },
           ],
         });
         list.renderStatus();
@@ -9433,7 +9379,7 @@
           "hidden",
           !["analysis", "request-events", "errors"].includes(selected),
         );
-        $("request-events-export").classList.toggle("hidden", selected !== "request-events");
+        $("events-export").classList.toggle("hidden", !["request-events", "errors"].includes(selected));
         if (!["analysis", "request-events", "errors"].includes(selected)) {
           closeSharedTimePopover(false);
         }
@@ -9620,9 +9566,10 @@
           ["error-model", "error-source", "error-type"].map((id) => prefix + id),
           $(prefix + "errors-filter-clear"),
         );
-        const exportButton = $(account ? "account-request-events-export" : "request-events-export");
+        const exportButton = $(account ? "account-events-export" : "events-export");
         setLabeledActionIcon(exportButton, "download", "导出");
-        exportButton.onclick = () => guard(() => exportRequestEvents(account));
+        exportButton.onclick = () =>
+          guard(() => exportEvents(activeTab(account) === "errors" ? "errors" : "events", account));
         bindSharedTimeControls(account);
         updateSharedTimeControl(account);
       }
