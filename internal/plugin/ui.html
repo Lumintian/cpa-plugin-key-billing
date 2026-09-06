@@ -3082,8 +3082,6 @@
           errors: null,
           analysis: null,
           pluginLogs: null,
-          pluginLogCounts: {},
-          pluginLogsNext: 0,
           authFiles: null,
           authQuotas: new Map(),
           authQuotaLoading: new Set(),
@@ -3210,7 +3208,7 @@
         [60, "分钟"],
         [1, "秒"],
       ];
-      const REQUEST_EVENT_BATCH_SIZE = 50;
+      const LIST_PAGE_SIZE = 50;
       const REQUEST_EVENT_EXPORT_BATCH_SIZE = 1000;
       const EVENT_LOAD_MORE_THRESHOLD_PX = 320;
       const REQUEST_EVENT_CSV_COLUMNS = [
@@ -3280,19 +3278,6 @@
         return { promise: null, error: "", generation: 0 };
       }
 
-      function emptyRequestEventLoadState() {
-        return {
-          request: 0,
-          promise: null,
-          range: null,
-          loading: false,
-          loadingMore: false,
-          hasMore: false,
-          autoLoadMore: true,
-          error: "",
-        };
-      }
-
       const detailLoads = {
         adminAccess: emptyLoadState(),
         adminEventKeys: emptyLoadState(),
@@ -3301,14 +3286,187 @@
         accountPrices: emptyLoadState(),
         adminAnalysis: emptyLoadState(),
         accountAnalysis: emptyLoadState(),
-        adminErrors: emptyLoadState(),
-        accountErrors: emptyLoadState(),
-        adminPluginLogs: emptyLoadState(),
         adminAuthFiles: emptyLoadState(),
         accountAuthFiles: emptyLoadState(),
         adminInventory: emptyLoadState(),
       };
-      const requestEventLoads = { admin: emptyRequestEventLoadState(), account: emptyRequestEventLoadState() };
+
+      // Views describe their API and markup; the controller owns paging and refresh state.
+      const PAGED_LIST_VIEWS = {
+        events: {
+          tab: "request-events",
+          data: "requestEvents",
+          label: "请求事件",
+          scrollers: ["request-events-body", "account-request-events-body"],
+          timed: true,
+          path: (account, range, cursor) => requestEventPath(cursor || 0, LIST_PAGE_SIZE, account, range),
+          next: (page, entries) => entries.length < Number(page.total || 0) ? entries.length : null,
+          render: renderRequestEvents,
+        },
+        errors: {
+          tab: "errors",
+          data: "errors",
+          label: "错误事件",
+          scrollers: ["errors-body", "account-errors"],
+          timed: true,
+          path: (account, range, cursor) => {
+            const params = errorParams(account, range);
+            params.set("offset", String(cursor || 0));
+            return "/errors?" + params;
+          },
+          next: (page, entries) => entries.length < Number(page.total || 0) ? entries.length : null,
+          render: renderErrors,
+        },
+        logs: {
+          tab: "settings",
+          data: "pluginLogs",
+          label: "插件日志",
+          scrollers: ["plugin-logs-body"],
+          path: (_account, _range, cursor) => {
+            const params = new URLSearchParams({ level: $("plugin-log-level").value, limit: String(LIST_PAGE_SIZE) });
+            if (cursor) params.set("before_id", String(cursor));
+            return "/plugin-logs?" + params;
+          },
+          next: (page) => Number(page.next_before_id) || null,
+          idle: () => expandedPluginLogIDs.size === 0,
+          render: renderPluginLogs,
+        },
+      };
+
+      function createPagedList(kind, account) {
+        const view = PAGED_LIST_VIEWS[kind];
+        const list = {
+          ...emptyLoadState(),
+          pending: "",
+          errorAction: "",
+          range: null,
+          cursor: null,
+          pages: 0,
+          get data() {
+            return (account ? accountState : state)[view.data];
+          },
+          set data(value) {
+            (account ? accountState : state)[view.data] = value;
+          },
+          get scroller() {
+            return $(view.scrollers[account ? 1 : 0]);
+          },
+          active() {
+            return currentRole === (account ? "account" : "admin") && activeTab(account) === view.tab;
+          },
+          canRefresh() {
+            return list.active() && list.pages <= 1 && list.scroller.scrollTop <= 0 && (view.idle?.() ?? true);
+          },
+          reset() {
+            resetLoadState(list);
+            Object.assign(list, { pending: "", errorAction: "", range: null, cursor: null, pages: 0 });
+            list.data = null;
+            list.scroller.scrollTop = 0;
+            list.scroller.scrollLeft = 0;
+          },
+          render() {
+            if (list.active()) view.render(account);
+          },
+          load(action = "replace", selected = selectedRange(account)) {
+            const append = action === "append";
+            const background = action === "background";
+            if (append && (list.cursor === null || list.promise)) return list.promise || Promise.resolve();
+            if (background && (list.promise || !list.canRefresh())) return list.promise || Promise.resolve();
+            const generation = ++list.generation;
+            const previous = list.data;
+            const range = append ? list.range : view.timed ? { ...selected } : null;
+            if (!append && range) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
+            const path = view.path(account, range, append ? list.cursor : null);
+            list.pending = action;
+            list.error = "";
+            list.errorAction = "";
+            const task = Promise.resolve()
+              .then(() => {
+                if (generation !== list.generation) throw new StaleRequestError();
+                return account ? accountAPI(path) : plugin("GET", path);
+              })
+              .then((page) => {
+                if (generation !== list.generation || (background && !list.canRefresh())) return;
+                const incoming = page.entries || [];
+                const entries = append ? (previous?.entries || []).concat(incoming) : incoming;
+                // Commit rows, cursor and snapshot together. A discarded refresh must
+                // leave the existing list fully pageable, including its time boundary.
+                list.data = {
+                  ...page,
+                  entries,
+                  filter_options: page.filter_options || (append ? previous?.filter_options : undefined),
+                };
+                list.range = range;
+                list.cursor = incoming.length ? view.next(page, entries) : null;
+                list.pages = append ? list.pages + 1 : 1;
+                if (!append) list.scroller.scrollTop = 0;
+              })
+              .catch((error) => {
+                if (generation !== list.generation || error instanceof StaleRequestError) return;
+                list.error = error.message || String(error);
+                list.errorAction = action;
+                throw error;
+              })
+              .finally(() => {
+                if (generation !== list.generation) return;
+                list.promise = null;
+                list.pending = "";
+                list.render();
+              });
+            list.promise = task;
+            if (!previous || append) list.render();
+            return task;
+          },
+          maybeLoadMore() {
+            if (!list.active() || list.promise || list.cursor === null || list.errorAction === "append") return;
+            if (isNearScrollEnd(list.scroller)) guard(() => list.load("append"));
+          },
+          renderEmpty() {
+            if (list.data) return false;
+            const message = list.promise ? "加载中…" : list.error ? view.label + "加载失败" : "暂无" + view.label;
+            const retry = list.error && !list.promise
+              ? el("button", { class: "retry-button", onclick: () => guard(() => list.load()) }, "重试") : null;
+            replaceContent(list.scroller, el("div", { class: "empty" }, el("div", { text: message }), retry));
+            return true;
+          },
+          renderContent(content) {
+            const scroller = list.scroller;
+            const top = scroller.scrollTop;
+            const left = scroller.scrollLeft;
+            if (list.pending === "append") {
+              content.push(el("div", { class: "event-load-state", role: "status", text: "正在加载更多…" }));
+            } else if (list.errorAction && !list.promise) {
+              const action = list.errorAction === "append" ? "append" : "replace";
+              content.push(
+                el(
+                  "div",
+                  { class: "event-load-state" },
+                  el("button", { onclick: () => guard(() => list.load(action)) }, "重试加载"),
+                ),
+              );
+            }
+            replaceContent(scroller, ...content);
+            scroller.scrollTop = top;
+            scroller.scrollLeft = left;
+            requestAnimationFrame(() => list.maybeLoadMore());
+          },
+        };
+        return list;
+      }
+
+      const pagedLists = {
+        admin: {
+          events: createPagedList("events", false),
+          errors: createPagedList("errors", false),
+          logs: createPagedList("logs", false),
+        },
+        account: { events: createPagedList("events", true), errors: createPagedList("errors", true) },
+      };
+
+      function pagedList(kind, account = false) {
+        return pagedLists[account ? "account" : "admin"][kind];
+      }
+
       let requestEventExporting = false;
       let sharedTimeRanges = { admin: { mode: "30d" }, account: { mode: "30d" } };
 
@@ -3437,19 +3595,17 @@
         if (role === "account") accountState = emptyAccountState();
         else state = emptyAdminState();
         for (const name of role === "account"
-          ? ["accountAccess", "accountPrices", "accountAnalysis", "accountErrors", "accountAuthFiles"]
+          ? ["accountAccess", "accountPrices", "accountAnalysis", "accountAuthFiles"]
           : [
               "adminAccess",
               "adminEventKeys",
               "adminPrices",
               "adminAnalysis",
-              "adminErrors",
-              "adminPluginLogs",
               "adminAuthFiles",
               "adminInventory",
             ])
           resetLoadState(detailLoads[name]);
-        resetRequestEventLoad(account);
+        for (const list of Object.values(pagedLists[role])) list.reset();
         resetRoleControls(role);
       }
 
@@ -4141,7 +4297,7 @@
 
       function errorParams(account, range = selectedRange(account)) {
         const prefix = account ? "account-" : "";
-        const params = new URLSearchParams({ ...range, limit: "200" });
+        const params = new URLSearchParams({ ...range, limit: String(LIST_PAGE_SIZE) });
         const fields = ["model", "source"];
         if (!account && $("analysis-key").value) params.set("api_key", $("analysis-key").value);
         for (const field of fields) {
@@ -4159,24 +4315,6 @@
         return params;
       }
 
-      function loadErrors(account, background = false, range = selectedRange(account)) {
-        const load = account ? detailLoads.accountErrors : detailLoads.adminErrors;
-        return loadResource(
-          load,
-          () => {
-            const path = "/errors?" + errorParams(account, range);
-            return account ? accountAPI(path) : plugin("GET", path);
-          },
-          (errors) => {
-            if (!background || canBackgroundRefreshErrors(account)) {
-              if (account) accountState.errors = errors;
-              else state.errors = errors;
-            }
-          },
-          () =>
-            currentRole === (account ? "account" : "admin") && activeTab(account) === "errors" && renderErrors(account),
-        );
-      }
 
       function activeAdminTab() {
         return document.querySelector(".tabs button[data-tab].active")?.dataset.tab || "keys";
@@ -4270,13 +4408,10 @@
             access: "Access",
             prices: "Prices",
             analysis: "Analysis",
-            errors: "Errors",
             authFiles: "AuthFiles",
-            logs: "PluginLogs",
           };
           for (const resource of VIEW_DEPENDENCIES[role][tab]) {
-            if (resource === "events") resetRequestEventLoad(account);
-            else resetLoadState(detailLoads[role + names[resource]]);
+            if (!pagedLists[role][resource]) resetLoadState(detailLoads[role + names[resource]]);
           }
         }
         const range = selectedRange(account);
@@ -4315,12 +4450,12 @@
           analysis: () => (background ? undefined : loadAnalysis(account, range)),
           events: () =>
             !background || canBackgroundRefreshRequestEvents(account)
-              ? loadRequestEvents(false, account, { background, range })
+              ? pagedList("events", account).load(background ? "background" : "replace", range)
               : undefined,
           errors: () =>
-            !background || canBackgroundRefreshErrors(account) ? loadErrors(account, background, range) : undefined,
+            pagedList("errors", account).load(background ? "background" : "replace", range),
           authFiles: () => loadAuthFiles(account),
-          logs: () => (!background || canBackgroundRefreshPluginLogs() ? loadPluginLogs({ background }) : undefined),
+          logs: () => pagedList("logs").load(background ? "background" : "replace"),
         };
         const results = await Promise.allSettled(VIEW_DEPENDENCIES[role][tab].map((resource) => loaders[resource]()));
         if (generation !== sessionGeneration) return;
@@ -5260,23 +5395,12 @@
 
       function renderErrors(account) {
         const owner = account ? accountState : state;
-        const target = $(account ? "account-errors" : "errors-body");
         const note = $(account ? "account-error-note" : "error-note");
-        const load = account ? detailLoads.accountErrors : detailLoads.adminErrors;
-        if (!owner.errors) {
-          note.textContent = "";
-          replaceContent(
-            target,
-            el("div", {
-              class: "empty",
-              text: load.promise ? "加载中…" : load.error ? "错误事件加载失败：" + load.error : "暂无错误事件",
-            }),
-          );
-          return;
-        }
+        const list = pagedList("errors", account);
+        if (!owner.errors) note.textContent = "";
+        if (list.renderEmpty()) return;
         populateErrorFilters(owner.errors, account);
         updateFilterClearButton($(account ? "account-errors-filter-clear" : "errors-filter-clear"));
-        const previousTop = target.scrollTop;
         const entries = (owner.errors.entries || []).map((entry) => {
           const tags = [
             el("span", { class: "tag bad", text: entry.status_code ? "HTTP " + entry.status_code : "失败" }),
@@ -5303,13 +5427,11 @@
             el("pre", { class: "event-error-body mono", text: entry.body || entry.reason || "没有错误详情" }),
           );
         });
-        replaceContent(
-          target,
+        list.renderContent([
           entries.length
             ? el("div", { class: "event-list", role: "list", "aria-label": "错误事件列表" }, entries)
             : el("div", { class: "empty", text: "暂无错误事件" }),
-        );
-        target.scrollTop = previousTop;
+        ]);
         note.textContent = "已加载 " + int(owner.errors.entries?.length) + " / " + int(owner.errors.total) + " 条";
       }
 
@@ -7089,8 +7211,8 @@
             if (select.value !== selected) {
               saveChoice("admin", "analysis-key");
               resetLoadState(detailLoads.adminAnalysis);
-              resetLoadState(detailLoads.adminErrors);
-              resetRequestEventLoad(false);
+              pagedList("errors").reset();
+              pagedList("events").reset();
             }
           },
           () => {
@@ -7102,7 +7224,7 @@
       function requestEventPath(offset, limit, account, range = selectedRange(account)) {
         const params = new URLSearchParams({
           offset: String(offset),
-          limit: String(limit || REQUEST_EVENT_BATCH_SIZE),
+          limit: String(limit || LIST_PAGE_SIZE),
         });
         const prefix = account ? "account-request-event" : "request-event";
         const key = account ? "" : $("analysis-key").value;
@@ -7715,124 +7837,15 @@
         return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= EVENT_LOAD_MORE_THRESHOLD_PX;
       }
 
-      function requestEventLoadState(account) {
-        return account ? requestEventLoads.account : requestEventLoads.admin;
-      }
-
-      function maybeLoadMoreRequestEvents(account) {
-        account = account === true;
-        const role = account ? "account" : "admin";
-        const tabActive = account
-          ? accountTab === "request-events"
-          : !!document.querySelector('[data-tab="request-events"].active');
-        if (currentRole !== role || !tabActive) return;
-        const scroller = $(account ? "account-request-events-body" : "request-events-body");
-        const load = requestEventLoadState(account);
-        if (
-          !load.autoLoadMore ||
-          !load.hasMore ||
-          load.loading ||
-          load.loadingMore ||
-          !isNearScrollEnd(scroller)
-        )
-          return;
-        guard(() => loadRequestEvents(true, account));
-      }
-
-      function loadRequestEvents(append, account, options = {}) {
-        account = account === true;
-        append = append === true;
-        const background = options.background === true;
-        const load = requestEventLoadState(account);
-        if (append && (!load.hasMore || load.loading || load.loadingMore)) return;
-        if (!append && load.promise && !load.loadingMore) return load.promise;
-        const owner = account ? accountState : state;
-        const renderRequestEventsNow = () =>
-          currentRole === (account ? "account" : "admin") &&
-          activeTab(account) === "request-events" &&
-          renderRequestEvents(account);
-        const existing = append && owner.requestEvents ? owner.requestEvents.entries || [] : [];
-        const offset = existing.length;
-        const range = append ? load.range : { ...(options.range || selectedRange(account)) };
-        if (!append) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
-        const path = requestEventPath(offset, REQUEST_EVENT_BATCH_SIZE, account, range);
-        const ticket = ++load.request;
-        if (append) {
-          load.loadingMore = true;
-        } else {
-          load.loading = true;
-          load.loadingMore = false;
-          load.hasMore = false;
-          load.autoLoadMore = true;
-          load.error = "";
-        }
-        if (!owner.requestEvents || append) renderRequestEventsNow();
-        const task = (async () => {
-          const page = account ? await accountAPI(path) : await plugin("GET", path);
-          // Filter changes can overtake an older request. Only the newest request
-          // for this role may replace or append rows.
-          if (ticket !== load.request) return;
-          // A background request that became ineligible while in flight is ignored.
-          if (background && !canBackgroundRefreshRequestEvents(account)) return;
-          const incoming = page.entries || [];
-          const entries = existing.concat(incoming);
-          owner.requestEvents = {
-            ...page,
-            filter_options: page.filter_options || owner.requestEvents?.filter_options,
-            entries,
-          };
-          load.range = range;
-          load.hasMore = incoming.length > 0 && entries.length < Number(page.total || 0);
-          load.autoLoadMore = true;
-          load.error = "";
-        })()
-          .catch((err) => {
-            if (ticket !== load.request || err instanceof StaleRequestError) return;
-            load.error = err.message || String(err);
-            if (append) load.autoLoadMore = false;
-            throw err;
-          })
-          .finally(() => {
-            if (ticket === load.request) {
-              load.promise = null;
-              load.loading = false;
-              load.loadingMore = false;
-              renderRequestEventsNow();
-            }
-          });
-        load.promise = task;
-        return task;
-      }
 
       function renderRequestEvents(account = false) {
         hideCostTooltip();
         const owner = account ? accountState : state;
         const view = owner.requestEvents;
-        const load = requestEventLoads[account ? "account" : "admin"];
+        const list = pagedList("events", account);
         const note = $(account ? "account-request-event-note" : "request-event-note");
-        const scroller = $(account ? "account-request-events-body" : "request-events-body");
-        if (!view) {
-          note.textContent = "";
-          if (load.loading) {
-            scroller.replaceChildren(el("div", { class: "empty", text: "加载中…" }));
-          } else if (load.error) {
-            scroller.replaceChildren(
-              el(
-                "div",
-                { class: "empty" },
-                el("div", { text: "请求事件加载失败" }),
-                el(
-                  "button",
-                  { class: "retry-button", onclick: () => guard(() => loadRequestEvents(false, account)) },
-                  "重试",
-                ),
-              ),
-            );
-          } else {
-            scroller.replaceChildren(el("div", { class: "empty", text: "暂无请求事件" }));
-          }
-          return;
-        }
+        if (!view) note.textContent = "";
+        if (list.renderEmpty()) return;
         const prefix = account ? "account-request-event" : "request-event";
         populateRequestEventFilters(view.filter_options, account);
         labelRequestEventStatuses($(prefix + "-status"), view.status_counts);
@@ -7840,8 +7853,6 @@
         const entries = view.entries || [];
         const hasCacheWrite = entries.some((entry) => Number(entry.cost?.cache_write_tokens || 0) !== 0);
         note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
-        const previousScrollTop = scroller.scrollTop;
-        const previousScrollLeft = scroller.scrollLeft;
         const rows = entries.map((entry) => {
           const cost = entry.cost || {};
           const statusMarks = [];
@@ -7972,21 +7983,7 @@
             rows,
           ),
         ];
-        if (load.loadingMore) {
-          content.push(el("div", { class: "event-load-state", role: "status", text: "正在加载更多…" }));
-        } else if (!load.autoLoadMore && load.hasMore) {
-          content.push(
-            el(
-              "div",
-              { class: "event-load-state" },
-              el("button", { onclick: () => guard(() => loadRequestEvents(true, account)) }, "重试加载"),
-            ),
-          );
-        }
-        replaceContent(scroller, ...content);
-        scroller.scrollTop = previousScrollTop;
-        scroller.scrollLeft = previousScrollLeft;
-        requestAnimationFrame(() => maybeLoadMoreRequestEvents(account));
+        list.renderContent(content);
       }
 
       const pluginLogLevels = {
@@ -8012,64 +8009,13 @@
         );
       }
 
-      function maybeLoadMorePluginLogs() {
-        const load = detailLoads.adminPluginLogs;
-        if (
-          currentRole !== "admin" ||
-          activeAdminTab() !== "settings" ||
-          !state.pluginLogsNext ||
-          load.promise ||
-          load.error ||
-          !isNearScrollEnd($("plugin-logs-body"))
-        )
-          return;
-        guard(() => loadPluginLogs({ append: true }));
-      }
-
-      function loadPluginLogs(options = {}) {
-        const background = options.background === true;
-        const append = options.append === true;
-        const before = append ? Number(state.pluginLogsNext || 0) : 0;
-        if (append && !before) return Promise.resolve();
-        const params = new URLSearchParams({ level: $("plugin-log-level").value, limit: "100" });
-        if (before) params.set("before_id", String(before));
-        return loadResource(
-          detailLoads.adminPluginLogs,
-          () => plugin("GET", "/plugin-logs?" + params.toString()),
-          (result) => {
-            if (!background || canBackgroundRefreshPluginLogs()) {
-              state.pluginLogs = append ? (state.pluginLogs || []).concat(result.entries || []) : result.entries || [];
-              state.pluginLogsNext = Number(result.next_before_id || 0);
-              state.pluginLogCounts = result.level_counts;
-            }
-          },
-          () => currentRole === "admin" && activeAdminTab() === "settings" && renderPluginLogs(),
-        );
-      }
 
       function renderPluginLogs() {
-        const pluginLogs = state.pluginLogs;
-        const load = detailLoads.adminPluginLogs;
-        const scroller = $("plugin-logs-body");
+        const list = pagedList("logs");
         const note = $("plugin-log-note");
-        if (!pluginLogs) {
-          note.textContent = "";
-          if (load.promise) {
-            scroller.replaceChildren(el("div", { class: "empty", text: "加载中…" }));
-          } else if (load.error) {
-            scroller.replaceChildren(
-              el(
-                "div",
-                { class: "empty" },
-                el("div", { text: "插件日志加载失败" }),
-                el("button", { class: "retry-button", onclick: () => guard(() => loadPluginLogs()) }, "重试"),
-              ),
-            );
-          } else {
-            scroller.replaceChildren(el("div", { class: "empty", text: "暂无插件日志" }));
-          }
-          return;
-        }
+        if (!list.data) note.textContent = "";
+        if (list.renderEmpty()) return;
+        const pluginLogs = list.data.entries || [];
         const filter = $("plugin-log-filter").value.trim().toLowerCase();
         const currentIDs = new Set(pluginLogs.map((entry) => String(entry.id || "")).filter(Boolean));
         for (const id of expandedPluginLogIDs) if (!currentIDs.has(id)) expandedPluginLogIDs.delete(id);
@@ -8078,8 +8024,8 @@
           return (pluginLog.message || "").toLowerCase().includes(filter);
         });
         const counts = {
-          ...state.pluginLogCounts,
-          all: Object.values(state.pluginLogCounts).reduce((sum, count) => sum + count, 0),
+          ...list.data.level_counts,
+          all: Object.values(list.data.level_counts || {}).reduce((sum, count) => sum + count, 0),
         };
         const levelSelect = $("plugin-log-level");
         for (const option of levelSelect.options) {
@@ -8102,28 +8048,12 @@
             renderPluginLogMessage(pluginLog),
           );
         });
-        const previousScrollTop = scroller.scrollTop;
-        const previousScrollLeft = scroller.scrollLeft;
         const content = [
           entries.length
             ? el("div", { class: "event-list", role: "list", "aria-label": "插件日志列表" }, entries)
             : el("div", { class: "empty", text: pluginLogs.length ? "没有匹配的日志" : "暂无插件日志" }),
         ];
-        if (load.promise) {
-          content.push(el("div", { class: "event-load-state", role: "status", text: "加载中…" }));
-        } else if (load.error && state.pluginLogsNext) {
-          content.push(
-            el(
-              "div",
-              { class: "event-load-state" },
-              el("button", { onclick: () => guard(() => loadPluginLogs({ append: true })) }, "重试加载"),
-            ),
-          );
-        }
-        replaceContent(scroller, ...content);
-        scroller.scrollTop = previousScrollTop;
-        scroller.scrollLeft = previousScrollLeft;
-        requestAnimationFrame(maybeLoadMorePluginLogs);
+        list.renderContent(content);
       }
 
       function renderPluginLogMessage(pluginLog) {
@@ -8674,35 +8604,12 @@
         return account ? accountTab : activeAdminTab();
       }
 
-      function scrollerAtTop(id) {
-        return $(id).scrollTop <= 0;
-      }
-
       function canBackgroundRefreshRequestEvents(account) {
-        const role = account ? "account" : "admin";
-        return (
-          currentRole === role &&
-          activeTab(account) === "request-events" &&
-          scrollerAtTop(account ? "account-request-events-body" : "request-events-body")
-        );
+        return pagedList("events", account).canRefresh();
       }
 
       function canBackgroundRefreshErrors(account) {
-        const role = account ? "account" : "admin";
-        return (
-          currentRole === role &&
-          activeTab(account) === "errors" &&
-          scrollerAtTop(account ? "account-errors" : "errors-body")
-        );
-      }
-
-      function canBackgroundRefreshPluginLogs() {
-        return (
-          currentRole === "admin" &&
-          activeAdminTab() === "settings" &&
-          expandedPluginLogIDs.size === 0 &&
-          scrollerAtTop("plugin-logs-body")
-        );
+        return pagedList("errors", account).canRefresh();
       }
       function scheduleAutoRefresh() {
         stopAutoRefresh();
@@ -8782,10 +8689,6 @@
         }),
       );
 
-      function resetRequestEventLoad(account) {
-        const load = requestEventLoads[account ? "account" : "admin"];
-        Object.assign(load, emptyRequestEventLoadState(), { request: load.request + 1 });
-      }
 
       function applySharedTimeRange(account) {
         if (!account) resetLoadState(detailLoads.adminEventKeys);
@@ -8794,23 +8697,21 @@
         owner.errors = null;
         owner.requestEvents = null;
         resetLoadState(account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis);
-        resetLoadState(account ? detailLoads.accountErrors : detailLoads.adminErrors);
-        resetRequestEventLoad(account);
+        pagedList("errors", account).reset();
+        pagedList("events", account).reset();
         return loadView(account);
       }
 
-      for (const account of [false, true]) {
-        const role = account ? "account" : "admin";
-        const prefix = account ? "account-" : "";
-        const load = account ? detailLoads.accountErrors : detailLoads.adminErrors;
-        const ids = [prefix + "error-model", prefix + "error-source", prefix + "error-type"];
-        const clear = $(prefix + "errors-filter-clear");
+      function bindPagedListFilters(list, role, ids, clear) {
+        const reload = () => {
+          updateFilterClearButton(clear);
+          list.reset();
+          guard(() => list.load());
+        };
         for (const id of ids) {
           $(id).addEventListener("change", () => {
             saveChoice(role, id);
-            updateFilterClearButton(clear);
-            resetLoadState(load);
-            guard(() => loadErrors(account));
+            reload();
           });
         }
         clear.onclick = () => {
@@ -8818,9 +8719,7 @@
             $(id).value = "";
             saveChoice(role, id);
           }
-          updateFilterClearButton(clear);
-          resetLoadState(load);
-          guard(() => loadErrors(account));
+          reload();
         };
       }
       for (const account of [false, true]) {
@@ -8838,14 +8737,14 @@
         ui.search.addEventListener("input", () => renderAuthFiles(account));
         ui.bulk.onclick = () => guard(() => refreshFilteredAuthQuotas(account));
       }
-      $("account-request-events-body").addEventListener(
-        "scroll",
-        () => {
-          hideCostTooltip();
-          maybeLoadMoreRequestEvents(true);
-        },
-        { passive: true },
-      );
+      for (const lists of Object.values(pagedLists)) {
+        for (const list of Object.values(lists)) {
+          list.scroller.addEventListener("scroll", () => {
+            hideCostTooltip();
+            list.maybeLoadMore();
+          }, { passive: true });
+        }
+      }
 
       const TABS = Array.from(document.querySelectorAll(".tabs button[data-tab]"));
       function setAdminTab(name) {
@@ -9055,12 +8954,9 @@
       $("plugin-log-filter").addEventListener("input", renderPluginLogs);
       $("plugin-log-level").addEventListener("change", () => {
         saveChoice("admin", "plugin-log-level");
-        resetLoadState(detailLoads.adminPluginLogs);
-        state.pluginLogs = null;
-        state.pluginLogsNext = 0;
-        guard(() => loadPluginLogs());
+        pagedList("logs").reset();
+        guard(() => pagedList("logs").load());
       });
-      $("plugin-logs-body").addEventListener("scroll", maybeLoadMorePluginLogs, { passive: true });
       $("plugin-logs-clear").onclick = () =>
         guard(async () => {
           if (
@@ -9073,22 +8969,15 @@
         });
       for (const account of [false, true]) {
         const role = account ? "account" : "admin";
-        const clear = $(account ? "account-request-events-filter-clear" : "request-events-filter-clear");
-        for (const id of REQUEST_EVENT_FILTER_IDS[role]) {
-          $(id).addEventListener("change", () => {
-            saveChoice(role, id);
-            updateFilterClearButton(clear);
-            guard(() => loadRequestEvents(false, account));
-          });
-        }
-        clear.onclick = () => {
-          for (const id of REQUEST_EVENT_FILTER_IDS[role]) {
-            $(id).value = "";
-            saveChoice(role, id);
-          }
-          updateFilterClearButton(clear);
-          guard(() => loadRequestEvents(false, account));
-        };
+        const prefix = account ? "account-" : "";
+        bindPagedListFilters(
+          pagedList("events", account), role, REQUEST_EVENT_FILTER_IDS[role], $(prefix + "request-events-filter-clear"),
+        );
+        bindPagedListFilters(
+          pagedList("errors", account), role,
+          ["error-model", "error-source", "error-type"].map((id) => prefix + id),
+          $(prefix + "errors-filter-clear"),
+        );
         const exportButton = $(account ? "account-request-events-export" : "request-events-export");
         setLabeledActionIcon(exportButton, "download", "导出");
         exportButton.onclick = () => guard(() => exportRequestEvents(account));
@@ -9120,14 +9009,6 @@
         closeSharedTimePopover(false);
         closeSharedTimePopover(true);
       });
-      $("request-events-body").addEventListener(
-        "scroll",
-        () => {
-          hideCostTooltip();
-          maybeLoadMoreRequestEvents(false);
-        },
-        { passive: true },
-      );
       $("keys-reset-all").onclick = () =>
         guard(async () => {
           if (
