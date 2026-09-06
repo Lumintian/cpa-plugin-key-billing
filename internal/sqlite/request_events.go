@@ -107,7 +107,7 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 	pageArgs := append(append([]any(nil), args...), limit, query.Offset)
 
 	rows, errQuery := d.db.Query(`
-		SELECT r.at, r.scope, r.auth_index, coalesce(NULLIF(r.provider, ''), c.provider, ''),
+		SELECT r.id, r.at, r.scope, r.auth_index, coalesce(NULLIF(r.provider, ''), c.provider, ''),
 			r.executor_type, r.reasoning_effort, r.service_tier,
 			r.upstream_model, r.billing_model, r.failed, r.latency_ms, r.ttft_ms,
 			r.accounting_quality, r.price_source, r.reasoning_tokens,
@@ -229,7 +229,7 @@ func scanRequestEventRow(rows *sql.Rows) (billing.RequestEventRow, error) {
 		at, failed           int64
 		quality, priceSource string
 	)
-	if errScan := rows.Scan(&at, &row.Scope, &row.AuthIndex, &row.Provider,
+	if errScan := rows.Scan(&row.ID, &at, &row.Scope, &row.AuthIndex, &row.Provider,
 		&row.ExecutorType, &row.ReasoningEffort, &row.ServiceTier,
 		&row.UpstreamModel, &row.BillingModel, &failed,
 		&row.LatencyMS, &row.TTFTMS,

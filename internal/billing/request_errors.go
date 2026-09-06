@@ -17,6 +17,7 @@ type RequestErrorEvent struct {
 // RequestErrorRow is projected from request_errors plus the immutable context
 // of its parent request_events row.
 type RequestErrorRow struct {
+	ID            int64     `json:"id,string"`
 	At            time.Time `json:"at"`
 	Scope         string    `json:"scope,omitempty"`
 	Preview       string    `json:"preview,omitempty"`

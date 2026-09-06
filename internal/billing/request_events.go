@@ -32,6 +32,8 @@ const RequestEventRetention = 365 * 24 * time.Hour
 // credential renames update historical rows without rewriting request events.
 type RequestEventRow struct {
 	RequestEvent
+	// Encode the database identity as a string to preserve all 64 bits in browsers.
+	ID      int64  `json:"id,string"`
 	Preview string `json:"preview,omitempty"`
 	Label   string `json:"label,omitempty"`
 	Source  string `json:"source,omitempty"`

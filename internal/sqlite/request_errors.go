@@ -118,7 +118,7 @@ func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (bi
 		limit = -1
 	}
 	pageArgs := append(append([]any(nil), args...), limit, query.Offset)
-	rows, err := d.db.Query(`SELECT r.at, r.scope, coalesce(k.preview, ''), coalesce(k.label, ''),
+	rows, err := d.db.Query(`SELECT r.id, r.at, r.scope, coalesce(k.preview, ''), coalesce(k.label, ''),
 		r.auth_index, coalesce(c.name, ''), coalesce(NULLIF(r.provider, ''), c.provider, ''),
 		r.executor_type, r.upstream_model, r.billing_model, r.latency_ms, r.ttft_ms,
 		e.status_code, e.error_type, e.reason, e.body`+where+` ORDER BY r.at DESC, r.id DESC LIMIT ? OFFSET ?`, pageArgs...)
@@ -129,7 +129,7 @@ func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (bi
 	for rows.Next() {
 		var row billing.RequestErrorRow
 		var at int64
-		if err := rows.Scan(&at, &row.Scope, &row.Preview, &row.Label, &row.AuthIndex, &row.Source,
+		if err := rows.Scan(&row.ID, &at, &row.Scope, &row.Preview, &row.Label, &row.AuthIndex, &row.Source,
 			&row.Provider, &row.ExecutorType, &row.UpstreamModel, &row.BillingModel, &row.LatencyMS,
 			&row.TTFTMS, &row.StatusCode, &row.ErrorType, &row.Reason, &row.Body); err != nil {
 			return billing.RequestErrorView{}, fmt.Errorf("读取错误事件：%w", err)
