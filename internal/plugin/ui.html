@@ -2084,7 +2084,7 @@
         --analysis-accent: var(--analysis-color-1);
         --analysis-trend-fill: color-mix(in srgb, var(--analysis-accent) 18%, transparent);
         display: grid;
-        grid-template-rows: auto auto auto 56px;
+        grid-template-rows: repeat(4, auto) 56px;
         align-content: start;
         gap: 7px;
         min-width: 0;
@@ -4692,7 +4692,7 @@
         });
       }
 
-      function renderUsageTrendChart(account, trends, colors) {
+      function renderUsageTrendChart(account, trends, colors, daily) {
         const role = account ? "account" : "admin";
         analysisCharts[role].trend?.destroy();
         analysisCharts[role].trend = null;
@@ -4707,7 +4707,6 @@
         const totalTokens = values("total_tokens");
         const cacheWriteTokens = values("cache_write_tokens");
         const average = totalTokens.reduce((sum, value) => sum + value, 0) / totalTokens.length;
-        const daily = points.length > 1 && new Date(points[1].time) - new Date(points[0].time) > 12 * 3600000;
         const labelFormat = new Intl.DateTimeFormat(
           "zh-CN",
           daily ? { month: "numeric", day: "numeric" } : { hour: "2-digit", minute: "2-digit", hour12: false },
@@ -4911,16 +4910,20 @@
         context.stroke(line);
       }
 
-      function renderAnalysisSummary(summary) {
+      function renderAnalysisSummary(summary, trends, daily) {
         const cost = summary.cost;
+        const averageLabel = daily ? "每日平均" : "每小时平均";
+        const average = (total) => (trends.requests.length ? Number(total || 0) / trends.requests.length : 0);
+        const peakCacheRate = Math.max(0, ...trends.cache_rate.map((point) => Number(point.value || 0)));
         const detail = (label, value) =>
           el("div", { class: "analysis-summary-line" }, el("span", {}, label), el("strong", { class: "mono" }, value));
-        const card = (title, value, rows, trend) =>
+        const card = (title, value, statistic, rows, trend) =>
           el(
             "section",
             { class: "card analysis-summary-card", "aria-label": title },
             el("div", { class: "analysis-summary-title" }, title),
             el("div", { class: "analysis-summary-value mono" }, value),
+            statistic,
             el("div", { class: "analysis-summary-details" }, rows),
             el("canvas", {
               class: "analysis-summary-trend",
@@ -4955,6 +4958,7 @@
           card(
             "请求总数",
             int(summary.requests),
+            detail(averageLabel, int(Math.ceil(average(summary.requests)))),
             [
               detail("成功", int(summary.succeeded)),
               detail("失败", int(summary.failed)),
@@ -4962,14 +4966,27 @@
             ],
             "requests",
           ),
-          card("Token 总数", tokens(summary.total_tokens), tokenRows, "total_tokens"),
+          card(
+            "Token 总数",
+            tokens(summary.total_tokens),
+            detail(averageLabel, tokens(Number(average(summary.total_tokens).toFixed(2)))),
+            tokenRows,
+            "total_tokens",
+          ),
           card(
             "缓存率",
             Number(summary.cache_rate || 0).toFixed(2) + "%",
+            detail(daily ? "按日峰值" : "按小时峰值", peakCacheRate.toFixed(2) + "%"),
             [detail("缓存读", tokens(summary.cache_read_tokens)), detail("输入", tokens(summary.input_tokens))],
             "cache_rate",
           ),
-          card("总成本", cost.available ? usd(cost.total_usd) : "—", costRows, "total_cost"),
+          card(
+            "总成本",
+            cost.available ? usd(cost.total_usd) : "—",
+            detail(averageLabel, cost.available ? usd(average(cost.total_usd)) : "—"),
+            costRows,
+            "total_cost",
+          ),
         );
       }
 
@@ -5089,6 +5106,8 @@
         const analysis = owner.analysis;
         const summary = analysis.summary;
         const trends = analysis.trends;
+        const points = trends.total_tokens;
+        const daily = points.length > 1 && new Date(points[1].time) - new Date(points[0].time) > 12 * 3600000;
         const renderSignature = JSON.stringify([
           document.documentElement.getAttribute("data-theme") || "",
           summary,
@@ -5106,7 +5125,7 @@
         const colors = analysisColors();
         replaceContent(
           target,
-          renderAnalysisSummary(summary),
+          renderAnalysisSummary(summary, trends, daily),
           el(
             "section",
             { class: "card usage-trend-card" },
@@ -5128,7 +5147,7 @@
         for (const canvas of target.querySelectorAll("[data-analysis-trend]")) {
           drawAnalysisTrend(canvas, trends[canvas.dataset.analysisTrend]);
         }
-        renderUsageTrendChart(account, trends, colors);
+        renderUsageTrendChart(account, trends, colors, daily);
         renderAnalysisDistribution(account, colors);
       }
 
