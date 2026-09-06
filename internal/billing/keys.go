@@ -18,13 +18,7 @@ type KeyView struct {
 	ConcurrencyLimit   int           `json:"concurrency_limit"`
 	CurrentConcurrency int           `json:"current_concurrency"`
 	RouteBindings      RouteBindings `json:"route_bindings"`
-	// Keys without a plan are still fully accounted for.
-	Unlimited   bool      `json:"unlimited"`
-	Blocked     bool      `json:"blocked"`
-	LimitUSD    float64   `json:"limit_usd"`
-	SpentUSD    float64   `json:"spent_usd"`
-	UsedPercent float64   `json:"used_percent"`
-	CycleEndAt  time.Time `json:"cycle_end_at,omitzero"`
+	QuotaView
 }
 
 // Settle expired cycles before displaying quota status for active keys.
@@ -41,24 +35,26 @@ func (s *Store) KeyViews() []KeyView {
 			if key == nil {
 				continue
 			}
-			if key.DeletedAt.IsZero() && settleKeyPlan(key, plans, now) {
+			if key.DeletedAt.IsZero() && settleKeyPlan(key, plans[key.PlanID], now) {
 				settled = append(settled, scope)
 			}
-			views = append(views, keyView(scope, key, plans, s.activeByScope[scope]))
+			views = append(views, keyView(scope, key, plans[key.PlanID], s.activeByScope[scope]))
 		}
 		sortKeyViews(views)
 		return views, Changes{Keys: settled}
 	})
 }
 
-func keyView(scope string, key *KeyState, plans map[string]Plan, currentConcurrency int) KeyView {
-	view := KeyView{
+func keyView(scope string, key *KeyState, plan Plan, currentConcurrency int) KeyView {
+	return KeyView{
 		Scope:              scope,
 		Preview:            key.Preview,
 		Label:              key.Label,
 		InConfig:           key.InConfig,
 		DeletedAt:          key.DeletedAt,
 		PlanID:             key.PlanID,
+		PlanName:           plan.Name,
+		QuotaView:          quotaView(key, plan),
 		ConcurrencyLimit:   key.ConcurrencyLimit,
 		CurrentConcurrency: currentConcurrency,
 		RouteBindings: RouteBindings{
@@ -67,40 +63,21 @@ func keyView(scope string, key *KeyState, plans map[string]Plan, currentConcurre
 			CredentialIDs:       append([]string{}, key.RouteBindings.CredentialIDs...),
 			CredentialProviders: append([]CredentialProviderSelector{}, key.RouteBindings.CredentialProviders...),
 		},
-		Unlimited:  true,
-		SpentUSD:   key.Cycle.SpentUSD,
-		CycleEndAt: key.Cycle.EndAt,
 	}
-	if plan, exists := plans[key.PlanID]; exists {
-		view.PlanName = plan.Name
-		view.LimitUSD = plan.AmountUSD
-		view.Unlimited = false
-		if plan.AmountUSD > 0 {
-			view.UsedPercent = key.Cycle.SpentUSD / plan.AmountUSD * 100
-			view.Blocked = key.Cycle.SpentUSD >= plan.AmountUSD
-		} else {
-			// Invalid persisted plans must never grant unlimited usage.
-			view.UsedPercent = 100
-			view.Blocked = true
-		}
-	}
-	return view
 }
 
-func settleKeyPlan(key *KeyState, plans map[string]Plan, now time.Time) bool {
+func settleKeyPlan(key *KeyState, plan Plan, now time.Time) bool {
 	if key.PlanID == "" {
 		return false
 	}
-	plan, exists := plans[key.PlanID]
-	if exists {
-		return settleExpiredCycle(key, plan, now)
+	if plan.ID == key.PlanID {
+		return settleExpiredCycles(key, now)
 	}
 	key.PlanID = ""
-	key.Cycle = Cycle{}
+	key.Cycles = nil
 	return true
 }
 
-// KeyViewForScope settles and returns one active key.
 func (s *Store) KeyViewForScope(scope string) (KeyView, bool) {
 	scope = normalizeScope(scope)
 	if scope == "" {
@@ -115,15 +92,12 @@ func (s *Store) KeyViewForScope(scope string) (KeyView, bool) {
 		if key == nil || !key.DeletedAt.IsZero() {
 			return result{}, Changes{}
 		}
-		plans := make(map[string]Plan, len(state.Plans))
-		for _, plan := range state.Plans {
-			plans[plan.ID] = plan
-		}
+		plan, _ := state.FindPlan(key.PlanID)
 		changed := Changes{}
-		if settleKeyPlan(key, plans, s.Now()) {
+		if settleKeyPlan(key, plan, s.Now()) {
 			changed.Keys = []string{scope}
 		}
-		return result{view: keyView(scope, key, plans, s.activeByScope[scope]), ok: true}, changed
+		return result{view: keyView(scope, key, plan, s.activeByScope[scope]), ok: true}, changed
 	})
 	return current.view, current.ok
 }
@@ -161,7 +135,7 @@ func (s *Store) BindKey(scope, planID string) error {
 		if key.PlanID == plan.ID {
 			return struct{}{}, Changes{}, nil
 		}
-		key.Cycle = Cycle{}
+		key.Cycles = nil
 		key.PlanID = plan.ID
 		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
@@ -179,26 +153,63 @@ func (s *Store) UnbindKey(scope string) error {
 			return struct{}{}, Changes{}, nil
 		}
 		key.PlanID = ""
-		key.Cycle = Cycle{}
+		key.Cycles = nil
 		return struct{}{}, Changes{Keys: []string{scope}}, nil
 	})
 	return err
 }
 
-// The next request starts a fresh period after a reset.
-func (s *Store) ResetCycles(scopes []string) (int, error) {
-	scopes = normalizeScopes(scopes)
-	return editConfiguration(s, func(state *State) (int, Changes, error) {
-		reset := make([]string, 0, len(scopes))
+type ResetRequest struct {
+	Mode   string   `json:"mode"`
+	Scopes []string `json:"scopes,omitempty"`
+}
+
+type ResetResult struct {
+	Keys    int `json:"keys"`
+	Windows int `json:"windows"`
+}
+
+func (s *Store) ResetCycles(req ResetRequest) (ResetResult, error) {
+	req.Scopes = normalizeScopes(req.Scopes)
+	if req.Mode == "global" {
+		if len(req.Scopes) != 0 {
+			return ResetResult{}, invalidf("全员重置不接受指定 Key")
+		}
+	} else if req.Mode == "all" {
+		if len(req.Scopes) == 0 {
+			return ResetResult{}, invalidf("请选择需要重置的 API Key")
+		}
+	} else {
+		return ResetResult{}, invalidf("额度重置方式无效")
+	}
+	return editConfiguration(s, func(state *State) (ResetResult, Changes, error) {
+		scopes := req.Scopes
+		if req.Mode == "global" {
+			for scope, key := range state.Keys {
+				if key != nil && key.DeletedAt.IsZero() && key.PlanID != "" {
+					scopes = append(scopes, scope)
+				}
+			}
+		}
 		for _, scope := range scopes {
 			key := state.liveKey(scope)
-			if key == nil || key.Cycle == (Cycle{}) {
-				continue
+			if key == nil || key.PlanID == "" {
+				return ResetResult{}, Changes{}, invalidf("API Key 不存在或未绑定计划")
 			}
-			key.Cycle = Cycle{}
-			reset = append(reset, scope)
 		}
-		return len(reset), Changes{Keys: reset}, nil
+		result := ResetResult{}
+		var changed []string
+		for _, scope := range scopes {
+			key := state.Keys[scope]
+			count := len(key.Cycles)
+			key.Cycles = nil
+			if count > 0 {
+				changed = append(changed, scope)
+				result.Keys++
+				result.Windows += count
+			}
+		}
+		return result, Changes{Keys: changed}, nil
 	})
 }
 

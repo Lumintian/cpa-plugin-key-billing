@@ -17,8 +17,8 @@ func (d *DB) Load(requestEventCutoff, pluginLogCutoff time.Time) (billing.Snapsh
 
 	state := billing.NewState()
 	for _, load := range []func(*billing.State) error{
-		d.loadKeys,
 		d.loadPlans,
+		d.loadKeys,
 		d.loadPrices,
 		d.loadRoutes,
 		d.loadCredentials,

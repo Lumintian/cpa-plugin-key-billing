@@ -5,39 +5,18 @@ import (
 	"time"
 )
 
-func TestKeyViewsSettleExpiredCycleWithoutRestartingIt(t *testing.T) {
-	now := time.Date(2026, 8, 8, 7, 0, 0, 0, time.UTC)
-	store := newEnforceStore(t, now)
-	store.ReplaceAll(func(state *State) {
-		state.Plans = []Plan{{ID: "p", AmountUSD: 10, PeriodSeconds: 86400}}
-		state.Keys["a"] = &KeyState{PlanID: "p", Cycle: Cycle{
-			PlanID: "p", StartAt: now.Add(-48 * time.Hour), EndAt: now.Add(-24 * time.Hour), SpentUSD: 2,
-		}}
-	})
-
-	views := store.KeyViews()
-	if len(views) != 1 || !views[0].CycleEndAt.IsZero() {
-		t.Fatalf("views = %+v, want inactive cycle", views)
-	}
-	store.Read(func(state *State) {
-		key := state.Keys["a"]
-		if key.Cycle != (Cycle{}) {
-			t.Fatalf("key = %+v", key)
-		}
-	})
-}
-
 func TestPlanBindingTransactions(t *testing.T) {
 	now := time.Date(2026, 8, 8, 7, 0, 0, 0, time.UTC)
-	store := newEnforceStore(t, now)
+	store := newStore(t)
+	store.now = func() time.Time { return now }
 	store.ReplaceAll(func(state *State) {
 		state.Keys["a"] = &KeyState{}
 		state.Keys["b"] = &KeyState{}
 		state.Keys["owned"] = &KeyState{PlanID: "other"}
-		state.Plans = []Plan{{ID: "other", AmountUSD: 1}}
+		state.Plans = []Plan{{ID: "other", Windows: []QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 1, PeriodSeconds: 3600}}}}
 	})
 
-	created, err := store.CreatePlanWithBindings(Plan{ID: "p", AmountUSD: 5, PeriodSeconds: 86400}, []string{"a"})
+	created, err := store.CreatePlanWithBindings(Plan{ID: "p", Windows: []QuotaWindow{{Name: "额度", AmountUSD: 5, PeriodSeconds: 86400}}}, []string{"a"})
 	if err != nil || created.ID != "p" {
 		t.Fatalf("CreatePlanWithBindings = %+v, %v", created, err)
 	}
@@ -46,7 +25,7 @@ func TestPlanBindingTransactions(t *testing.T) {
 		t.Fatalf("UpdatePlanWithBindings error = %v", err)
 	}
 	store.Read(func(state *State) {
-		if state.Keys["a"].PlanID != "" || state.Keys["b"].PlanID != "p" || state.Keys["b"].Cycle != (Cycle{}) {
+		if state.Keys["a"].PlanID != "" || state.Keys["b"].PlanID != "p" || len(state.Keys["b"].Cycles) != 0 {
 			t.Fatalf("keys = %+v", state.Keys)
 		}
 	})
@@ -74,7 +53,7 @@ func newSyncStore(t *testing.T, clock *time.Time) *Store {
 	store := newAccountStore(t, *clock)
 	store.now = func() time.Time { return *clock }
 	store.ReplaceAll(func(state *State) {
-		state.Plans = []Plan{{ID: "p", Name: "Weekly", AmountUSD: 10, PeriodSeconds: 604800}}
+		state.Plans = []Plan{{ID: "p", Name: "Weekly", Windows: []QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 10, PeriodSeconds: 604800}}}}
 	})
 	if _, errSync := store.SyncKeys([]string{keptKeyPlaintext, deletedKeyPlaintext}, false); errSync != nil {
 		t.Fatalf("SyncKeys error = %v", errSync)
@@ -108,8 +87,8 @@ func TestDeletedKeyRetainsUsageAndIdentity(t *testing.T) {
 			t.Fatalf("key = %+v, want it to stay deleted", key)
 		}
 		// The window was live at admission, so the spend belongs to it.
-		if key.Cycle.SpentUSD == 0 {
-			t.Fatalf("Cycle = %+v, want the admitted window charged", key.Cycle)
+		if key.Cycles["default"].SpentUSD == 0 {
+			t.Fatalf("Cycle = %+v, want the admitted window charged", key.Cycles["default"])
 		}
 	})
 	if rows := mustRequestEvents(t, store, RequestEventQuery{}).Entries; len(rows) != 1 || rows[0].Preview != PreviewKey(deletedKeyPlaintext) {
@@ -129,15 +108,19 @@ func TestDeletedKeyRetainsUsageAndIdentity(t *testing.T) {
 }
 
 func TestSyncKeysRestoresQuotaAndBindings(t *testing.T) {
-	for _, period := range []int64{0, 3600} {
+	for _, period := range []int64{3600, 7200} {
 		t.Run(time.Duration(period*int64(time.Second)).String(), func(t *testing.T) {
 			now := time.Date(2026, 8, 12, 15, 57, 0, 0, time.UTC)
 			store := newSyncStore(t, &now)
 			scope := CallerScope(deletedKeyPlaintext)
-			store.ReplaceAll(func(state *State) { state.Plans[0].PeriodSeconds = period })
+			store.ReplaceAll(func(state *State) { state.Plans[0].Windows[0].PeriodSeconds = period })
 			store.RecordUsage(admittedEvent(store, scope, now))
-			store.ReplaceAll(func(state *State) { state.Keys[scope].Cycle.SpentUSD = 10 })
-			cycle := store.state.Keys[scope].Cycle
+			store.ReplaceAll(func(state *State) {
+				cycle := state.Keys[scope].Cycles["default"]
+				cycle.SpentUSD = 10
+				state.Keys[scope].Cycles["default"] = cycle
+			})
+			cycle := store.state.Keys[scope].Cycles["default"]
 			if _, err := store.SyncKeys([]string{keptKeyPlaintext}, false); err != nil {
 				t.Fatal(err)
 			}
@@ -146,7 +129,7 @@ func TestSyncKeysRestoresQuotaAndBindings(t *testing.T) {
 				t.Fatal(err)
 			}
 			key := store.state.Keys[scope]
-			if !key.InConfig || !key.DeletedAt.IsZero() || key.PlanID != "p" || key.Cycle != cycle {
+			if !key.InConfig || !key.DeletedAt.IsZero() || key.PlanID != "p" || key.Cycles["default"] != cycle {
 				t.Fatalf("restored key = %+v, want original binding and cycle %+v", key, cycle)
 			}
 			if store.Authorize(scope, now).Allowed {
@@ -156,7 +139,7 @@ func TestSyncKeysRestoresQuotaAndBindings(t *testing.T) {
 				t.Fatal("request history was lost")
 			}
 			now = now.Add(time.Hour)
-			if allowed := store.Authorize(scope, now).Allowed; allowed != (period != 0) {
+			if allowed := store.Authorize(scope, now).Allowed; allowed != (period == 3600) {
 				t.Fatalf("allowed after an hour = %v for period %d", allowed, period)
 			}
 		})
@@ -222,7 +205,7 @@ func TestPlanEditCanKeepOrUnbindDeletedKeys(t *testing.T) {
 	}
 	store.Read(func(state *State) {
 		key := state.Keys[scope]
-		if key.PlanID != "" || key.Cycle != (Cycle{}) || key.DeletedAt.IsZero() {
+		if key.PlanID != "" || key.Cycles["default"] != (QuotaCycle{}) || key.DeletedAt.IsZero() {
 			t.Fatalf("deleted key was not unbound: %+v", key)
 		}
 	})
@@ -245,5 +228,62 @@ func TestPlanEditCanKeepOrUnbindDeletedKeys(t *testing.T) {
 		if key.Scope == scope && (key.Label != "Historical key" || key.DeletedAt.IsZero()) {
 			t.Fatalf("deleted key lost its display identity: %+v", key)
 		}
+	}
+}
+
+func TestWindowEditsAndQuotaReset(t *testing.T) {
+	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
+	store := newAccountStore(t, now)
+	store.ReplaceAll(func(state *State) {
+		state.Keys["live"] = &KeyState{}
+		state.Keys["deleted"] = &KeyState{}
+	})
+	plan, err := store.CreatePlanWithBindings(Plan{Name: "Team", Windows: []QuotaWindow{
+		{Name: "Budget", AmountUSD: 10, PeriodSeconds: 86400},
+		{Name: "Short", AmountUSD: 5, PeriodSeconds: 3600},
+	}}, []string{"live", "deleted"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []string{"live", "deleted"} {
+		store.RecordUsage(admittedEvent(store, scope, now))
+	}
+	store.ReplaceAll(func(state *State) { state.Keys["deleted"].DeletedAt = now })
+	short, long := plan.Windows[0].ID, plan.Windows[1].ID
+	if err := store.BindKey("live", plan.ID); err != nil {
+		t.Fatal(err)
+	}
+	plan.Windows[0].Name = "Renamed"
+	plan.Windows[0].AmountUSD = wantSubsetCost / 2
+	if _, err := store.UpdatePlanWithBindings(PlanPatch{ID: plan.ID, Windows: &plan.Windows}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if store.Authorize("live", now).Allowed {
+		t.Fatal("lowered amount did not block")
+	}
+	plan.Windows[0].PeriodSeconds = 7200
+	if _, err := store.UpdatePlanWithBindings(PlanPatch{ID: plan.ID, Windows: &plan.Windows}, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range store.state.Keys {
+		if _, exists := key.Cycles[short]; exists || key.Cycles[long].SpentUSD != wantSubsetCost {
+			t.Fatalf("window edit reset other usage: %+v", key.Cycles)
+		}
+	}
+	if _, err := store.ResetCycles(ResetRequest{Mode: "all", Scopes: []string{"live", "deleted"}}); err == nil {
+		t.Fatal("deleted key accepted in reset")
+	}
+	if len(store.state.Keys["live"].Cycles) != 1 {
+		t.Fatal("invalid batch partially applied")
+	}
+	result, err := store.ResetCycles(ResetRequest{Mode: "global"})
+	if err != nil || result.Keys != 1 || result.Windows != 1 || len(store.state.Keys["live"].Cycles) != 0 || len(store.state.Keys["deleted"].Cycles) != 1 {
+		t.Fatalf("global reset: %+v, %v", result, err)
+	}
+	plan.Windows = plan.Windows[:1]
+	plan.Windows = append(plan.Windows, QuotaWindow{Name: "New budget", AmountUSD: 20, PeriodSeconds: 86400})
+	updated, err := store.UpdatePlanWithBindings(PlanPatch{ID: plan.ID, Windows: &plan.Windows}, nil)
+	if err != nil || updated.Windows[1].ID == long || len(store.state.Keys["deleted"].Cycles) != 0 {
+		t.Fatalf("window replacement: %+v, %v", updated, err)
 	}
 }

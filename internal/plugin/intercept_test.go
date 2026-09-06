@@ -25,8 +25,7 @@ func exhaustedApp(t *testing.T, resetAfter time.Duration) *App {
 		t.Fatalf("SyncKeys error = %v", errSync)
 	}
 	if _, errCreate := app.store.CreatePlanWithBindings(billing.Plan{
-		ID: "plan-5", Name: "Plan 5", AmountUSD: 5,
-		PeriodSeconds: int64(resetAfter / time.Second),
+		ID: "plan-5", Name: "Plan 5", Windows: []billing.QuotaWindow{{Name: "额度", AmountUSD: 5, PeriodSeconds: int64(resetAfter / time.Second)}},
 	}, []string{billing.CallerScope(testAPIKey)}); errCreate != nil {
 		t.Fatalf("CreatePlanWithBindings error = %v", errCreate)
 	}
@@ -59,18 +58,6 @@ func TestInterceptTerminatesAnExhaustedKey(t *testing.T) {
 	retryAfter, err := strconv.Atoi(resp.ResponseHeaders.Get("Retry-After"))
 	if err != nil || retryAfter != 1800 {
 		t.Fatalf("Retry-After = %q, want 1800", resp.ResponseHeaders.Get("Retry-After"))
-	}
-}
-
-func TestInterceptNeverResetPlanHasNoRetryHint(t *testing.T) {
-	app := exhaustedApp(t, 0)
-
-	resp := callIntercept(t, app, "openai")
-	if !resp.Terminate || resp.ResponseHeaders.Get("Retry-After") != "" {
-		t.Fatalf("response = %+v, want a rejection without Retry-After", resp)
-	}
-	if strings.Contains(string(resp.ResponseBody), "resets") {
-		t.Fatalf("body = %s, should not promise an automatic reset", resp.ResponseBody)
 	}
 }
 
@@ -157,7 +144,7 @@ func TestCompletionDuringReferencePriceRefresh(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := app.store.CreatePlanWithBindings(billing.Plan{
-				ID: "cancel-test", Name: "Cancel test", AmountUSD: 10, PeriodSeconds: 3600,
+				ID: "cancel-test", Name: "Cancel test", Windows: []billing.QuotaWindow{{Name: "额度", AmountUSD: 10, PeriodSeconds: 3600}},
 			}, []string{flowScope()}); err != nil {
 				t.Fatal(err)
 			}
@@ -199,10 +186,10 @@ func TestCompletionDuringReferencePriceRefresh(t *testing.T) {
 			}
 			view, _ := app.store.KeyViewForScope(flowScope())
 			if test.complete {
-				if view.CurrentConcurrency != 0 || !view.CycleEndAt.IsZero() {
+				if view.CurrentConcurrency != 0 || !view.Windows[0].EndAt.IsZero() {
 					t.Fatalf("completed request changed admission state: %+v", view)
 				}
-			} else if view.CurrentConcurrency != 1 || view.CycleEndAt.IsZero() {
+			} else if view.CurrentConcurrency != 1 || view.Windows[0].EndAt.IsZero() {
 				t.Fatalf("active request was not admitted: %+v", view)
 			}
 			if len(app.admissions) != 0 {

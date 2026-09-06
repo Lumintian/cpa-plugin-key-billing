@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func concurrencyApp(t *testing.T, limit int) *App {
@@ -81,7 +82,7 @@ func TestNonGeneratingRequestDoesNotOccupySlot(t *testing.T) {
 }
 
 func TestQuotaRejectionRollsBackConcurrencySlot(t *testing.T) {
-	app := exhaustedApp(t, 0)
+	app := exhaustedApp(t, time.Hour)
 	if errSet := app.store.SetConcurrencyLimit(flowScope(), 1); errSet != nil {
 		t.Fatal(errSet)
 	}

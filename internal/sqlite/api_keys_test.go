@@ -43,12 +43,13 @@ func TestOldKeyPreviewRepairPreservesHistoryAndCanBeResolved(t *testing.T) {
 	const apiKey = "sk-dummy-legacy-0001"
 	scope := billing.CallerScope(apiKey)
 	state := billing.NewState()
+	state.Plans = []billing.Plan{{ID: "plan", Windows: []billing.QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 10, PeriodSeconds: 3600}}}}
 	state.Keys[scope] = &billing.KeyState{
 		Preview: billing.PreviewKey(apiKey), Label: "Legacy", PlanID: "plan",
-		ConcurrencyLimit: 3, DeletedAt: time.Unix(100, 0), Cycle: billing.Cycle{SpentUSD: 2},
+		ConcurrencyLimit: 3, DeletedAt: time.Unix(100, 0), Cycles: map[string]billing.QuotaCycle{"default": {PlanID: "plan", StartAt: time.Unix(1, 0), EndAt: time.Unix(3601, 0), SpentUSD: 2}},
 		RouteBindings: billing.RouteBindings{Models: []string{"gpt-5.5"}},
 	}
-	mustSave(t, database, state, billing.Changes{AllKeys: true,
+	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true,
 		NormalRequestEvents: []billing.RequestEvent{requestEvent(scope, time.Now())},
 	})
 	if _, err := database.db.Exec("UPDATE api_keys SET preview = '' WHERE scope = ?", scope); err != nil {
@@ -57,7 +58,7 @@ func TestOldKeyPreviewRepairPreservesHistoryAndCanBeResolved(t *testing.T) {
 	for range 2 {
 		key := mustLoad(t, database).State.Keys[scope]
 		if key == nil || key.Preview != billing.UnknownKeyPreview || key.Label != "Legacy" ||
-			key.PlanID != "plan" || key.ConcurrencyLimit != 3 || key.Cycle.SpentUSD != 2 ||
+			key.PlanID != "plan" || key.ConcurrencyLimit != 3 || key.Cycles["default"].SpentUSD != 2 ||
 			!key.DeletedAt.Equal(time.Unix(100, 0)) || len(key.RouteBindings.Models) != 1 {
 			t.Fatalf("preview repair changed key state: %+v", key)
 		}

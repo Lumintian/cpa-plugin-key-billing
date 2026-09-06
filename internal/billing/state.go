@@ -37,11 +37,16 @@ type LongContextPrice struct {
 }
 
 type Plan struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	AmountUSD float64 `json:"amount_usd"`
-	// PeriodSeconds is zero for a budget that never resets.
-	PeriodSeconds int64 `json:"period_seconds"`
+	ID      string        `json:"id"`
+	Name    string        `json:"name"`
+	Windows []QuotaWindow `json:"windows"`
+}
+
+type QuotaWindow struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	AmountUSD     float64 `json:"amount_usd"`
+	PeriodSeconds int64   `json:"period_seconds"`
 }
 
 // KeyState is identified by caller scope; plaintext keys are never stored.
@@ -58,17 +63,16 @@ type KeyState struct {
 	//
 	// Key records are permanent: historical events resolve their scope to the
 	// preview and label here, even after the key leaves CPA's configuration.
-	InConfig         bool          `json:"in_config,omitempty"`
-	DeletedAt        time.Time     `json:"deleted_at,omitzero"`
-	PlanID           string        `json:"plan_id,omitempty"`
-	ConcurrencyLimit int           `json:"concurrency_limit,omitempty"`
-	RouteBindings    RouteBindings `json:"route_bindings"`
-	Cycle            Cycle         `json:"cycle"`
+	InConfig         bool                  `json:"in_config,omitempty"`
+	DeletedAt        time.Time             `json:"deleted_at,omitzero"`
+	PlanID           string                `json:"plan_id,omitempty"`
+	ConcurrencyLimit int                   `json:"concurrency_limit,omitempty"`
+	RouteBindings    RouteBindings         `json:"route_bindings"`
+	Cycles           map[string]QuotaCycle `json:"cycles"`
 }
 
-type Cycle struct {
-	// PlanID records which plan opened this window, so a completion admitted
-	// under an earlier binding is recognized as belonging elsewhere.
+type QuotaCycle struct {
+	// PlanID ties persisted consumption to the plan that opened this window.
 	PlanID   string    `json:"plan_id,omitempty"`
 	StartAt  time.Time `json:"start_at,omitzero"`
 	EndAt    time.Time `json:"end_at,omitzero"`

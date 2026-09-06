@@ -12,9 +12,7 @@ import (
 	"cpa-key-billing/internal/billing"
 )
 
-// maxRetryAfterSeconds caps the Retry-After hint. A monthly plan can be weeks
-// from resetting, and a client that sleeps literally for that long is worse off
-// than one that retries hourly and gets another 429.
+// Bound the retry hint so clients periodically recheck quota availability.
 const maxRetryAfterSeconds = 3600
 
 // Only in-flight admission calls need a completion marker. Once they return,
@@ -240,7 +238,7 @@ func quotaExhaustedResponse(sourceFormat string, decision billing.Decision, now 
 	headers := http.Header{
 		"Content-Type": []string{"application/json; charset=utf-8"},
 	}
-	if retryAfter := retryAfterSeconds(decision.ResetAt, now); retryAfter > 0 {
+	if retryAfter := retryAfterSeconds(decision.RetryAt, now); retryAfter > 0 {
 		headers.Set("Retry-After", strconv.Itoa(retryAfter))
 	}
 	return RequestInterceptResponse{
@@ -281,10 +279,14 @@ func modelForbiddenResponse(sourceFormat string, decision billing.RoutingDecisio
 
 func quotaExhaustedMessage(decision billing.Decision) string {
 	var builder strings.Builder
-	builder.WriteString("API key subscription quota exhausted: $")
-	builder.WriteString(formatUSD(decision.SpentUSD))
-	builder.WriteString(" spent of $")
-	builder.WriteString(formatUSD(decision.LimitUSD))
+	builder.WriteString("API key subscription quota exhausted:")
+	for _, window := range decision.Windows {
+		if !window.Blocked {
+			continue
+		}
+		fmt.Fprintf(&builder, " %q $%s / $%s, resets at %s;", window.Name,
+			formatUSD(window.SpentUSD), formatUSD(window.AmountUSD), window.EndAt.UTC().Format(time.RFC3339))
+	}
 	plan := strings.TrimSpace(decision.PlanName)
 	if plan == "" {
 		plan = strings.TrimSpace(decision.PlanID)
@@ -294,9 +296,9 @@ func quotaExhaustedMessage(decision billing.Decision) string {
 		builder.WriteString(strconv.Quote(plan))
 	}
 	builder.WriteString(".")
-	if !decision.ResetAt.IsZero() {
+	if !decision.RetryAt.IsZero() {
 		builder.WriteString(" Quota resets at ")
-		builder.WriteString(decision.ResetAt.UTC().Format(time.RFC3339))
+		builder.WriteString(decision.RetryAt.UTC().Format(time.RFC3339))
 		builder.WriteString(".")
 	}
 	return builder.String()

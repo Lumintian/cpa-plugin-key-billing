@@ -92,6 +92,14 @@ INSERT INTO key_allowed_models VALUES(0,'legacy-scope','other-model');`
 					old += `INSERT INTO api_keys(scope,plan_id,cycle_spent_usd,route_bindings_json)
 VALUES('legacy-scope','plan',4.5,'[{"kind":"model","value":"model-a"}]');`
 				}
+				old += `UPDATE api_keys SET cycle_plan_id='plan',cycle_start_at=1,cycle_end_at=2592000000000001;`
+				old += `INSERT INTO plans(position,id,name,amount_usd,period_kind) VALUES(1,'legacy-zero','Legacy',20,'never');
+                    INSERT INTO api_keys(scope,plan_id,cycle_plan_id,cycle_start_at,cycle_spent_usd) VALUES('zero-active','legacy-zero','legacy-zero',123456789,2);
+                    INSERT INTO api_keys(scope,plan_id) VALUES('zero-idle','legacy-zero');`
+				if version == 11 {
+					old += `UPDATE api_keys SET route_bindings_json='[]' WHERE scope IN ('zero-active','zero-idle');`
+				}
+
 				if conflict {
 					// Fail after the earlier migration steps have transformed legacy
 					// bindings and periods, proving the entire chain rolls back.
@@ -136,11 +144,17 @@ VALUES('legacy-scope','plan',4.5,'[{"kind":"model","value":"model-a"}]');`
 				if err != nil {
 					t.Fatal(err)
 				}
-				if snapshot.RequestEventCount != 2 || len(snapshot.State.Prices) != 1 || snapshot.State.Prices["model-a"].ModelID != "model-a" || snapshot.State.Prices["model-a"].InputPer1M != 0 || snapshot.State.Plans[0].PeriodSeconds != 2592000 {
+				if snapshot.RequestEventCount != 2 || len(snapshot.State.Prices) != 1 || snapshot.State.Prices["model-a"].ModelID != "model-a" || snapshot.State.Prices["model-a"].InputPer1M != 0 || snapshot.State.Plans[0].Windows[0].PeriodSeconds != 2592000 {
 					t.Fatal("history or prices changed", snapshot)
 				}
+				converted, _ := snapshot.State.FindPlan("legacy-zero")
+				cycle := snapshot.State.Keys["zero-active"].Cycles["default"]
+				if converted.Windows[0].PeriodSeconds != 365*24*3600 || cycle.SpentUSD != 2 ||
+					!cycle.EndAt.Equal(time.Unix(0, 123456789).Add(365*24*time.Hour)) || len(snapshot.State.Keys["zero-idle"].Cycles) != 0 {
+					t.Fatal("zero-period migration changed consumption or started an idle window")
+				}
 				key := snapshot.State.Keys["legacy-scope"]
-				if key == nil || key.Cycle.SpentUSD != 4.5 || (len(key.RouteBindings.Models) == 0 && len(key.RouteBindings.RouteIDs) == 0) {
+				if key == nil || key.Cycles["default"].SpentUSD != 4.5 || (len(key.RouteBindings.Models) == 0 && len(key.RouteBindings.RouteIDs) == 0) {
 					t.Fatal("legacy key state was lost", key)
 				}
 				var reason string
@@ -297,3 +311,80 @@ CREATE TABLE plugin_logs (
 
 CREATE INDEX plugin_logs_at ON plugin_logs(at);
 `
+
+func TestV12QuotaWindowsMigrationAndRollback(t *testing.T) {
+	for _, scenario := range []string{"", "zero period", "missing cycle time", "mixed format"} {
+		t.Run(scenario, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "old.db")
+			raw, err := sql.Open("sqlite3", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer raw.Close()
+			if _, err := raw.Exec(legacyPricingSchemaSQL); err != nil {
+				t.Fatal(err)
+			}
+			start := time.Date(2026, 8, 1, 2, 3, 4, 567890123, time.UTC)
+			if _, err := raw.Exec(`INSERT INTO plans(position,id,name,amount_usd,period_seconds) VALUES(0,'p','Team',5,3600);
+                    INSERT INTO request_events(at,scope,failed) VALUES(1,'s',1),(2,'s',0);`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.Exec(`INSERT INTO api_keys(scope,preview,deleted_at,plan_id,cycle_plan_id,cycle_start_at,cycle_end_at,cycle_spent_usd)
+                    VALUES('s','unknown',1,'p','p',?,?,7.5)`, start.UnixNano(), start.Add(time.Hour).UnixNano()); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "mixed format" {
+				_, err = raw.Exec("ALTER TABLE plans ADD COLUMN windows_json TEXT")
+			}
+			if scenario == "zero period" {
+				_, err = raw.Exec("UPDATE plans SET period_seconds=0; UPDATE api_keys SET cycle_end_at=0;")
+			}
+			if scenario == "missing cycle time" {
+				_, err = raw.Exec("UPDATE api_keys SET cycle_start_at=0")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.Exec("PRAGMA user_version=12"); err != nil {
+				t.Fatal(err)
+			}
+			database, err := Open(path)
+			if scenario == "missing cycle time" || scenario == "mixed format" {
+				if err == nil {
+					database.Close()
+					t.Fatal("corrupt legacy data accepted")
+				}
+				var spent float64
+				var currentVersion int
+				if err := raw.QueryRow("SELECT cycle_spent_usd FROM api_keys").Scan(&spent); err != nil || spent != 7.5 {
+					t.Fatal("rollback lost data", err)
+				}
+				if err := raw.QueryRow("PRAGMA user_version").Scan(&currentVersion); err != nil || currentVersion != 12 {
+					t.Fatal("version was not rolled back", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			snapshot := mustLoad(t, database)
+			cycle := snapshot.State.Keys["s"].Cycles["default"]
+			expectedPeriod := int64(3600)
+			if scenario == "zero period" {
+				expectedPeriod = 365 * 24 * 3600
+			}
+			if snapshot.State.Plans[0].Windows[0].PeriodSeconds != expectedPeriod {
+				t.Fatal("incorrect migrated period")
+			}
+			if !cycle.StartAt.Equal(start) || !cycle.EndAt.Equal(start.Add(time.Duration(expectedPeriod)*time.Second)) || cycle.SpentUSD != 7.5 || snapshot.RequestEventCount != 2 || snapshot.State.Keys["s"].DeletedAt.IsZero() {
+				t.Fatalf("migration lost state: %+v", snapshot)
+			}
+			database.Close()
+			reopened, err := Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reopened.Close()
+		})
+	}
+}

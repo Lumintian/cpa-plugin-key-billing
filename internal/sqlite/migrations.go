@@ -12,15 +12,15 @@ import (
 )
 
 func (d *DB) migrateV10ToV13() error {
-	return d.migrateToV13(migrateModelGroups, migrateSubscriptionPeriods, migrateModelPricing)
+	return d.migrateToV13(migrateModelGroups, migrateSubscriptionPeriods, migrateModelPricing, migrateQuotaWindows)
 }
 
 func (d *DB) migrateV11ToV13() error {
-	return d.migrateToV13(migrateLegacyRouteBindings, migrateSubscriptionPeriods, migrateModelPricing)
+	return d.migrateToV13(migrateLegacyRouteBindings, migrateSubscriptionPeriods, migrateModelPricing, migrateQuotaWindows)
 }
 
 func (d *DB) migrateV12ToV13() error {
-	return d.migrateToV13(migrateModelPricing)
+	return d.migrateToV13(migrateModelPricing, migrateQuotaWindows)
 }
 
 // Each supported version upgrades directly to v13 in one transaction.
@@ -313,4 +313,103 @@ func migrateSubscriptionPeriods(tx *sql.Tx) error {
 		return fmt.Errorf("删除旧订阅周期类型：%w", err)
 	}
 	return nil
+}
+
+func migrateQuotaWindows(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT id, name, amount_usd, period_seconds FROM plans")
+	if err != nil {
+		return err
+	}
+	plans := make(map[string]billing.Plan)
+	convertedPeriods := make(map[string]bool)
+	for rows.Next() {
+		var plan billing.Plan
+		window := billing.QuotaWindow{ID: "default", Name: "默认额度"}
+		if err := rows.Scan(&plan.ID, &plan.Name, &window.AmountUSD, &window.PeriodSeconds); err != nil {
+			rows.Close()
+			return err
+		}
+		if window.PeriodSeconds == 0 {
+			window.PeriodSeconds = 365 * 24 * 60 * 60
+			convertedPeriods[plan.ID] = true
+		}
+		plan.Windows = []billing.QuotaWindow{window}
+		if err := plan.Validate(); err != nil {
+			rows.Close()
+			return err
+		}
+		plans[plan.ID] = plan
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	rows, err = tx.Query("SELECT scope, plan_id, cycle_plan_id, cycle_start_at, cycle_end_at, cycle_spent_usd FROM api_keys")
+	if err != nil {
+		return err
+	}
+	cycles := make(map[string]string)
+	for rows.Next() {
+		var scope string
+		var key billing.KeyState
+		var cycle billing.QuotaCycle
+		var start, end int64
+		if err := rows.Scan(&scope, &key.PlanID, &cycle.PlanID, &start, &end, &cycle.SpentUSD); err != nil {
+			rows.Close()
+			return err
+		}
+		cycle.StartAt, cycle.EndAt = timeAt(start), timeAt(end)
+		if convertedPeriods[key.PlanID] && !cycle.StartAt.IsZero() && cycle.EndAt.IsZero() {
+			cycle.EndAt = cycle.StartAt.Add(365 * 24 * time.Hour)
+		}
+		key.Cycles = map[string]billing.QuotaCycle{}
+		if cycle != (billing.QuotaCycle{}) {
+			key.Cycles["default"] = cycle
+		}
+		if err := key.ValidateCycles(plans[key.PlanID]); err != nil {
+			rows.Close()
+			return fmt.Errorf("迁移额度周期：%w", err)
+		}
+		raw, err := json.Marshal(key.Cycles)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		cycles[scope] = string(raw)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`ALTER TABLE plans ADD COLUMN windows_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE api_keys ADD COLUMN cycles_json TEXT NOT NULL DEFAULT '{}';`); err != nil {
+		return err
+	}
+	for id, plan := range plans {
+		raw, err := json.Marshal(plan.Windows)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE plans SET windows_json=? WHERE id=?", string(raw), id); err != nil {
+			return err
+		}
+	}
+	for scope, raw := range cycles {
+		if _, err := tx.Exec("UPDATE api_keys SET cycles_json=? WHERE scope=?", raw, scope); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(`ALTER TABLE plans DROP COLUMN amount_usd;
+        ALTER TABLE plans DROP COLUMN period_seconds;
+        ALTER TABLE api_keys DROP COLUMN cycle_plan_id;
+        ALTER TABLE api_keys DROP COLUMN cycle_start_at;
+        ALTER TABLE api_keys DROP COLUMN cycle_end_at;
+        ALTER TABLE api_keys DROP COLUMN cycle_spent_usd;`)
+	return err
 }

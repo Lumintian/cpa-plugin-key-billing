@@ -3,6 +3,7 @@ package billing
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -213,7 +214,10 @@ func editConfiguration[T any](s *Store, fn func(*State) (T, Changes, error)) (T,
 		defer s.mu.Unlock()
 
 		next := *s.state
-		next.Plans = slices.Clone(s.state.Plans)
+		next.Plans = make([]Plan, len(s.state.Plans))
+		for i, plan := range s.state.Plans {
+			next.Plans[i] = clonePlan(plan)
+		}
 		next.Routes = make([]Route, len(s.state.Routes))
 		for i, route := range s.state.Routes {
 			next.Routes[i] = cloneRoute(route)
@@ -225,6 +229,7 @@ func editConfiguration[T any](s *Store, fn func(*State) (T, Changes, error)) (T,
 				continue
 			}
 			copyKey := *key
+			copyKey.Cycles = maps.Clone(key.Cycles)
 			copyKey.RouteBindings.RouteIDs = slices.Clone(key.RouteBindings.RouteIDs)
 			copyKey.RouteBindings.Models = slices.Clone(key.RouteBindings.Models)
 			copyKey.RouteBindings.CredentialIDs = slices.Clone(key.RouteBindings.CredentialIDs)
@@ -246,6 +251,13 @@ func editConfiguration[T any](s *Store, fn func(*State) (T, Changes, error)) (T,
 			s.dirty = Changes{}
 		}
 		s.state = &next
+		if changes.AllKeys {
+			s.blocked.reset()
+		} else {
+			for _, scope := range changes.Keys {
+				s.blocked.clear(scope)
+			}
+		}
 		value = result
 		return nil
 	}()

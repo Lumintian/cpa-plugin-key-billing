@@ -11,7 +11,7 @@ import (
 
 func TestConfigureLoadsTheDocumentBehindTheNewPath(t *testing.T) {
 	first := &memoryRepository{state: NewState()}
-	first.state.Plans = []Plan{{ID: "monthly-20", AmountUSD: 20, PeriodSeconds: 2592000}}
+	first.state.Plans = []Plan{{ID: "monthly-20", Windows: []QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 20, PeriodSeconds: 2592000}}}}
 	second := &memoryRepository{state: NewState()}
 
 	opened := 0
@@ -120,6 +120,14 @@ func TestReconfigureReportsADatabaseThatFailsToClose(t *testing.T) {
 func TestRecoveredWriteIncludesPendingRequestEvents(t *testing.T) {
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 	store, repo := newAccountStoreWithRepository(t, now)
+	store.ReplaceAll(func(state *State) {
+		state.Plans = []Plan{{ID: "p", Windows: []QuotaWindow{
+			{ID: "short", Name: "短时", AmountUSD: 5, PeriodSeconds: 3600},
+			{ID: "long", Name: "预算", AmountUSD: 10, PeriodSeconds: 86400},
+		}}}
+		state.Keys["scope-a"] = &KeyState{PlanID: "p"}
+	})
+	store.Authorize("scope-a", now)
 	repo.fail = errors.New("disk full")
 	store.RecordUsage(subsetEvent("scope-a", now))
 	store.RecordUsage(subsetEvent("scope-a", now.Add(time.Minute)))
@@ -139,6 +147,9 @@ func TestRecoveredWriteIncludesPendingRequestEvents(t *testing.T) {
 	}
 	if len(repo.requestEvents) != 2 {
 		t.Fatalf("recovered request events = %d, want 2", len(repo.requestEvents))
+	}
+	for _, cycle := range repo.state.Keys["scope-a"].Cycles {
+		assertClose(t, "persisted cycle cost", cycle.SpentUSD, 2*wantSubsetCost)
 	}
 }
 
@@ -164,16 +175,23 @@ func TestConfigurationWriteFailureKeepsState(t *testing.T) {
 	}{
 		{"concurrency", func(s *Store) error { return s.SetConcurrencyLimit("key", 1) }},
 		{"sync", func(s *Store) error { _, err := s.SyncKeys([]string{"sk-test-sync-0001"}, false); return err }},
+		{"edit windows", func(s *Store) error {
+			windows := s.Plans()[0].Windows
+			windows[0].PeriodSeconds = 7200
+			_, err := s.UpdatePlanWithBindings(PlanPatch{ID: "p", Windows: &windows}, nil)
+			return err
+		}},
+		{"reset", func(s *Store) error { _, err := s.ResetCycles(ResetRequest{Mode: "global"}); return err }},
 		{"delete plan", func(s *Store) error { _, err := s.DeletePlan("p"); return err }},
 		{"delete route", func(s *Store) error { _, err := s.DeleteRoute("r"); return err }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			store, repo := newStoreWithRepository(t)
 			store.ReplaceAll(func(state *State) {
-				state.Plans = []Plan{{ID: "p", AmountUSD: 10}}
+				state.Plans = []Plan{{ID: "p", Windows: []QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 10, PeriodSeconds: 3600}}}}
 				state.Routes = []Route{{ID: "r", Name: "r"}, {ID: "keep", Name: "keep"}}
 				state.Keys["key"] = &KeyState{Preview: "unknown", InConfig: true, PlanID: "p",
-					Cycle:         Cycle{PlanID: "p", StartAt: time.Now(), SpentUSD: 5},
+					Cycles:        map[string]QuotaCycle{"default": {PlanID: "p", StartAt: time.Now(), SpentUSD: 5}},
 					RouteBindings: RouteBindings{RouteIDs: []string{"r", "keep"}}}
 			})
 			before, err := json.Marshal(store.state)

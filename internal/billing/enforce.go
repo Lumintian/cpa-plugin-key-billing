@@ -1,29 +1,61 @@
 package billing
 
 import (
+	"math"
 	"strings"
 	"time"
 )
 
-type Decision struct {
-	Allowed      bool
-	PlanID       string
-	PlanName     string
-	LimitUSD     float64
-	SpentUSD     float64
-	CycleStartAt time.Time
-	ResetAt      time.Time
+type QuotaWindowView struct {
+	QuotaWindow
+	SpentUSD     float64   `json:"spent_usd"`
+	RemainingUSD float64   `json:"remaining_usd"`
+	UsedPercent  float64   `json:"used_percent"`
+	Started      bool      `json:"started"`
+	Blocked      bool      `json:"blocked"`
+	StartAt      time.Time `json:"start_at,omitzero"`
+	EndAt        time.Time `json:"end_at,omitzero"`
 }
 
-// It fails open by design. Anything the plugin cannot resolve — an
-// unattributable request, an unknown key, no subscription, or a deleted plan —
-// is allowed through. A billing plugin that starts
-// rejecting traffic because of its own missing state would be worse than one
-// that briefly under-charges.
-//
-// The first admitted use starts a key-relative period. An elapsed period is
-// closed and a fresh one starts at this use; idle time never consumes a new
-// period.
+type QuotaView struct {
+	Unlimited bool              `json:"unlimited"`
+	Blocked   bool              `json:"blocked"`
+	RetryAt   time.Time         `json:"retry_at,omitzero"`
+	Windows   []QuotaWindowView `json:"windows"`
+}
+
+type Decision struct {
+	Allowed  bool
+	PlanID   string
+	PlanName string
+	QuotaView
+}
+
+func quotaView(key *KeyState, plan Plan) QuotaView {
+	view := QuotaView{Windows: []QuotaWindowView{}, Unlimited: plan.ID == ""}
+	for _, window := range plan.Windows {
+		cycle := key.Cycles[window.ID]
+		item := QuotaWindowView{
+			QuotaWindow:  window,
+			SpentUSD:     cycle.SpentUSD,
+			RemainingUSD: math.Max(0, window.AmountUSD-cycle.SpentUSD),
+			UsedPercent:  math.Min(cycle.SpentUSD, window.AmountUSD) / window.AmountUSD * 100,
+			Started:      !cycle.StartAt.IsZero(),
+			StartAt:      cycle.StartAt,
+			EndAt:        cycle.EndAt,
+			Blocked:      cycle.SpentUSD >= window.AmountUSD,
+		}
+		if item.Blocked {
+			view.Blocked = true
+			if item.EndAt.After(view.RetryAt) {
+				view.RetryAt = item.EndAt
+			}
+		}
+		view.Windows = append(view.Windows, item)
+	}
+	return view
+}
+
 func (s *Store) Authorize(scope string, at time.Time) Decision {
 	allowed := Decision{Allowed: true}
 	scope = strings.TrimSpace(scope)
@@ -41,30 +73,22 @@ func (s *Store) Authorize(scope string, at time.Time) Decision {
 		touched := Changes{Keys: []string{scope}}
 		plan, ok := state.FindPlan(key.PlanID)
 		if !ok {
-			// The bound plan was deleted; treat the key as unlimited and drop
-			// the stale window instead of blocking it forever.
-			key.PlanID = ""
-			key.Cycle = Cycle{}
+			key.PlanID, key.Cycles = "", nil
 			return allowed, touched
 		}
 		var changed Changes
-		if activateCycle(key, plan, at) {
+		if settleExpiredCycles(key, at) {
 			changed = touched
 		}
-		current := Decision{
-			Allowed:      true,
-			PlanID:       plan.ID,
-			PlanName:     plan.Name,
-			LimitUSD:     plan.AmountUSD,
-			SpentUSD:     key.Cycle.SpentUSD,
-			CycleStartAt: key.Cycle.StartAt,
-			ResetAt:      key.Cycle.EndAt,
+		view := quotaView(key, plan)
+		if !view.Blocked && activateCycles(key, plan, at) {
+			changed = touched
+			view = quotaView(key, plan)
 		}
-		if key.Cycle.SpentUSD < plan.AmountUSD {
-			return current, changed
-		}
-		current.Allowed = false
-		return current, changed
+		return Decision{Allowed: !view.Blocked, PlanID: plan.ID, PlanName: plan.Name, QuotaView: view}, changed
 	})
+	if decision.Allowed {
+		s.blocked.clear(scope)
+	}
 	return decision
 }

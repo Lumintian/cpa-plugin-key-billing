@@ -33,8 +33,8 @@ func TestQuotaBlockIsReportedOncePerCycle(t *testing.T) {
 	store := failingStore(t)
 	cycle := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
 	blocked := Decision{
-		PlanID: "weekly", PlanName: "Weekly 10", LimitUSD: 10, SpentUSD: 10.4,
-		CycleStartAt: cycle, ResetAt: cycle.Add(7 * 24 * time.Hour),
+		PlanID: "weekly", PlanName: "Weekly 10",
+		QuotaView: QuotaView{Blocked: true, RetryAt: cycle.Add(7 * 24 * time.Hour), Windows: []QuotaWindowView{{QuotaWindow: QuotaWindow{ID: "d", Name: "额度", AmountUSD: 10}, SpentUSD: 10.4, Blocked: true, StartAt: cycle, EndAt: cycle.Add(7 * 24 * time.Hour)}}},
 	}
 
 	for range 3 {
@@ -52,7 +52,8 @@ func TestQuotaBlockIsReportedOncePerCycle(t *testing.T) {
 
 	// The next window is a new exhaustion and worth saying again.
 	rolled := blocked
-	rolled.CycleStartAt = cycle.Add(7 * 24 * time.Hour)
+	rolled.Windows = append([]QuotaWindowView(nil), blocked.Windows...)
+	rolled.Windows[0].StartAt = cycle.Add(7 * 24 * time.Hour)
 	store.ReportQuotaBlock("scope-a", "/v1/messages", rolled)
 	if events := admissionPluginLogs(t, store); len(events) != 2 {
 		t.Fatalf("events = %+v, want the new window reported", events)

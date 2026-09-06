@@ -29,7 +29,7 @@ func newAccountStoreWithRepository(t *testing.T, now time.Time) (*Store, *memory
 func subsetEvent(scope string, at time.Time) UsageEvent {
 	return UsageEvent{
 		Scope: scope, KeyPreview: "sk-tes…0001", AuthIndex: "auth-codex", ExecutorType: "CodexExecutor",
-		ReasoningEffort: "high", ServiceTier: "auto", At: at,
+		ReasoningEffort: "high", ServiceTier: "auto", At: at, RequestedAt: at,
 		UpstreamModel: "gpt-5.5", RouteModel: "gpt-5.5",
 		Breakdown: completeBreakdown(500, 400, 100, 500, 200),
 	}
@@ -107,56 +107,48 @@ func TestRecordUsagePreservesHostModelAndDurationValues(t *testing.T) {
 	}
 }
 
-func TestConcurrentLateCompletionDoesNotChargeNewCycle(t *testing.T) {
+func TestUsageRequestTimesPreserveWindowAttribution(t *testing.T) {
 	start := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	store := newAccountStore(t, start)
 	store.ReplaceAll(func(state *State) {
-		state.Plans = []Plan{{ID: "daily", AmountUSD: 5, PeriodSeconds: 86400}}
-		state.Keys["scope-a"] = &KeyState{PlanID: "daily"}
+		state.Plans = []Plan{{ID: "p", Windows: []QuotaWindow{
+			{ID: "short", Name: "短时", AmountUSD: 5, PeriodSeconds: 3600},
+			{ID: "long", Name: "预算", AmountUSD: 10, PeriodSeconds: 86400},
+		}}}
+		state.Keys["scope-a"] = &KeyState{PlanID: "p"}
 	})
-	firstCycle := store.Authorize("scope-a", start)
-	newCycle := store.Authorize("scope-a", start.Add(25*time.Hour))
-	if newCycle.CycleStartAt.Equal(firstCycle.CycleStartAt) {
-		t.Fatal("new request did not start a new cycle")
-	}
-
-	event := subsetEvent("scope-a", start.Add(26*time.Hour))
+	store.Authorize("scope-a", start)
+	next := store.Authorize("scope-a", start.Add(2*time.Hour))
+	event := subsetEvent("scope-a", start.Add(150*time.Minute))
 	event.RequestedAt = start
 	store.RecordUsage(event)
-
 	store.Read(func(state *State) {
 		key := state.Keys["scope-a"]
-		if !key.Cycle.StartAt.Equal(newCycle.CycleStartAt) || key.Cycle.SpentUSD != 0 {
-			t.Fatalf("new cycle was charged: %+v", key.Cycle)
+		if len(key.Cycles) != 2 || key.Cycles["short"].SpentUSD != 0 || key.Cycles["long"].SpentUSD != wantSubsetCost {
+			t.Fatalf("late usage attribution: %+v; admission=%+v", key.Cycles, next)
 		}
 	})
-	if len(mustRequestEvents(t, store, RequestEventQuery{}).Entries) != 1 {
-		t.Fatal("late completion request event was not preserved")
+	for _, requestedAt := range []time.Time{time.Time{}, start.Add(48 * time.Hour)} {
+		event.RequestedAt = requestedAt
+		store.RecordUsage(event)
+		store.Read(func(state *State) {
+			cycles := state.Keys["scope-a"].Cycles
+			if len(cycles) != 2 || cycles["short"].SpentUSD != 0 || cycles["long"].SpentUSD != wantSubsetCost ||
+				!cycles["short"].StartAt.Equal(next.Windows[0].StartAt) || !cycles["long"].StartAt.Equal(start) {
+				t.Fatalf("request time %s changed current cycles: %+v", requestedAt, cycles)
+			}
+		})
 	}
-}
-
-func TestFutureRequestedAtDoesNotClearCurrentCycle(t *testing.T) {
-	start := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
-	store := newAccountStore(t, start.Add(time.Hour))
-	store.ReplaceAll(func(state *State) {
-		state.Plans = []Plan{{ID: "daily", AmountUSD: 5, PeriodSeconds: 86400}}
-		state.Keys["scope-a"] = &KeyState{PlanID: "daily"}
-	})
-	cycle := store.Authorize("scope-a", start)
-	store.ReplaceAll(func(state *State) {
-		state.Keys["scope-a"].Cycle.SpentUSD = 4
-	})
-
-	event := subsetEvent("scope-a", start.Add(time.Hour))
-	event.RequestedAt = start.Add(25 * time.Hour)
-	store.RecordUsage(event)
-
-	store.Read(func(state *State) {
-		key := state.Keys["scope-a"]
-		if !key.Cycle.StartAt.Equal(cycle.CycleStartAt) || key.Cycle.SpentUSD != 4 {
-			t.Fatalf("cycle changed by request timestamp: %+v", key.Cycle)
-		}
-	})
+	if rows := mustRequestEvents(t, store, RequestEventQuery{}).Entries; len(rows) != 3 {
+		t.Fatal("usage history lost")
+	}
+	found := false
+	for _, entry := range mustPluginLogs(t, store) {
+		found = found || strings.Contains(entry.Message, "请求时间")
+	}
+	if !found {
+		t.Fatal("missing time was not diagnosed")
+	}
 }
 
 func TestCompletionDoesNotOpenCycleAfterAdministrativeChange(t *testing.T) {
@@ -167,7 +159,7 @@ func TestCompletionDoesNotOpenCycleAfterAdministrativeChange(t *testing.T) {
 		planID string
 	}{
 		{"reset", func(store *Store) error {
-			_, err := store.ResetCycles([]string{"scope-a"})
+			_, err := store.ResetCycles(ResetRequest{Mode: "all", Scopes: []string{"scope-a"}})
 			return err
 		}, "daily"},
 		{"rebind", func(store *Store) error { return store.BindKey("scope-a", "weekly") }, "weekly"},
@@ -176,8 +168,8 @@ func TestCompletionDoesNotOpenCycleAfterAdministrativeChange(t *testing.T) {
 			store := newAccountStore(t, start)
 			store.ReplaceAll(func(state *State) {
 				state.Plans = []Plan{
-					{ID: "daily", AmountUSD: 5, PeriodSeconds: 86400},
-					{ID: "weekly", AmountUSD: 5, PeriodSeconds: 604800},
+					{ID: "daily", Windows: []QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 5, PeriodSeconds: 86400}}},
+					{ID: "weekly", Windows: []QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 5, PeriodSeconds: 604800}}},
 				}
 				state.Keys["scope-a"] = &KeyState{PlanID: "daily"}
 			})
@@ -192,7 +184,7 @@ func TestCompletionDoesNotOpenCycleAfterAdministrativeChange(t *testing.T) {
 
 			store.Read(func(state *State) {
 				key := state.Keys["scope-a"]
-				if key.PlanID != test.planID || key.Cycle != (Cycle{}) {
+				if key.PlanID != test.planID || key.Cycles["default"] != (QuotaCycle{}) {
 					t.Fatalf("key = %+v, want plan %q with no active cycle", key, test.planID)
 				}
 			})

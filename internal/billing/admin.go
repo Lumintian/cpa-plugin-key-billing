@@ -8,7 +8,11 @@ import (
 
 func (s *Store) Plans() []Plan {
 	plans := []Plan{}
-	s.read(func(state *State) { plans = append(plans, state.Plans...) })
+	s.read(func(state *State) {
+		for _, plan := range state.Plans {
+			plans = append(plans, clonePlan(plan))
+		}
+	})
 	return plans
 }
 
@@ -22,6 +26,11 @@ func (s *Store) CreatePlanWithBindings(plan Plan, scopes []string) (Plan, error)
 		if plan.ID == "" {
 			plan.ID = state.freePlanID(plan.Name)
 		}
+		windows, err := prepareWindows(plan.Windows, nil)
+		if err != nil {
+			return Plan{}, Changes{}, err
+		}
+		plan.Windows = windows
 		if errValidate := plan.Validate(); errValidate != nil {
 			return Plan{}, Changes{}, errValidate
 		}
@@ -43,17 +52,16 @@ func (s *Store) CreatePlanWithBindings(plan Plan, scopes []string) (Plan, error)
 		state.Plans = append(state.Plans, plan)
 		for _, scope := range scopes {
 			state.Keys[scope].PlanID = plan.ID
-			state.Keys[scope].Cycle = Cycle{}
+			state.Keys[scope].Cycles = nil
 		}
-		return plan, Changes{Plans: true, Keys: scopes}, nil
+		return clonePlan(plan), Changes{Plans: true, Keys: scopes}, nil
 	})
 }
 
 type PlanPatch struct {
-	ID            string   `json:"id"`
-	Name          *string  `json:"name,omitempty"`
-	AmountUSD     *float64 `json:"amount_usd,omitempty"`
-	PeriodSeconds *int64   `json:"period_seconds,omitempty"`
+	ID      string         `json:"id"`
+	Name    *string        `json:"name,omitempty"`
+	Windows *[]QuotaWindow `json:"windows,omitempty"`
 }
 
 // UpdatePlanWithBindings applies a plan edit and, when scopes is non-nil,
@@ -74,11 +82,12 @@ func (s *Store) UpdatePlanWithBindings(patch PlanPatch, scopes *[]string) (Plan,
 			if patch.Name != nil {
 				updated.Name = strings.TrimSpace(*patch.Name)
 			}
-			if patch.AmountUSD != nil {
-				updated.AmountUSD = *patch.AmountUSD
-			}
-			if patch.PeriodSeconds != nil {
-				updated.PeriodSeconds = *patch.PeriodSeconds
+			if patch.Windows != nil {
+				windows, err := prepareWindows(*patch.Windows, updated.Windows)
+				if err != nil {
+					return Plan{}, Changes{}, err
+				}
+				updated.Windows = windows
 			}
 			if errValidate := updated.Validate(); errValidate != nil {
 				return Plan{}, Changes{}, errValidate
@@ -99,19 +108,28 @@ func (s *Store) UpdatePlanWithBindings(patch PlanPatch, scopes *[]string) (Plan,
 				}
 			}
 
-			periodChanged := updated.PeriodSeconds != state.Plans[i].PeriodSeconds
-			if periodChanged || scopes != nil {
-				for scope, key := range state.Keys {
-					if key == nil || key.PlanID != patch.ID {
-						continue
+			var resetWindows []string
+			if patch.Windows != nil {
+				for _, old := range state.Plans[i].Windows {
+					if !slices.ContainsFunc(updated.Windows, func(window QuotaWindow) bool {
+						return window.ID == old.ID && window.PeriodSeconds == old.PeriodSeconds
+					}) {
+						resetWindows = append(resetWindows, old.ID)
 					}
-					_, shouldBind := selected[scope]
-					if scopes != nil && !shouldBind {
-						key.PlanID = ""
-						key.Cycle = Cycle{}
-					} else if periodChanged && key.DeletedAt.IsZero() {
-						key.Cycle = Cycle{}
-					}
+				}
+			}
+
+			for scope, key := range state.Keys {
+				if key == nil || key.PlanID != patch.ID {
+					continue
+				}
+				_, shouldBind := selected[scope]
+				if scopes != nil && !shouldBind {
+					key.PlanID, key.Cycles = "", nil
+					continue
+				}
+				for _, id := range resetWindows {
+					delete(key.Cycles, id)
 				}
 			}
 			if scopes != nil {
@@ -119,12 +137,12 @@ func (s *Store) UpdatePlanWithBindings(patch PlanPatch, scopes *[]string) (Plan,
 					key := state.Keys[scope]
 					if key.PlanID == "" {
 						key.PlanID = patch.ID
-						key.Cycle = Cycle{}
+						key.Cycles = nil
 					}
 				}
 			}
 			state.Plans[i] = updated
-			return updated, Changes{Plans: true, AllKeys: true}, nil
+			return clonePlan(updated), Changes{Plans: true, AllKeys: true}, nil
 		}
 		return Plan{}, Changes{}, notFoundf("订阅计划 %q 不存在", patch.ID)
 	})
@@ -149,7 +167,7 @@ func (s *Store) DeletePlan(id string) (int, error) {
 				continue
 			}
 			key.PlanID = ""
-			key.Cycle = Cycle{}
+			key.Cycles = nil
 			released++
 		}
 		return released, Changes{Plans: true, AllKeys: true}, nil

@@ -82,7 +82,7 @@ func TestForbiddenModelIsRefusedInEveryClientFormat(t *testing.T) {
 func TestForbiddenModelLeavesTheSubscriptionUntouched(t *testing.T) {
 	app := restrictApp(t, "chat/fast")
 	if _, errCreate := app.store.CreatePlanWithBindings(billing.Plan{
-		ID: "daily", Name: "Daily 1", AmountUSD: 1, PeriodSeconds: 86400,
+		ID: "daily", Name: "Daily 1", Windows: []billing.QuotaWindow{{Name: "额度", AmountUSD: 1, PeriodSeconds: 86400}},
 	}, nil); errCreate != nil {
 		t.Fatalf("CreatePlanWithBindings error = %v", errCreate)
 	}
@@ -94,7 +94,7 @@ func TestForbiddenModelLeavesTheSubscriptionUntouched(t *testing.T) {
 		t.Fatal("a model the key may not call was admitted")
 	}
 	for _, key := range app.store.KeyViews() {
-		if key.Scope == flowScope() && (!key.CycleEndAt.IsZero() || key.SpentUSD != 0) {
+		if key.Scope == flowScope() && (!key.Windows[0].EndAt.IsZero() || key.Windows[0].SpentUSD != 0) {
 			t.Fatalf("key = %+v, want its cycle left inactive", key)
 		}
 	}

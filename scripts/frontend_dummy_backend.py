@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -240,25 +241,39 @@ def iso(value):
 
 
 PLANS = [
-    {
-        "id": "engineering-monthly",
-        "name": "研发团队",
-        "amount_usd": 300,
-        "period_seconds": 2592000,
-    },
-    {
-        "id": "production-monthly",
-        "name": "生产服务",
-        "amount_usd": 1000,
-        "period_seconds": 2592000,
-    },
-    {
-        "id": "project-credit",
-        "name": "项目额度",
-        "amount_usd": 100,
-        "period_seconds": 0,
-    },
+    {"id": "engineering", "name": "研发团队", "windows": [
+        {"id": "short", "name": "短时额度", "amount_usd": 15, "period_seconds": 18000},
+        {"id": "budget", "name": "团队预算", "amount_usd": 300, "period_seconds": 2592000},
+    ]},
+    {"id": "production", "name": "生产服务", "windows": [
+        {"id": "short", "name": "峰值保护", "amount_usd": 30, "period_seconds": 7200},
+        {"id": "medium", "name": "服务额度", "amount_usd": 100, "period_seconds": 86400},
+        {"id": "budget", "name": "生产预算", "amount_usd": 1000, "period_seconds": 2592000},
+    ]},
+    {"id": "project-credit", "name": "项目额度", "windows": [
+        {"id": "budget", "name": "项目预算", "amount_usd": 100, "period_seconds": 864000},
+    ]},
 ]
+
+
+def refresh_key_quota(key):
+    plan = next((item for item in PLANS if item["id"] == key["plan_id"]), None)
+    previous = {window["id"]: window for window in key.get("windows", [])}
+    key.update(plan_name=plan["name"] if plan else "", unlimited=plan is None, blocked=False, windows=[])
+    key.pop("retry_at", None)
+    for window in plan["windows"] if plan else []:
+        old = previous.get(window["id"], {})
+        started = old.get("started", False) and old.get("period_seconds") == window["period_seconds"]
+        spent = old.get("spent_usd", 0) if started else 0
+        amount = window["amount_usd"]
+        view = dict(window, started=started, spent_usd=spent, remaining_usd=max(0, amount-spent),
+                    used_percent=spent / amount * 100, blocked=spent >= amount)
+        if started:
+            view.update(start_at=old["start_at"], end_at=old["end_at"])
+        if view["blocked"]:
+            key["blocked"] = True
+            key["retry_at"] = max(key.get("retry_at", ""), view["end_at"])
+        key["windows"].append(view)
 
 
 CREDENTIALS = [
@@ -456,11 +471,11 @@ def auth_file_quota(query):
 
 
 KEY_PROFILES = [
-    {"label": "代码审查机器人", "plan_id": "engineering-monthly", "spent_usd": 128.64, "concurrency_limit": 5, "current_concurrency": 2, "cycle_days": 18, "route_bindings": {"route_ids": ["coding"], "models": [], "credential_ids": [], "credential_providers": []}},
-    {"label": "CI 构建服务", "plan_id": "engineering-monthly", "spent_usd": 84.27, "concurrency_limit": 10, "current_concurrency": 3, "cycle_days": 24, "route_bindings": {"route_ids": ["coding"], "models": [], "credential_ids": [], "credential_providers": []}},
-    {"label": "数据分析平台", "plan_id": "production-monthly", "spent_usd": 368.91, "concurrency_limit": 5, "current_concurrency": 1, "cycle_days": 12, "route_bindings": {"route_ids": ["analytics"], "models": [], "credential_ids": [], "credential_providers": []}},
-    {"label": "客服助手", "plan_id": "production-monthly", "spent_usd": 241.36, "concurrency_limit": 8, "current_concurrency": 2, "cycle_days": 7, "route_bindings": {"route_ids": ["analytics"], "models": ["gpt-5.5"], "credential_ids": [], "credential_providers": []}},
-    {"label": "文档生成", "plan_id": "engineering-monthly", "spent_usd": 56.48, "concurrency_limit": 3, "current_concurrency": 0, "cycle_days": 21, "route_bindings": {"route_ids": ["coding"], "models": [], "credential_ids": [], "credential_providers": []}},
+    {"label": "代码审查机器人", "plan_id": "engineering", "spent_usd": 128.64, "concurrency_limit": 5, "current_concurrency": 2, "route_bindings": {"route_ids": ["coding"], "models": [], "credential_ids": [], "credential_providers": []}},
+    {"label": "CI 构建服务", "plan_id": "engineering", "spent_usd": 84.27, "concurrency_limit": 10, "current_concurrency": 3, "route_bindings": {"route_ids": ["coding"], "models": [], "credential_ids": [], "credential_providers": []}},
+    {"label": "数据分析平台", "plan_id": "production", "spent_usd": 368.91, "concurrency_limit": 5, "current_concurrency": 1, "route_bindings": {"route_ids": ["analytics"], "models": [], "credential_ids": [], "credential_providers": []}},
+    {"label": "客服助手", "plan_id": "production", "spent_usd": 241.36, "concurrency_limit": 8, "current_concurrency": 2, "route_bindings": {"route_ids": ["analytics"], "models": ["gpt-5.5"], "credential_ids": [], "credential_providers": []}},
+    {"label": "文档生成", "plan_id": "engineering", "spent_usd": 56.48, "concurrency_limit": 3, "current_concurrency": 0, "route_bindings": {"route_ids": ["coding"], "models": [], "credential_ids": [], "credential_providers": []}},
     {"label": "预发布环境", "plan_id": "project-credit", "spent_usd": 43.72, "concurrency_limit": 2, "current_concurrency": 1, "route_bindings": {"route_ids": ["economy"], "models": [], "credential_ids": [], "credential_providers": []}},
     {"label": "内部工具", "plan_id": "", "spent_usd": 0, "concurrency_limit": 0, "current_concurrency": 1, "route_bindings": {"route_ids": [], "models": [], "credential_ids": [], "credential_providers": []}},
     {"label": "临时测试", "plan_id": "project-credit", "spent_usd": 87.19, "concurrency_limit": 1, "current_concurrency": 0, "route_bindings": {"route_ids": [], "models": ["gpt-5.5"], "credential_ids": ["sha256:" + "c" * 64], "credential_providers": []}},
@@ -470,7 +485,6 @@ KEY_PROFILES = [
 def make_key(index):
     profile = KEY_PROFILES[index - 1]
     plan = next((item for item in PLANS if item["id"] == profile["plan_id"]), None)
-    limit = plan["amount_usd"] if plan else 0
     result = {
         "scope": hashlib.sha256(CALLER_SCOPE_SALT + f"sk-demo-{index:04d}".encode()).hexdigest(),
         "preview": f"sk-demo…{index:04d}",
@@ -481,14 +495,16 @@ def make_key(index):
         "concurrency_limit": profile["concurrency_limit"],
         "current_concurrency": profile["current_concurrency"],
         "route_bindings": profile["route_bindings"],
-        "unlimited": plan is None,
-        "blocked": False,
-        "limit_usd": limit,
-        "spent_usd": profile["spent_usd"],
-        "used_percent": profile["spent_usd"] / limit * 100 if limit else 0,
+        "windows": [],
     }
-    if plan and plan["period_seconds"] > 0:
-        result["cycle_end_at"] = iso(NOW + timedelta(days=profile["cycle_days"]))
+    for position, window in enumerate(plan["windows"] if plan else []):
+        ratio = profile["spent_usd"] / plan["windows"][-1]["amount_usd"]
+        if index == 2 and position == 0 or index == 3 and position < 2:
+            ratio = 1.05
+        end = NOW + timedelta(seconds=window["period_seconds"] * 0.4)
+        result["windows"].append(dict(window, started=True, spent_usd=window["amount_usd"]*ratio,
+            start_at=iso(end-timedelta(seconds=window["period_seconds"])), end_at=iso(end)))
+    refresh_key_quota(result)
     return result
 
 
@@ -776,9 +792,7 @@ def account_access(index):
         "identity": {"preview": key["preview"], "label": key["label"]},
         "subscription": {
             "name": key["plan_name"], "unlimited": key["unlimited"], "blocked": key["blocked"],
-            "limit_usd": key["limit_usd"], "spent_usd": key["spent_usd"],
-            "remaining_usd": max(0, key["limit_usd"] - key["spent_usd"]),
-            "used_percent": key["used_percent"], "cycle_end_at": key.get("cycle_end_at"),
+            "windows": key["windows"], "retry_at": key.get("retry_at"),
         },
         "concurrency": {"limit": key["concurrency_limit"], "current": key["current_concurrency"]},
         "models": sorted(models),
@@ -1334,8 +1348,17 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.send_json(200, {"deleted": model})
         elif route == ("POST", f"{API_BASE}/keys/reset"):
-            scopes = json.loads(request_body or b"[]")
-            self.send_json(200, {"reset": len(set(scopes))})
+            body = json.loads(request_body or b"{}")
+            targets = [key for key in KEYS if not key.get("deleted_at") and key["plan_id"]
+                       and (body.get("mode") == "global" or key["scope"] in body.get("scopes", []))]
+            counts = {"keys": 0, "windows": 0}
+            for key in targets:
+                count = sum(window["started"] for window in key["windows"])
+                counts["keys"] += bool(count)
+                counts["windows"] += count
+                key["windows"] = []
+                refresh_key_quota(key)
+            self.send_json(200, counts)
         elif route == ("POST", f"{API_BASE}/keys/concurrency"):
             body = json.loads(request_body or b"{}")
             for key in KEYS:
@@ -1406,14 +1429,20 @@ class Handler(BaseHTTPRequestHandler):
                     key["route_bindings"]["route_ids"] = route_ids
             refresh_route_counts()
             self.send_json(200, {"route": stored})
-        elif route == ("PATCH", f"{API_BASE}/plans"):
+        elif route in {("POST", f"{API_BASE}/plans"), ("PATCH", f"{API_BASE}/plans")}:
             body = json.loads(request_body or b"{}")
-            plan_id = body.get("id", "")
+            plan_id = body.get("id") or "plan-" + str(time.time_ns())
             stored = next((item for item in PLANS if item["id"] == plan_id), None)
+            if self.command == "POST":
+                stored = {"id": plan_id}
+                PLANS.append(stored)
             if stored is None:
                 self.send_json(404, {"error": {"message": "dummy backend: plan not found"}})
                 return
-            stored.update({key: body[key] for key in ("name", "amount_usd", "period_seconds") if key in body})
+            stored.update({key: body[key] for key in ("name", "windows") if key in body})
+            for index, window in enumerate(stored["windows"]):
+                window.setdefault("id", str(time.time_ns()) + "-" + str(index))
+            stored["windows"].sort(key=lambda window: window["period_seconds"])
             if "scopes" in body:
                 scopes = set(body["scopes"])
                 for key in KEYS:
@@ -1421,7 +1450,9 @@ class Handler(BaseHTTPRequestHandler):
                         key["plan_id"] = plan_id
                     elif key["plan_id"] == plan_id:
                         key["plan_id"] = ""
-            self.send_json(200, {"plan": stored})
+            for key in KEYS:
+                refresh_key_quota(key)
+            self.send_json(201 if self.command == "POST" else 200, {"plan": stored})
         elif route == ("PUT", f"{API_BASE}/keys/routes"):
             body = json.loads(request_body or b"{}")
             bindings = body.get("bindings", {})
@@ -1436,14 +1467,24 @@ class Handler(BaseHTTPRequestHandler):
                     break
             refresh_route_counts()
             self.send_json(200, {"ok": True})
-        elif route in {
-            ("POST", f"{API_BASE}/keys/bind"),
-            ("POST", f"{API_BASE}/keys/unbind"),
-            ("POST", f"{API_BASE}/keys/label"),
-            ("POST", f"{API_BASE}/plans"),
-            ("DELETE", f"{API_BASE}/plans"),
-            ("PUT", f"{API_BASE}/prices"),
-        }:
+        elif route == ("DELETE", f"{API_BASE}/plans"):
+            plan_id = parse_qs(parsed.query).get("id", [""])[0]
+            PLANS[:] = [plan for plan in PLANS if plan["id"] != plan_id]
+            for key in KEYS:
+                if key["plan_id"] == plan_id:
+                    key.update(plan_id="", windows=[])
+                    refresh_key_quota(key)
+            self.send_json(200, {"deleted": plan_id})
+        elif route in {("POST", f"{API_BASE}/keys/bind"), ("POST", f"{API_BASE}/keys/unbind")}:
+            body = json.loads(request_body or b"{}")
+            for key in KEYS:
+                if key["scope"] == body.get("scope"):
+                    plan_id = body.get("plan_id", "")
+                    if key["plan_id"] != plan_id:
+                        key.update(plan_id=plan_id, windows=[])
+                        refresh_key_quota(key)
+            self.send_json(200, {"ok": True})
+        elif route == ("POST", f"{API_BASE}/keys/label"):
             self.send_json(200, {"ok": True})
         else:
             self.send_json(404, {"error": {"message": "dummy backend: route not found"}})

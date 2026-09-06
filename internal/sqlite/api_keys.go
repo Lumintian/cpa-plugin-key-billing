@@ -12,14 +12,13 @@ import (
 const insertKey = `
 INSERT INTO api_keys (
 	scope, preview, label, in_config, deleted_at, plan_id, concurrency_limit,
-	cycle_plan_id, cycle_start_at, cycle_end_at, cycle_spent_usd, route_bindings_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	cycles_json, route_bindings_json
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(scope) DO UPDATE SET
 	preview = excluded.preview, label = excluded.label, in_config = excluded.in_config,
 	deleted_at = excluded.deleted_at, plan_id = excluded.plan_id,
 	concurrency_limit = excluded.concurrency_limit,
-	cycle_plan_id = excluded.cycle_plan_id, cycle_start_at = excluded.cycle_start_at,
-	cycle_end_at = excluded.cycle_end_at, cycle_spent_usd = excluded.cycle_spent_usd,
+	cycles_json = excluded.cycles_json,
 	route_bindings_json = excluded.route_bindings_json`
 
 func saveKey(tx *sql.Tx, scope string, key *billing.KeyState) error {
@@ -33,9 +32,17 @@ func saveKey(tx *sql.Tx, scope string, key *billing.KeyState) error {
 	if errJSON != nil {
 		return fmt.Errorf("保存 API Key %s 的路由绑定：%w", scope, errJSON)
 	}
+	cycles := key.Cycles
+	if cycles == nil {
+		cycles = map[string]billing.QuotaCycle{}
+	}
+	rawCycles, err := json.Marshal(cycles)
+	if err != nil {
+		return err
+	}
 	_, errKey := tx.Exec(insertKey,
 		scope, key.Preview, key.Label, key.InConfig, nanos(key.DeletedAt), key.PlanID, key.ConcurrencyLimit,
-		key.Cycle.PlanID, nanos(key.Cycle.StartAt), nanos(key.Cycle.EndAt), key.Cycle.SpentUSD, string(bindings))
+		string(rawCycles), string(bindings))
 	if errKey != nil {
 		return fmt.Errorf("保存 API Key %s：%w", scope, errKey)
 	}
@@ -50,7 +57,7 @@ func (d *DB) loadKeys(state *billing.State) error {
 	}
 	rows, errQuery := d.db.Query(`
 		SELECT scope, preview, label, in_config, deleted_at, plan_id, concurrency_limit,
-			cycle_plan_id, cycle_start_at, cycle_end_at, cycle_spent_usd, route_bindings_json
+			cycles_json, route_bindings_json
 		FROM api_keys`)
 	if errQuery != nil {
 		return fmt.Errorf("读取 API Key 列表：%w", errQuery)
@@ -58,21 +65,30 @@ func (d *DB) loadKeys(state *billing.State) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			scope                           string
-			key                             billing.KeyState
-			deletedAt, cycleStart, cycleEnd int64
-			bindingsJSON                    string
+			scope        string
+			key          billing.KeyState
+			deletedAt    int64
+			cyclesJSON   string
+			bindingsJSON string
 		)
 		if errScan := rows.Scan(&scope, &key.Preview, &key.Label, &key.InConfig, &deletedAt, &key.PlanID, &key.ConcurrencyLimit,
-			&key.Cycle.PlanID, &cycleStart, &cycleEnd, &key.Cycle.SpentUSD, &bindingsJSON); errScan != nil {
+			&cyclesJSON, &bindingsJSON); errScan != nil {
 			return fmt.Errorf("读取 API Key 列表：%w", errScan)
 		}
 		if strings.TrimSpace(scope) == "" || strings.TrimSpace(key.Preview) == "" {
 			return fmt.Errorf("API Key 的标识和掩码不能为空")
 		}
 		key.DeletedAt = timeAt(deletedAt)
-		key.Cycle.StartAt = timeAt(cycleStart)
-		key.Cycle.EndAt = timeAt(cycleEnd)
+		if err := json.Unmarshal([]byte(cyclesJSON), &key.Cycles); err != nil {
+			return fmt.Errorf("读取额度周期：%w", err)
+		}
+		if key.Cycles == nil {
+			return fmt.Errorf("额度周期必须为 JSON 对象")
+		}
+		plan, _ := state.FindPlan(key.PlanID)
+		if err := key.ValidateCycles(plan); err != nil {
+			return err
+		}
 		if errDecode := json.Unmarshal([]byte(bindingsJSON), &key.RouteBindings); errDecode != nil {
 			return fmt.Errorf("读取 API Key %s 的路由绑定：%w", scope, errDecode)
 		}

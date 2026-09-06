@@ -46,9 +46,9 @@ func price(value float64) *float64 { return &value }
 
 func TestRepositoryRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
-	start := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
+	start := time.Date(2026, 8, 12, 9, 30, 0, 123456789, time.UTC)
 	state := billing.NewState()
-	state.Plans = []billing.Plan{{ID: "weekly", Name: "Weekly 10", AmountUSD: 10, PeriodSeconds: 604800}}
+	state.Plans = []billing.Plan{{ID: "weekly", Name: "Weekly 10", Windows: []billing.QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 10, PeriodSeconds: 604800}, {ID: "long", Name: "预算", AmountUSD: 50, PeriodSeconds: 1209600}}}}
 	state.Prices = map[string]billing.CustomPrice{"gpt-5.5": {ModelID: "gpt-5.5", PriceRates: billing.PriceRates{InputPer1M: 1, OutputPer1M: 2, CacheReadPer1M: price(.1)}}}
 	state.Routes = []billing.Route{{ID: "fast", Name: "Fast", Rule: billing.RouteRule{Models: []string{"gpt-5.5"}, CredentialIDs: []string{}, CredentialProviders: []billing.CredentialProviderSelector{}}}}
 	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", Label: "Alice", InConfig: true,
@@ -56,7 +56,7 @@ func TestRepositoryRoundTrip(t *testing.T) {
 			RouteIDs: []string{"fast"}, Models: []string{"other"}, CredentialIDs: []string{},
 			CredentialProviders: []billing.CredentialProviderSelector{},
 		},
-		Cycle: billing.Cycle{PlanID: "weekly", StartAt: start, EndAt: start.Add(7 * 24 * time.Hour), SpentUSD: 1.5}}
+		Cycles: map[string]billing.QuotaCycle{"default": {PlanID: "weekly", StartAt: start, EndAt: start.Add(7 * 24 * time.Hour), SpentUSD: 1.5}, "long": {PlanID: "weekly", StartAt: start, EndAt: start.Add(14 * 24 * time.Hour), SpentUSD: 9}}}
 	state.Credentials["auth-1"] = billing.Credential{Provider: "codex", Account: "ops@example.com"}
 
 	database := openDatabase(t, path)

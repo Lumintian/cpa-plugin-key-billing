@@ -50,6 +50,7 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 	}
 
 	cost := ComputeCost(price, event.Breakdown)
+	missingCycleTime := false
 	updateResult(s, func(state *State) (struct{}, Changes) {
 		upstreamModel := strings.TrimSpace(event.UpstreamModel)
 		if upstreamModel == "" {
@@ -81,12 +82,13 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		var changedKeys []string
 		if key := state.ensureKey(scope, event.KeyPreview); key != nil {
 			if !failed || usageBreakdownPresent(event.Breakdown) {
-				chargeCycle(key, event, cost.TotalUSD)
+				missingCycleTime = event.RequestedAt.IsZero() && len(key.Cycles) > 0 && cost.TotalUSD > 0
+				chargeCycles(key, event, cost.TotalUSD)
 			}
 			// A completion may arrive after its period ended. Close it now, but do
 			// not start the next period until another request is admitted.
-			if plan, hasPlan := state.FindPlan(key.PlanID); hasPlan {
-				settleExpiredCycle(key, plan, at)
+			if _, hasPlan := state.FindPlan(key.PlanID); hasPlan {
+				settleExpiredCycles(key, at)
 			}
 			changedKeys = []string{scope}
 		}
@@ -102,6 +104,9 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		}
 		return struct{}{}, changes
 	})
+	if missingCycleTime {
+		s.AddPluginLog(PluginLogError, "用量记录缺少请求时间，保留费用事件并跳过额度扣除")
+	}
 	if price.Source == PriceSourceReference {
 		s.AddPluginLog(PluginLogDebug,
 			"参考价计费：billing_model=%q，费用=$%.8f，单价（每百万 Token）：输入=$%g，输出=$%g，缓存读=$%g，缓存写=$%g",
@@ -110,24 +115,18 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 	}
 }
 
-// chargeCycle charges only a window opened when the request was admitted.
-// Usage completion never starts a window: after a reset or rebind, an older
-// in-flight request must not create and spend a new subscription period.
-func chargeCycle(key *KeyState, event UsageEvent, costUSD float64) {
-	if key.PlanID == "" || key.Cycle.StartAt.IsZero() || key.Cycle.PlanID != key.PlanID {
+// Usage never starts a window or charges a replacement window with older usage.
+func chargeCycles(key *KeyState, event UsageEvent, costUSD float64) {
+	if key.PlanID == "" || event.RequestedAt.IsZero() {
 		return
 	}
-	requestedAt := event.RequestedAt
-	if requestedAt.IsZero() {
-		requestedAt = event.At
+	for id, cycle := range key.Cycles {
+		if cycle.PlanID != key.PlanID || event.RequestedAt.Before(cycle.StartAt) || !event.RequestedAt.Before(cycle.EndAt) {
+			continue
+		}
+		cycle.SpentUSD += costUSD
+		key.Cycles[id] = cycle
 	}
-	if requestedAt.Before(key.Cycle.StartAt) {
-		return
-	}
-	if !key.Cycle.EndAt.IsZero() && !requestedAt.Before(key.Cycle.EndAt) {
-		return
-	}
-	key.Cycle.SpentUSD += costUSD
 }
 
 func usageBreakdownPresent(value TokenBreakdown) bool {

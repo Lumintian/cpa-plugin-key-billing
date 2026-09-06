@@ -876,7 +876,7 @@ assert_quota_exhausted() {
   management_call POST "$port" "/v0/management/plugins/cpa-key-billing/plans" \
     -H "Content-Type: application/json" \
     --data "$(jq -nc --arg name "$plan_name" --arg scope "$scope" \
-      '{name: $name, amount_usd: 0.0001, period_seconds: 86400, scopes: [$scope]}')" \
+      '{name: $name, windows: [{name: "Short", amount_usd: 0.0001, period_seconds: 3600}, {name: "Budget", amount_usd: 0.001, period_seconds: 86400}], scopes: [$scope]}')" \
     >"$runtime_dir/plan.json"
   plan="$(jq -er '.plan.id' "$runtime_dir/plan.json")"
 
@@ -888,6 +888,19 @@ assert_quota_exhausted() {
   assert_billing_entry "$port" "$expected_count" chat chat \
     "gpt-5.6-sol" "gpt-5.6-sol" "$runtime_dir/quota-spend-request-events.json" \
     "$runtime_dir/responses/quota-spend.json" false
+
+  management_call GET "$port" "/v0/management/plugins/cpa-key-billing/access" >"$runtime_dir/quota-access.json"
+  if ! jq -e --arg scope "$scope" \
+      --slurpfile events "$runtime_dir/quota-spend-request-events.json" '
+      $events[0].entries[0].cost.total_usd as $cost |
+      first(.keys[] | select(.scope == $scope)) |
+      (.windows | length == 2) and .blocked and
+      ([.windows[].period_seconds] == [3600, 86400]) and
+      all(.windows[]; .started and ((.spent_usd - $cost) | fabs) < 0.000000000001)
+    ' "$runtime_dir/quota-access.json" >/dev/null; then
+    echo "多维度周期消费与单笔请求费用不一致。" >&2
+    return 1
+  fi
 
   # The model stays one the key may call, so only the exhausted budget can be
   # refusing these. Anthropic clients read an error envelope of their own; every
@@ -921,7 +934,6 @@ assert_quota_exhausted() {
       echo "额度拦截 ${client} 的错误内容不正确：$(jq -c '.' "$response_file")" >&2
       return 1
     fi
-    # A periodic plan resets, so the refusal tells the client how long to wait.
     retry_after="$(awk 'tolower($1) == "retry-after:" {gsub(/\r/, "", $2); print $2}' "$headers_file" | tail -n 1)"
     if [[ -z "$retry_after" ]] || (( retry_after <= 0 )); then
       echo "额度拦截 ${client} 缺少 Retry-After 响应头：${retry_after:-无}" >&2

@@ -1,8 +1,11 @@
 package sqlite
 
 import (
+	"cmp"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"slices"
 
 	"cpa-key-billing/internal/billing"
 )
@@ -12,10 +15,17 @@ func replacePlans(tx *sql.Tx, state *billing.State) error {
 		return fmt.Errorf("保存订阅计划：%w", errClear)
 	}
 	for position, plan := range state.Plans {
+		if err := plan.Validate(); err != nil {
+			return err
+		}
+		raw, err := json.Marshal(plan.Windows)
+		if err != nil {
+			return err
+		}
 		_, errPlan := tx.Exec(`
-			INSERT INTO plans (position, id, name, amount_usd, period_seconds)
-			VALUES (?, ?, ?, ?, ?)`,
-			position, plan.ID, plan.Name, plan.AmountUSD, plan.PeriodSeconds)
+			INSERT INTO plans (position, id, name, windows_json)
+			VALUES (?, ?, ?, ?)`,
+			position, plan.ID, plan.Name, string(raw))
 		if errPlan != nil {
 			return fmt.Errorf("保存订阅计划 %s：%w", plan.ID, errPlan)
 		}
@@ -25,16 +35,26 @@ func replacePlans(tx *sql.Tx, state *billing.State) error {
 
 func (d *DB) loadPlans(state *billing.State) error {
 	rows, errQuery := d.db.Query(`
-		SELECT id, name, amount_usd, period_seconds FROM plans ORDER BY position`)
+		SELECT id, name, windows_json FROM plans ORDER BY position`)
 	if errQuery != nil {
 		return fmt.Errorf("读取订阅计划：%w", errQuery)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var plan billing.Plan
-		if errScan := rows.Scan(&plan.ID, &plan.Name, &plan.AmountUSD, &plan.PeriodSeconds); errScan != nil {
+		var raw string
+		if errScan := rows.Scan(&plan.ID, &plan.Name, &raw); errScan != nil {
 			return fmt.Errorf("读取订阅计划：%w", errScan)
 		}
+		if err := json.Unmarshal([]byte(raw), &plan.Windows); err != nil {
+			return fmt.Errorf("读取订阅计划 %s：%w", plan.ID, err)
+		}
+		if err := plan.Validate(); err != nil {
+			return err
+		}
+		slices.SortFunc(plan.Windows, func(a, b billing.QuotaWindow) int {
+			return cmp.Compare(a.PeriodSeconds, b.PeriodSeconds)
+		})
 		state.Plans = append(state.Plans, plan)
 	}
 	if errRows := rows.Err(); errRows != nil {

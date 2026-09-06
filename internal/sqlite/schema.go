@@ -1,6 +1,6 @@
 package sqlite
 
-// Times are Unix nanoseconds. Ordered configuration uses explicit positions.
+// Time columns use Unix nanoseconds; JSON cycles use UTC RFC3339Nano.
 const schema = `
 CREATE TABLE api_keys (
 	scope                 TEXT    PRIMARY KEY,
@@ -10,10 +10,7 @@ CREATE TABLE api_keys (
 	deleted_at            INTEGER NOT NULL DEFAULT 0,
 	plan_id               TEXT    NOT NULL DEFAULT '',
 	concurrency_limit     INTEGER NOT NULL DEFAULT 0,
-	cycle_plan_id         TEXT    NOT NULL DEFAULT '',
-	cycle_start_at        INTEGER NOT NULL DEFAULT 0,
-	cycle_end_at          INTEGER NOT NULL DEFAULT 0,
-	cycle_spent_usd       REAL    NOT NULL DEFAULT 0,
+	cycles_json           TEXT    NOT NULL DEFAULT '{}',
 	route_bindings_json   TEXT    NOT NULL DEFAULT '{}'
 );
 
@@ -25,11 +22,10 @@ CREATE TABLE routes (
 );
 
 CREATE TABLE plans (
-	position       INTEGER PRIMARY KEY,
-	id             TEXT    NOT NULL UNIQUE,
-	name           TEXT    NOT NULL DEFAULT '',
-	amount_usd     REAL    NOT NULL DEFAULT 0,
-	period_seconds INTEGER NOT NULL DEFAULT 0
+	position        INTEGER PRIMARY KEY,
+	id              TEXT    NOT NULL UNIQUE,
+	name            TEXT    NOT NULL DEFAULT '',
+	windows_json    TEXT    NOT NULL
 );
 
 CREATE TABLE prices (

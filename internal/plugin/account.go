@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"cpa-key-billing/internal/billing"
 )
@@ -15,14 +14,8 @@ type accountIdentity struct {
 }
 
 type accountSubscription struct {
-	Name         string    `json:"name,omitempty"`
-	Unlimited    bool      `json:"unlimited"`
-	Blocked      bool      `json:"blocked"`
-	LimitUSD     float64   `json:"limit_usd"`
-	SpentUSD     float64   `json:"spent_usd"`
-	RemainingUSD float64   `json:"remaining_usd"`
-	UsedPercent  float64   `json:"used_percent"`
-	CycleEndAt   time.Time `json:"cycle_end_at,omitzero"`
+	Name string `json:"name,omitempty"`
+	billing.QuotaView
 }
 
 type accountConcurrency struct {
@@ -58,16 +51,8 @@ func (a *App) accountAccess(access viewAccess) ManagementResponse {
 		return apiKeyJSON(http.StatusOK, response)
 	}
 	view := access.Key
-	remaining := view.LimitUSD - view.SpentUSD
-	if remaining < 0 {
-		remaining = 0
-	}
 	response.Identity = accountIdentity{Preview: view.Preview, Label: view.Label}
-	response.Subscription = accountSubscription{
-		Name: view.PlanName, Unlimited: view.Unlimited, Blocked: view.Blocked,
-		LimitUSD: view.LimitUSD, SpentUSD: view.SpentUSD, RemainingUSD: remaining,
-		UsedPercent: view.UsedPercent, CycleEndAt: view.CycleEndAt,
-	}
+	response.Subscription = accountSubscription{Name: view.PlanName, QuotaView: view.QuotaView}
 	response.Concurrency = accountConcurrency{Limit: view.ConcurrencyLimit, Current: view.CurrentConcurrency}
 	decision := a.store.ResolveRouting(access.Scope, "", "")
 	response.Models = decision.ModelScope

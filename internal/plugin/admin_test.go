@@ -90,10 +90,6 @@ func TestPricesRoundTripThroughTheManagementAPI(t *testing.T) {
 	if prices = readPrices(t, app, models...); len(prices) != 2 || prices[1].InputPer1M != 0 {
 		t.Fatalf("prices = %+v, want the rows kept and the edit dropped", prices)
 	}
-
-	if resp := callManagement(t, app, http.MethodPost, "/prices/sync", nil, map[string]any{"models": []string{}}); resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404 (body=%s)", resp.StatusCode, resp.Body)
-	}
 }
 
 func TestPlansCRUDThroughTheManagementAPI(t *testing.T) {
@@ -103,15 +99,14 @@ func TestPlansCRUDThroughTheManagementAPI(t *testing.T) {
 		Plan billing.Plan `json:"plan"`
 	}
 	callOK(t, app, http.MethodPost, routePlans, nil, map[string]any{
-		"name":           "Team Monthly",
-		"amount_usd":     20,
-		"period_seconds": 2592000,
+		"name":    "Team Monthly",
+		"windows": []billing.QuotaWindow{{Name: "额度", AmountUSD: 20, PeriodSeconds: 2592000}},
 	}, http.StatusCreated, &created)
-	if created.Plan.ID != "team-monthly" || created.Plan.PeriodSeconds != 2592000 {
+	if created.Plan.ID != "team-monthly" || created.Plan.Windows[0].PeriodSeconds != 2592000 {
 		t.Fatalf("plan = %+v", created.Plan)
 	}
 
-	if resp := callManagement(t, app, http.MethodPost, routePlans, nil, map[string]any{"id": created.Plan.ID, "amount_usd": 20}); resp.StatusCode != http.StatusConflict {
+	if resp := callManagement(t, app, http.MethodPost, routePlans, nil, map[string]any{"id": created.Plan.ID, "windows": []billing.QuotaWindow{{Name: "额度", AmountUSD: 20, PeriodSeconds: 3600}}}); resp.StatusCode != http.StatusConflict {
 		t.Fatalf("duplicate plan status = %d", resp.StatusCode)
 	}
 
@@ -119,11 +114,10 @@ func TestPlansCRUDThroughTheManagementAPI(t *testing.T) {
 		Plan billing.Plan `json:"plan"`
 	}
 	callOK(t, app, http.MethodPatch, routePlans, nil, map[string]any{
-		"id":             "team-monthly",
-		"amount_usd":     50,
-		"period_seconds": 0,
+		"id":      "team-monthly",
+		"windows": []billing.QuotaWindow{{ID: created.Plan.Windows[0].ID, Name: "额度", AmountUSD: 50, PeriodSeconds: 3600}},
 	}, http.StatusOK, &patched)
-	if patched.Plan.AmountUSD != 50 || patched.Plan.PeriodSeconds != 0 || patched.Plan.Name != "Team Monthly" {
+	if patched.Plan.Windows[0].AmountUSD != 50 || patched.Plan.Windows[0].PeriodSeconds != 3600 || patched.Plan.Name != "Team Monthly" {
 		t.Fatalf("plan = %+v", patched.Plan)
 	}
 
@@ -144,7 +138,7 @@ func TestKeyResetAcceptsScopeList(t *testing.T) {
 	callOK(t, app, http.MethodPost, routeKeysSync, nil,
 		map[string]any{"keys": keys}, http.StatusOK, nil)
 	callOK(t, app, http.MethodPost, routePlans, nil, map[string]any{
-		"id": "daily", "amount_usd": 10, "period_seconds": 86400,
+		"id": "daily", "windows": []billing.QuotaWindow{{Name: "额度", AmountUSD: 10, PeriodSeconds: 86400}},
 		"scopes": scopes,
 	}, http.StatusCreated, nil)
 	for _, scope := range scopes {
@@ -153,16 +147,14 @@ func TestKeyResetAcceptsScopeList(t *testing.T) {
 		}
 	}
 
-	var result struct {
-		Reset int `json:"reset"`
-	}
-	callOK(t, app, http.MethodPost, routeKeysReset, nil, scopes, http.StatusOK, &result)
-	if result.Reset != 2 {
-		t.Fatalf("reset = %d, want 2", result.Reset)
+	var result billing.ResetResult
+	callOK(t, app, http.MethodPost, routeKeysReset, nil, billing.ResetRequest{Mode: "all", Scopes: scopes}, http.StatusOK, &result)
+	if result.Keys != 2 {
+		t.Fatalf("reset = %d, want 2", result.Keys)
 	}
 	byScope := keysByScope(t, app)
 	for _, scope := range scopes {
-		if !byScope[scope].CycleEndAt.IsZero() {
+		if !byScope[scope].Windows[0].EndAt.IsZero() {
 			t.Fatalf("cycle for %q remained active: %+v", scope, byScope[scope])
 		}
 	}
@@ -213,9 +205,9 @@ func TestManagementErrorsMapToStatusCodes(t *testing.T) {
 		body       any
 		wantStatus int
 	}{
-		{"zero plan amount", http.MethodPost, routePlans, map[string]any{"id": "x", "amount_usd": 0, "period_seconds": 86400}, http.StatusBadRequest},
-		{"invalid plan period", http.MethodPost, routePlans, map[string]any{"id": "x", "amount_usd": 1, "period_seconds": -1}, http.StatusBadRequest},
-		{"unknown plan", http.MethodPatch, routePlans, map[string]any{"id": "ghost", "amount_usd": 1}, http.StatusNotFound},
+		{"zero plan amount", http.MethodPost, routePlans, map[string]any{"id": "x", "windows": []billing.QuotaWindow{{Name: "额度", AmountUSD: 0, PeriodSeconds: 86400}}}, http.StatusBadRequest},
+		{"invalid plan period", http.MethodPost, routePlans, map[string]any{"id": "x", "windows": []billing.QuotaWindow{{Name: "额度", AmountUSD: 1, PeriodSeconds: -1}}}, http.StatusBadRequest},
+		{"unknown plan", http.MethodPatch, routePlans, map[string]any{"id": "ghost", "name": "Missing"}, http.StatusNotFound},
 		{"bind to unknown plan", http.MethodPost, routeKeysBind, map[string]any{"scope": "abc", "plan_id": "ghost"}, http.StatusNotFound},
 		{"no scope", http.MethodPost, routeKeysUnbind, map[string]any{}, http.StatusBadRequest},
 		{"malformed body", http.MethodPost, routePlans, "{not json", http.StatusBadRequest},
@@ -317,7 +309,7 @@ func TestRequestEventQueryUsesABoundedDefaultPage(t *testing.T) {
 	}
 }
 
-func TestManagementAnalysisOmitsTheSelectedKeyDimension(t *testing.T) {
+func TestManagementAnalysisOmitsTheSelectedKeyWindow(t *testing.T) {
 	app := newConfiguredApp(t)
 	const apiKey = "sk-analysis-0000000001"
 	callOK(t, app, http.MethodPost, routeKeysSync, nil, map[string]any{"keys": []string{apiKey}}, http.StatusOK, nil)
@@ -351,7 +343,7 @@ func TestManagementRoutesWorkWhileDisabled(t *testing.T) {
 		t.Fatalf("prices = %+v", prices)
 	}
 	callOK(t, app, http.MethodPost, routePlans, nil, map[string]any{
-		"id": "daily", "amount_usd": 1, "period_seconds": 86400,
+		"id": "daily", "windows": []billing.QuotaWindow{{Name: "额度", AmountUSD: 1, PeriodSeconds: 86400}},
 	}, http.StatusCreated, nil)
 }
 
@@ -579,7 +571,7 @@ func TestManagementWriteFailureReturnsError(t *testing.T) {
 	if _, err := app.store.SyncKeys([]string{apiKey}, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.store.CreatePlanWithBindings(billing.Plan{ID: "p", AmountUSD: 10}, []string{scope}); err != nil {
+	if _, err := app.store.CreatePlanWithBindings(billing.Plan{ID: "p", Windows: []billing.QuotaWindow{{Name: "额度", AmountUSD: 10, PeriodSeconds: 3600}}}, []string{scope}); err != nil {
 		t.Fatal(err)
 	}
 	app.store.Authorize(scope, app.store.Now())
@@ -593,7 +585,7 @@ func TestManagementWriteFailureReturnsError(t *testing.T) {
         BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	response := callManagement(t, app, http.MethodPost, routeKeysReset, nil, []string{scope})
+	response := callManagement(t, app, http.MethodPost, routeKeysReset, nil, billing.ResetRequest{Mode: "all", Scopes: []string{scope}})
 	if response.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("reset status = %d, body = %s", response.StatusCode, response.Body)
 	}
@@ -607,12 +599,12 @@ func TestManagementWriteFailureReturnsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := app.store.KeyViewForScope(scope)
-	if after.PlanID != before.PlanID || after.SpentUSD != before.SpentUSD {
+	if after.PlanID != before.PlanID || after.Windows[0].SpentUSD != before.Windows[0].SpentUSD {
 		t.Fatalf("failed reset changed state: %+v", after)
 	}
-	reset, err := app.store.ResetCycles([]string{scope})
-	if err != nil || reset != 1 {
-		t.Fatalf("cycle was reset despite write failure: reset=%d, err=%v", reset, err)
+	reset, err := app.store.ResetCycles(billing.ResetRequest{Mode: "all", Scopes: []string{scope}})
+	if err != nil || reset.Keys != 1 {
+		t.Fatalf("cycle was reset despite write failure: reset=%+v, err=%v", reset, err)
 	}
 }
 

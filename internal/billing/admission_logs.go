@@ -16,7 +16,7 @@ func (s *Store) ReportQuotaBlock(scope, endpoint string, decision Decision) {
 		return
 	}
 	scope = strings.TrimSpace(scope)
-	if scope == "" || !s.blocked.onset(scope, decision.CycleStartAt) {
+	if scope == "" || !s.blocked.onset(scope, decision.blockSignature()) {
 		return
 	}
 	name := ""
@@ -29,42 +29,63 @@ func (s *Store) ReportQuotaBlock(scope, endpoint string, decision Decision) {
 		message.WriteString(" → ")
 		message.WriteString(endpoint)
 	}
-	fmt.Fprintf(&message, "，本期已用 $%.4f / $%.4f", decision.SpentUSD, decision.LimitUSD)
+	for _, window := range decision.Windows {
+		if window.Blocked {
+			fmt.Fprintf(&message, "，%s 已用 $%.4f / $%.4f（%s 重置）", window.Name, window.SpentUSD, window.AmountUSD, window.EndAt.UTC().Format(time.RFC3339))
+		}
+	}
 	if plan := planName(decision); plan != "" {
 		message.WriteString("，计划 ")
 		message.WriteString(plan)
 	}
-	if !decision.ResetAt.IsZero() {
-		message.WriteString("，重置时间 ")
-		message.WriteString(decision.ResetAt.UTC().Format(time.RFC3339))
+	if !decision.RetryAt.IsZero() {
+		message.WriteString("，预计恢复 ")
+		message.WriteString(decision.RetryAt.UTC().Format(time.RFC3339))
 	}
 	// Enforcement working as configured is not a fault of the plugin's, so this
 	// stays out of the level an operator reads to find one.
 	s.AddPluginLog(PluginLogInfo, "%s", message.String())
 }
 
-// blockedKeys remembers which subscription window a key was last reported
-// blocked in, so an exhausted key names itself once rather than once per
-// request the client behind it retries. A window that rolls, and an operator
-// who resets or rebinds one, produce a different instant and therefore a fresh
-// report. Only a key with a plan is ever blocked, so this holds at most one
-// entry per tracked key.
 type blockedKeys struct {
 	mu     sync.Mutex
-	cycles map[string]time.Time
+	states map[string]string
 }
 
-func (b *blockedKeys) onset(scope string, cycleStart time.Time) bool {
+func (d Decision) blockSignature() string {
+	var value strings.Builder
+	fmt.Fprintf(&value, "%q", d.PlanID)
+	for _, window := range d.Windows {
+		if window.Blocked {
+			fmt.Fprintf(&value, "|%q:%s", window.ID, window.StartAt.UTC().Format(time.RFC3339Nano))
+		}
+	}
+	return value.String()
+}
+
+func (b *blockedKeys) onset(scope, signature string) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.cycles == nil {
-		b.cycles = make(map[string]time.Time)
+	if b.states == nil {
+		b.states = make(map[string]string)
 	}
-	if reported, exists := b.cycles[scope]; exists && reported.Equal(cycleStart) {
+	if previous, exists := b.states[scope]; exists && previous == signature {
 		return false
 	}
-	b.cycles[scope] = cycleStart
+	b.states[scope] = signature
 	return true
+}
+
+func (b *blockedKeys) clear(scope string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	delete(b.states, scope)
+}
+
+func (b *blockedKeys) reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.states = nil
 }
 
 // describeKey names a key the way the panel does: the operator's remark beside

@@ -261,17 +261,15 @@ func (a *App) unbindKey(req ManagementRequest) ManagementResponse {
 }
 
 func (a *App) resetKeys(req ManagementRequest) ManagementResponse {
-	var scopes []string
-	if errDecode := decodeStrict(req.Body, &scopes); errDecode != nil {
-		return errorResponse(errDecode)
+	var body billing.ResetRequest
+	if err := decodeStrict(req.Body, &body); err != nil {
+		return errorResponse(err)
 	}
-	reset, err := a.store.ResetCycles(scopes)
+	result, err := a.store.ResetCycles(body)
 	if err != nil {
 		return errorResponse(err)
 	}
-	return JSONResponse(http.StatusOK, struct {
-		Reset int `json:"reset"`
-	}{Reset: reset})
+	return JSONResponse(http.StatusOK, result)
 }
 
 func (a *App) labelKey(req ManagementRequest) ManagementResponse {

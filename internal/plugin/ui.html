@@ -397,14 +397,12 @@
         font-weight: 500;
         color: var(--text-secondary);
       }
-      label.field > input,
-      label.field > select,
-      label.field > .native-select > select {
+      label.field input,
+      label.field select {
         font-weight: 400;
       }
-      :root:not([data-cpamp-plugin-host="true"]) label.field > input,
-      :root:not([data-cpamp-plugin-host="true"]) label.field > select,
-      :root:not([data-cpamp-plugin-host="true"]) label.field > .native-select > select {
+      :root:not([data-cpamp-plugin-host="true"]) label.field input,
+      :root:not([data-cpamp-plugin-host="true"]) label.field select {
         font-size: 14px;
         line-height: 1.5;
       }
@@ -606,9 +604,8 @@
       :root[data-cpamp-plugin-host="true"] select {
         padding-block: 5px;
       }
-      :root[data-cpamp-plugin-host="true"] label.field > input,
-      :root[data-cpamp-plugin-host="true"] label.field > select,
-      :root[data-cpamp-plugin-host="true"] label.field > .native-select > select {
+      :root[data-cpamp-plugin-host="true"] label.field input,
+      :root[data-cpamp-plugin-host="true"] label.field select {
         font-size: 13px;
         line-height: 1.5;
       }
@@ -738,14 +735,6 @@
       :root[data-cpamp-plugin-host="true"] thead th {
         background: var(--table-header-bg);
       }
-      .usage {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-        min-width: 118px;
-        max-width: 210px;
-      }
-      .usage > span { font-size: 12px; white-space: nowrap; }
       .bar {
         height: 6px;
         border-radius: 999px;
@@ -995,12 +984,28 @@
       body.embedded .standalone-actions { display: none; }
       .account-subscription-stats { margin-bottom: 16px; }
       .account-plan { display: grid; gap: 10px; margin: 0; }
-      .account-plan-value { display: block; margin-top: 10px; font-size: 24px; }
-      .account-progress {
-        height: 6px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+      .account-plan-value { font-size: 24px; }
+      .quota-windows { display: grid; gap: 6px; min-width: 0; }
+      .quota-window { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+      .quota-windows .bar { height: 4px; }
+      .quota-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
+      .quota-heading > :first-child { overflow: hidden; text-overflow: ellipsis; }
+      .quota-heading .blocked { color: var(--quota-low-color); }
+      #keys-body .quota-windows { width: 240px; }
+      .settings-dialog.plan-dialog { width: min(800px, calc(100vw - 32px)); }
+      .plan-windows-heading { margin-top: 20px; }
+      #plan-windows { display: grid; gap: 14px; margin-top: 12px; }
+      .plan-window { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .7fr) minmax(0, 1.2fr) auto; gap: 12px; align-items: start; }
+      .plan-window input, .plan-dialog > .field input { width: 100%; min-width: 0; }
+      .period-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+      .window-delete { margin-top: 24px; }
+      .field-error, #plan-form-error { color: var(--error-color); }
+      .field-error:empty { display: none; }
+      .plan-window [aria-invalid="true"] { border-color: var(--error-color); }
+      #plan-form-error { margin-top: 12px; }
+      @media (max-width: 640px) {
+        .plan-window { grid-template-columns: 1fr; padding-bottom: 14px; border-bottom: 1px solid var(--border-primary); }
+        .window-delete { margin-top: 0; justify-self: end; }
       }
       .account-models {
         display: grid;
@@ -1361,20 +1366,9 @@
       body:has(dialog[open]) {
         overflow: hidden;
       }
-      .settings-form-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(140px, 0.55fr) minmax(150px, 0.65fr);
-        gap: 14px;
-      }
-      .settings-form-grid .field,
-      .settings-form-grid .native-select,
-      .settings-form-grid input,
-      .settings-form-grid select {
-        width: 100%;
-      }
       .settings-picker-section { display: grid; gap: 8px; margin-top: 20px; }
       .settings-picker-list { max-height: 340px; overflow: auto; }
-      .price-dialog {
+      .settings-dialog {
         width: min(620px, calc(100vw - 32px));
         min-width: 0;
         max-height: calc(100dvh - 32px);
@@ -1421,7 +1415,7 @@
       .price-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; }
       .price-fields .field { min-width: 0; }
       .price-fields input[type="number"] { width: 100%; }
-      .price-dialog-actions { justify-content: flex-end; margin-top: 20px; }
+      .dialog-actions { justify-content: flex-end; margin-top: 20px; }
       .route-dialog { width: min(820px, calc(100vw - 32px)); }
       .route-form-toolbar {
         display: grid;
@@ -2270,9 +2264,7 @@
         border-bottom: 1px solid var(--border-color);
       }
       .usage-distribution-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .usage-distribution-heading b { min-width: 0; overflow-wrap: anywhere; }
-      .usage-distribution-heading .api-key-identity { flex: 1; font-weight: 600; }
-      .usage-distribution-heading .api-key-identity-secondary { font-weight: 400; }
+      .usage-distribution-heading > :first-child { min-width: 0; overflow-wrap: anywhere; }
       .usage-distribution-track {
         height: 6px;
         overflow: hidden;
@@ -2319,8 +2311,7 @@
         .usage-trend-legend-item { padding: 4px 8px; font-size: 10px; }
         .usage-trend-chart { height: 280px; }
         dialog { width: calc(100vw - 24px); max-width: none; padding: 16px; }
-        .settings-form-grid { grid-template-columns: 1fr; }
-        .price-dialog { padding: 18px; }
+        .settings-dialog { padding: 18px; }
         .route-form-toolbar,
         .route-editor-grid {
           grid-template-columns: 1fr;
@@ -2340,7 +2331,7 @@
         background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
         color: var(--text-secondary);
       }
-      #keys-body tr.key-deleted .usage {
+      #keys-body tr.key-deleted .quota-window {
         opacity: 0.65;
       }
       #keys-body tr.key-deleted .quota-fill {
@@ -2565,7 +2556,7 @@
                     aria-hidden="true"></span
                   ><span>包含已删除</span></label
                 >
-                <button id="keys-reset-periodic" class="labeled-icon-button">
+                <button id="keys-reset-all" class="labeled-icon-button">
                   <span data-lucide-icon="party-popper" aria-hidden="true"></span>全员重置
                 </button>
               </div>
@@ -2586,27 +2577,21 @@
             </div>
             <div id="plans-body"></div>
           </div>
-          <dialog id="plan-dialog" class="price-dialog">
+          <dialog id="plan-dialog" class="settings-dialog plan-dialog">
             <h2 id="plan-form-title">新建订阅计划</h2>
             <input id="plan-id" type="hidden" />
-            <div class="settings-form-grid">
-              <label class="field">名称<input id="plan-name" placeholder="团队 30 天额度" /></label>
-              <label class="field">额度（USD）<input id="plan-amount" type="number" step="any" min="0.000001" /></label>
-              <label class="field"
-                >周期
-                <span class="native-select">
-                  <select id="plan-period"></select>
-                </span>
-              </label>
-              <label class="field hidden" id="plan-seconds-field"
-                >时长（秒）<input id="plan-seconds" type="number" min="1" value="3600"
-              /></label>
+            <label class="field">计划名称<input id="plan-name" placeholder="团队额度" /></label>
+            <div class="row spread plan-windows-heading">
+              <span class="small muted">额度窗口</span>
+              <button id="plan-window-add" type="button" class="link small">添加窗口</button>
             </div>
+            <div id="plan-windows"></div>
+            <div id="plan-form-error" class="small" role="alert"></div>
             <div class="settings-picker-section">
               <div class="small muted">绑定 API Key</div>
               <div id="plan-key-picker" class="key-picker settings-picker-list"></div>
             </div>
-            <div class="row price-dialog-actions">
+            <div class="row dialog-actions">
               <button id="plan-cancel" type="button">取消</button>
               <button id="plan-save" class="primary" type="button">保存</button>
             </div>
@@ -2621,7 +2606,7 @@
             </div>
             <div id="routes-body"></div>
           </div>
-          <dialog id="route-dialog" class="price-dialog route-dialog">
+          <dialog id="route-dialog" class="settings-dialog route-dialog">
             <h2 id="route-form-title">新建路由规则</h2>
             <input id="route-id" type="hidden" />
             <div class="route-form-toolbar">
@@ -2656,7 +2641,7 @@
               <div class="small muted">绑定 API Key</div>
               <div id="route-key-list" class="key-picker settings-picker-list"></div>
             </div>
-            <div class="row price-dialog-actions">
+            <div class="row dialog-actions">
               <button id="route-cancel" type="button">取消</button>
               <button id="route-save" class="primary" type="button">保存</button>
             </div>
@@ -2875,13 +2860,9 @@
               <div class="card account-plan">
                 <div class="row spread">
                   <h2 id="account-plan-name">订阅剩余额度</h2>
-                  <span id="account-reset" class="muted small"></span>
+                  <span id="account-plan-status" class="tag plain"></span>
                 </div>
-                <b id="account-remaining" class="account-plan-value">—</b>
-                <div class="account-progress" role="progressbar" aria-label="剩余额度">
-                  <i id="account-progress-bar" class="quota-fill"></i>
-                </div>
-                <div id="account-plan-summary" class="muted small"></div>
+                <div id="account-windows"></div>
               </div>
               <div class="card account-plan">
                 <h2>并发限制</h2>
@@ -2993,7 +2974,7 @@
       </main>
     </div>
 
-    <dialog id="price-dlg" class="price-dialog">
+    <dialog id="price-dlg" class="settings-dialog">
       <h2 id="price-dialog-title">编辑模型定价</h2>
       <label class="field">模型 ID<input class="mono price-dialog-model" id="price-model" placeholder="模型 ID" maxlength="1024" /></label>
       <div class="price-reference">
@@ -3028,7 +3009,7 @@
           >长上下文缓存写 / 1M Token<input id="price-tier-cw" type="number" step="any" min="0"
         /></label>
       </div>
-      <div class="row price-dialog-actions">
+      <div class="row dialog-actions">
         <button id="price-cancel">取消</button>
         <button id="price-save" class="primary">保存</button>
       </div>
@@ -3282,14 +3263,7 @@
 
       const CONCURRENCY_OPTIONS = [0, 1, 2, 3, 5, 10, 20, 50];
       const CUSTOM_CONCURRENCY = "__custom__";
-      const PLAN_PERIOD_OPTIONS = new Map([
-        ["18000", "5 小时"],
-        ["86400", "24 小时"],
-        ["604800", "7 天"],
-        ["2592000", "30 天"],
-        ["custom", "自定义周期"],
-        ["0", "不重置"],
-      ]);
+      const PERIOD_UNITS = [[86400, "天"], [3600, "小时"], [60, "分钟"], [1, "秒"]];
       const REQUEST_EVENT_BATCH_SIZE = 50;
       const REQUEST_EVENT_EXPORT_BATCH_SIZE = 1000;
       const REQUEST_EVENT_LOAD_MORE_THRESHOLD_PX = 320;
@@ -4468,11 +4442,6 @@
         if (tracked) $("account-identity").textContent = apiKeyIdentity(identity).text;
         const subscription = access.subscription || {};
         const concurrency = access.concurrency || {};
-        $("account-remaining").textContent = !tracked
-          ? "—"
-          : subscription.unlimited
-            ? "不限制"
-            : usd(subscription.remaining_usd);
         $("account-concurrency").textContent = !tracked
           ? "—"
           : int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
@@ -4487,28 +4456,9 @@
 
         $("account-plan-name").textContent =
           subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
-        $("account-reset").textContent = subscription.cycle_end_at
-          ? when(subscription.cycle_end_at) + " 重置"
-          : subscription.unlimited
-            ? "不限制"
-            : "未开始";
-        const quota = remainingQuota(subscription.used_percent);
-        const progress = $("account-progress-bar");
-        const progressPercent = subscription.unlimited ? 0 : quota.percent;
-        progress.className = "quota-fill " + quota.level;
-        progress.style.width = progressPercent + "%";
-        progress.parentElement.setAttribute("aria-valuemin", "0");
-        progress.parentElement.setAttribute("aria-valuemax", "100");
-        progress.parentElement.setAttribute("aria-valuenow", String(Math.round(progressPercent)));
-        $("account-plan-summary").textContent = subscription.unlimited
-          ? "当前 API Key 未设置订阅额度"
-          : "剩余 " +
-            usd(subscription.remaining_usd) +
-            " / " +
-            usd(subscription.limit_usd) +
-            "（" +
-            quota.percent.toFixed(2) +
-            "%）";
+        $("account-plan-status").className = "tag " + (subscription.blocked ? "bad" : "plain");
+        $("account-plan-status").textContent = subscription.unlimited ? "不限制" : subscription.blocked ? "额度用尽" : "正常";
+        $("account-windows").replaceChildren(renderQuotaWindows(subscription, true));
 
         const routingValid = access.routing_valid !== false;
         const modelScope = new Set((access.models || []).map((model) => model.toLowerCase()));
@@ -4536,12 +4486,12 @@
         const routingValid = access.routing_valid !== false;
         const accountCredentialLabel = (item) =>
           item.provider_wide
-            ? { text: credentialSourceLabel(item.source) + " · " + item.provider, tag: "整类" }
+            ? { text: credentialSourceLabel(item.source) + "·" + item.provider, tag: "整类" }
             : item.status === "missing"
               ? { text: item.name || "指定上游凭证当前不可用", tag: "" }
               : {
                   text:
-                    item.provider + " · " + (item.name || (item.source === "auth-files" ? "未提供邮箱" : "凭证不可用")),
+                    item.provider + "·" + (item.name || (item.source === "auth-files" ? "未提供邮箱" : "凭证不可用")),
                   tag: "",
                 };
 
@@ -4766,7 +4716,7 @@
                 titleColor: themeColor("--text-primary", "#f6f4f1"),
                 bodyColor: themeColor("--text-secondary", "#c9c3bb"),
                 callbacks: {
-                  title: (items) => (items.length ? dimensionLabel + " · " + items[0].label : dimensionLabel),
+                  title: (items) => (items.length ? dimensionLabel + "·" + items[0].label : dimensionLabel),
                   label: (context) => {
                     const row = rows[context.dataIndex];
                     return [
@@ -4904,6 +4854,7 @@
                 borderWidth: 1,
                 titleColor: themeColor("--text-primary", "#f6f4f1"),
                 bodyColor: themeColor("--text-secondary", "#c9c3bb"),
+                footerColor: themeColor("--text-primary", "#f6f4f1"),
                 usePointStyle: true,
                 boxWidth: 8,
                 boxHeight: 8,
@@ -5075,6 +5026,9 @@
         }
         const metric = analysisMetrics[role];
         const rows = compactDistribution(analysis.usage_distribution[dimension], metric);
+        if (dimension === "sources") {
+          for (const row of rows) row.label = sourceLabel(row.label || row.key);
+        }
         const metricSelect = el(
           "select",
           {
@@ -5109,7 +5063,7 @@
               "div",
               { class: "usage-distribution-heading" },
               dimension === "api_keys" && row.key !== "other"
-                ? renderAPIKeyIdentity(row)
+                ? el("span", { text: apiKeyIdentity(row).text })
                 : el("b", {}, row.label || row.key || "未知"),
               el("b", { class: "mono" }, row.percent.toFixed(2) + "%"),
             ),
@@ -5231,17 +5185,13 @@
         if (typeSelect.value) types.push(typeSelect.value.slice(5));
         populateEventFilterSelect(
           typeSelect,
-          "全部错误类型 · " + int(total),
+          "全部错误类型·" + int(total),
           [...new Set(types)].sort(),
           (value) => "type:" + value,
-          (value) => (value || "未分类") + " · " + int(counts[value]),
+          (value) => (value || "未分类") + "·" + int(counts[value]),
         );
-        for (const [name, label, values] of [
-          ["model", "全部模型", filters.models],
-          ["source", "全部来源", filters.sources],
-        ]) {
-          populateEventFilterSelect($(prefix + "error-" + name), label, values || []);
-        }
+        populateEventFilterSelect($(prefix + "error-model"), "全部模型", filters.models);
+        populateEventFilterSelect($(prefix + "error-source"), "全部来源", filters.sources, undefined, sourceLabel);
       }
 
       function renderErrors(account) {
@@ -5280,9 +5230,9 @@
               el(
                 "div",
                 { class: "event-request-meta" },
-                account ? null : errorEventField("API Key", renderAPIKeyIdentity(entry), false),
+                account ? null : errorEventField("API Key", apiKeyIdentity(entry).text, false),
                 errorEventField("模型", entry.billing_model || entry.upstream_model),
-                errorEventField("来源", entry.source),
+                errorEventField("来源", sourceLabel(entry.source)),
               ),
               el("div", { class: "event-entry-tags" }, tags),
             ),
@@ -5533,13 +5483,13 @@
         if (!hasUsed && !hasLimit) return "";
         const money = row.currency === "USD";
         const format = (value) => (money ? usd(value) : value.toLocaleString("zh-CN", { maximumFractionDigits: 2 }));
-        if (hasUsed && hasLimit) return format(row.used) + " / " + format(row.limit);
+        if (hasUsed && hasLimit) return format(row.used) + "/" + format(row.limit);
         return hasUsed ? "已用 " + format(row.used) : "额度 " + format(row.limit);
       }
 
       function quotaLabel(row) {
         return row.group_label && row.group_label.toLocaleLowerCase() !== row.label.toLocaleLowerCase()
-          ? row.group_label + " · " + row.label
+          ? row.group_label + "·" + row.label
           : row.group_label || row.label;
       }
 
@@ -5553,8 +5503,7 @@
         const amount = quotaAmount(row);
         const stats = [el("span", { class: "auth-quota-value", text: value })];
         if (amount) stats.push(el("span", { text: amount }));
-        if (reset.at) stats.push(el("span", { text: reset.at }));
-        if (reset.after) stats.push(el("span", { text: "· " + reset.after }));
+        if (reset.at) stats.push(el("span", { text: reset.at + (reset.after ? "·" + reset.after : "") }));
         return el(
           "div",
           { class: "auth-quota-row" },
@@ -5795,6 +5744,10 @@
         }
       }
 
+      function sourceLabel(source) {
+        return String(source || "").replace(/\s*·\s*/g, "·");
+      }
+
       function apiKeyIdentity(view) {
         const scope = String(view.scope || view.key || "");
         const preview = String(view.preview || "");
@@ -5802,7 +5755,7 @@
         const label = candidate && candidate !== preview && candidate !== scope ? candidate : "";
         const primary = label || preview || (scope ? "unknown" : "未归属");
         const secondary = label ? preview : "";
-        return { primary, secondary, text: secondary ? primary + " · " + secondary : primary };
+        return { primary, secondary, text: secondary ? primary + "·" + secondary : primary };
       }
 
       function renderAPIKeyIdentity(view, options = {}) {
@@ -5900,8 +5853,6 @@
           .map((view) => {
             const deleted = !!view.deleted_at;
             const name = apiKeyIdentity(view).primary;
-            const plan = state.plans.find((plan) => plan.id === view.plan_id);
-            const cycleStatus = view.unlimited ? "—" : plan?.period_seconds === 0 ? "不重置" : "未开始";
             const select = el(
               "select",
               {
@@ -5923,33 +5874,7 @@
               ),
             );
 
-            const quota = remainingQuota(view.used_percent);
-            const usage = view.unlimited
-              ? el("span", { class: "muted", text: "—" })
-              : el(
-                  "div",
-                  { class: "usage" },
-                  el(
-                    "span",
-                    { class: "muted small mono" },
-                    "剩余 " +
-                      usd(Math.max(0, Number(view.limit_usd || 0) - Number(view.spent_usd || 0))) +
-                      " / " +
-                      usd(view.limit_usd),
-                  ),
-                  el(
-                    "div",
-                    {
-                      class: "bar",
-                      role: "progressbar",
-                      "aria-label": name + " 的剩余额度",
-                      "aria-valuemin": "0",
-                      "aria-valuemax": "100",
-                      "aria-valuenow": String(Math.round(quota.percent)),
-                    },
-                    el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" }),
-                  ),
-                );
+            const usage = renderQuotaWindows(view);
 
             const currentConcurrencyLimit = Number(view.concurrency_limit || 0);
             const concurrencyValues = CONCURRENCY_OPTIONS.includes(currentConcurrencyLimit)
@@ -6016,7 +5941,7 @@
                       },
                       actionIcon("copy"),
                     ),
-                    !deleted && !view.in_config ? " · 仅用量记录" : null,
+                    !deleted && !view.in_config ? "·仅用量记录" : null,
                   ],
                 }),
               ),
@@ -6024,11 +5949,6 @@
               el("td", {}, routeTrigger(view)),
               el("td", {}, concurrency),
               el("td", {}, usage),
-              el(
-                "td",
-                {},
-                view.cycle_end_at ? dateTimeLines(view.cycle_end_at) : el("div", { class: "muted small" }, cycleStatus),
-              ),
               el(
                 "td",
                 {},
@@ -6054,8 +5974,8 @@
                   disabled: deleted || view.unlimited || undefined,
                   onclick: () =>
                     guard(async () => {
-                      if (!(await confirmAction("重置订阅额度？", "当前周期将结束，下一次请求会开启新周期。"))) return;
-                      await plugin("POST", "/keys/reset", [view.scope]);
+                      if (!(await confirmAction("重置订阅额度？", "所有额度周期将结束，下一次放行会开启新周期。请求事件及其统计不受影响。"))) return;
+                      await plugin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
                       notify("订阅额度已重置");
                       await refreshPage("foreground");
                     }),
@@ -6078,7 +5998,7 @@
 
         replaceContent(
           $("keys-body"),
-          table(["API Key", "订阅计划", "路由规则", "并发限制", "剩余额度", "到期时间", "状态", "操作"], rows),
+          table(["API Key", "订阅计划", "路由规则", "并发限制", "订阅额度", "状态", "操作"], rows),
         );
       }
 
@@ -6088,8 +6008,8 @@
       }
 
       function credentialLabel(item) {
-        if (item.source === "auth-files") return item.provider + " · " + (item.display_name || "未提供邮箱");
-        return item.provider + " · " + item.display_name;
+        if (item.source === "auth-files") return item.provider + "·" + (item.display_name || "未提供邮箱");
+        return item.provider + "·" + item.display_name;
       }
 
       function credentialSourceLabel(source) {
@@ -6116,7 +6036,7 @@
       }
 
       function credentialProviderLabel(item) {
-        return credentialSourceLabel(item.source) + " · " + item.provider;
+        return credentialSourceLabel(item.source) + "·" + item.provider;
       }
 
       function sameCredentialProvider(a, b) {
@@ -6138,7 +6058,7 @@
           ? [{ text: "全部路由", mono: false }]
           : routeIDs
               .map((id) => ({ text: routeName(id), mono: false }))
-              .concat(models.map((model) => ({ text: "单模型 · " + model, mono: true })))
+              .concat(models.map((model) => ({ text: "单模型·" + model, mono: true })))
               .concat(
                 providers.map((provider) => ({ text: credentialProviderLabel(provider), mono: false, tag: "整类" })),
               )
@@ -6158,7 +6078,7 @@
           {
             class: "route-trigger" + (allRoutes ? " route-trigger-all" : ""),
             disabled: !!view.deleted_at,
-            title: names.map((entry) => entry.text + (entry.tag ? " · " + entry.tag : "")).join("、"),
+            title: names.map((entry) => entry.text + (entry.tag ? "·" + entry.tag : "")).join("、"),
             "aria-label": apiKeyIdentity(view).primary + " 的路由规则",
             onclick: (event) => openRoutePicker(view, event.currentTarget),
           },
@@ -6502,10 +6422,7 @@
           text: apiKeyIdentity(key).text,
           tag: key.deleted_at ? "已删除" : "",
         }));
-        return settingsEntryField("已绑定 Key", el("div", { class: "key-bindings" },
-          el("div", { class: "small muted", text: bindingSummary(keys) }),
-          settingsChipList(chips, "—"),
-        ));
+        return settingsEntryField("已绑定 Key", settingsChipList(chips, "—"));
       }
 
       function modelChipItems(models) {
@@ -6521,8 +6438,6 @@
         const cards = state.plans.map((plan) => {
           const boundKeys = state.keys.filter((key) => key.plan_id === plan.id);
           const name = plan.name || plan.id;
-          const periodLabel =
-            PLAN_PERIOD_OPTIONS.get(String(plan.period_seconds)) || "每 " + int(plan.period_seconds) + " 秒";
           return el(
             "article",
             { class: "auth-file-card", role: "listitem" },
@@ -6559,12 +6474,12 @@
             el(
               "div",
               { class: "settings-entry-fields" },
-              el(
+              plan.windows.map((quotaWindow) => el(
                 "div",
                 { class: "event-request-meta" },
-                settingsEntryField("额度", el("b", { class: "mono", text: usd(plan.amount_usd) })),
-                settingsEntryField("周期", periodLabel),
-              ),
+                settingsEntryField(quotaWindow.name, el("b", { class: "mono", text: usd(quotaWindow.amount_usd) })),
+                settingsEntryField("周期", periodLabel(quotaWindow.period_seconds)),
+              )),
               boundKeyField(boundKeys),
             ),
           );
@@ -6575,7 +6490,6 @@
             ? el("div", { class: "event-list settings-card-list", role: "list" }, cards)
             : el("div", { class: "empty", text: "暂无订阅计划" }),
         );
-        if ($("plan-dialog").open) renderPlanKeyPicker($("plan-id").value);
       }
 
       function renderRoutes() {
@@ -6715,7 +6629,7 @@
                 },
               }),
               actionIcon(credentialIcon(item)),
-              el("span", { title: label + " · 整类" }, label),
+              el("span", { title: label + "·整类" }, label),
               el("span", { class: "tag warn settings-item-chip", text: "整类" }),
               item.available
                 ? null
@@ -7069,7 +6983,7 @@
       function labelRequestEventStatuses(select, counts) {
         for (const option of select.options) {
           const status = REQUEST_EVENT_STATUS_OPTIONS[option.value];
-          option.textContent = status.label + " · " + int((counts || {})[status.count]);
+          option.textContent = status.label + "·" + int((counts || {})[status.count]);
         }
       }
 
@@ -7093,7 +7007,7 @@
         if (!filters) return;
         const prefix = account ? "account-request-event" : "request-event";
         populateEventFilterSelect($(prefix + "-model"), "全部模型", filters.models);
-        populateEventFilterSelect($(prefix + "-source"), "全部来源", filters.sources);
+        populateEventFilterSelect($(prefix + "-source"), "全部来源", filters.sources, undefined, sourceLabel);
       }
 
       function loadEventKeys(range) {
@@ -7492,8 +7406,8 @@
               el("div", { class: "request-event-cell-line mono" }, entry.executor_type || "执行器未知"),
               el(
                 "div",
-                { class: "request-event-source muted", title: entry.source || null },
-                entry.source || "来源未知",
+                { class: "request-event-source muted", title: sourceLabel(entry.source) || null },
+                sourceLabel(entry.source) || "来源未知",
               ),
             ),
             el(
@@ -7509,8 +7423,8 @@
               el("div", {}, outputTPS(cost, entry.latency_ms, measured)),
               el(
                 "div",
-                { class: "muted small", title: hasTTFT ? "首字延迟 · 总延迟" : "总延迟" },
-                hasTTFT ? latency(entry.ttft_ms) + " · " + latency(entry.latency_ms) : latency(entry.latency_ms),
+                { class: "muted small", title: hasTTFT ? "首字延迟·总延迟" : "总延迟" },
+                hasTTFT ? latency(entry.ttft_ms) + "·" + latency(entry.latency_ms) : latency(entry.latency_ms),
               ),
             ),
             el("td", { class: "num" }, tokens(input)),
@@ -7606,7 +7520,7 @@
         for (const option of $("plugin-log-level").options) {
           const label = option.value === "all" ? "全部级别" : pluginLogLevels[option.value].label;
           const count = pluginLogs.filter((pluginLog) => matchesPluginLogLevel(pluginLog, option.value)).length;
-          option.textContent = label + " · " + int(count);
+          option.textContent = label + "·" + int(count);
         }
       }
 
@@ -7715,13 +7629,13 @@
           const row = JSON.parse(message.slice(6));
           const model =
             row.model_result === "deny"
-              ? "模型：拒绝"
+              ? "拒绝"
               : row.model_result === "configuration_error"
-                ? "模型：配置错误"
-                : "模型：允许";
+                ? "配置错误"
+                : "允许";
           const credential =
             row.credential_result === "selected"
-              ? "上游凭证：" + row.selected_credential
+              ? "上游凭证：" + (sourceLabel(row.selected_credential) || "未知")
               : row.credential_result === "no_match"
                 ? "上游凭证：无符合条件的可用凭证"
                 : row.credential_result === "not_reached"
@@ -7731,6 +7645,7 @@
                     : row.credential_result === "configuration_error"
                       ? "上游凭证：配置错误"
                       : "上游凭证：全部上游凭证";
+          const outcome = { succeeded: "成功", failed: "失败", rejected: "已拒绝", canceled: "已取消" }[row.outcome] || row.outcome || "未知";
           const id = String(pluginLog.id || "");
           return el(
             "details",
@@ -7749,8 +7664,11 @@
               el("span", { class: "details-summary-icon", "aria-hidden": "true" }, actionIcon("chevron")),
               el(
                 "span",
-                {},
-                [row.key, row.model, model, credential, "请求结果：" + row.outcome].filter(Boolean).join(" · "),
+                { class: "row" },
+                el("span", { text: "API Key：" + String(row.key || "未知").replace(/\s*·\s*/g, "·") }),
+                el("span", { text: "模型：" + (row.model || "未知") + "（" + model + "）" }),
+                el("span", { text: credential }),
+                el("span", { text: "请求结果：" + outcome }),
               ),
             ),
             el("pre", {}, JSON.stringify(row, null, 2)),
@@ -7760,9 +7678,69 @@
         }
       }
 
-      function syncPlanFields() {
-        $("plan-seconds-field").classList.toggle("hidden", $("plan-period").value !== "custom");
+      function periodLabel(seconds) {
+        const [unit, label] = PERIOD_UNITS.find(([unit]) => seconds % unit === 0);
+        return int(seconds / unit) + " " + label;
       }
+
+      function renderQuotaWindows(view, showCountdown = false) {
+        if (view.unlimited) return el("span", { class: "muted", text: "不限制" });
+        return el("div", { class: "quota-windows" }, view.windows.map((quotaWindow) => {
+          const quota = remainingQuota(quotaWindow.used_percent);
+          const resetAt = quotaWindow.started ? new Date(quotaWindow.end_at) : null;
+          let resetLabel = resetAt ? compactResetDate(resetAt) : "未开始";
+          if (resetAt && showCountdown) {
+            resetLabel += "·" + (resetAt <= new Date() ? "已到期" : compactResetAfter((resetAt.getTime() - Date.now()) / 1000));
+          }
+          return el("div", { class: "quota-window" },
+            el("div", { class: "quota-heading" },
+              el("span", { text: quotaWindow.name, title: quotaWindow.name }),
+              el("span", {
+                class: "mono",
+                title: "剩余 " + usd(quotaWindow.remaining_usd) + "/" + usd(quotaWindow.amount_usd),
+              },
+                el("span", { class: quotaWindow.blocked ? "blocked" : "", text: usd(quotaWindow.remaining_usd) }),
+                el("span", { class: "muted", text: "/" + usd(quotaWindow.amount_usd) }),
+              ),
+              el("span", { class: "muted", text: resetLabel, title: resetAt ? when(quotaWindow.end_at) + " 重置" : resetLabel }),
+            ),
+            el("div", {
+              class: "bar", role: "progressbar", "aria-label": quotaWindow.name + " 的剩余额度",
+              "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(quota.percent)),
+            }, el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" })),
+          );
+        }));
+      }
+
+      function addPlanWindow(quotaWindow = {}) {
+        const seconds = quotaWindow.period_seconds;
+        const unit = seconds ? PERIOD_UNITS.find(([value]) => seconds % value === 0)[0] : 3600;
+        const row = el("div", { class: "plan-window", "data-id": quotaWindow.id || "" });
+        const field = (label, input) => el("label", { class: "field" }, label, input, el("span", { class: "field-error small" }));
+        row.append(
+          field("窗口名称", el("input", { name: "window_name", value: quotaWindow.name || "", required: true })),
+          field("额度（USD）", el("input", { name: "window_amount", type: "number", step: "any", value: quotaWindow.amount_usd ?? "", required: true })),
+          field("周期长度", el("div", { class: "period-input" },
+            el("input", { name: "window_period", type: "number", step: "any", value: seconds ? seconds / unit : "", required: true }),
+            el("span", { class: "native-select" }, el("select", { name: "window_unit", "aria-label": "周期单位" },
+              PERIOD_UNITS.map(([value, label]) => el("option", { value: String(value), selected: value === unit, text: label })),
+            )),
+          )),
+          el("button", { type: "button", class: "link small danger window-delete", text: "删除", onclick: () => {
+            row.remove();
+            updateWindowDeleteButtons();
+          }}),
+        );
+        $("plan-windows").append(row);
+        updateWindowDeleteButtons();
+        return row;
+      }
+
+      function updateWindowDeleteButtons() {
+        const buttons = $("plan-windows").querySelectorAll(".window-delete");
+        buttons.forEach((button) => button.disabled = buttons.length === 1);
+      }
+
       function renderPlanKeyPicker(planID) {
         const picker = $("plan-key-picker");
         const keys = state.keys.filter((key) => !key.deleted_at || (planID && key.plan_id === planID));
@@ -7800,10 +7778,9 @@
         $("plan-save").textContent = "创建";
         $("plan-id").value = "";
         $("plan-name").value = "";
-        $("plan-amount").value = "";
-        $("plan-period").value = "86400";
-        $("plan-seconds").value = "3600";
-        syncPlanFields();
+        $("plan-windows").replaceChildren();
+        $("plan-form-error").textContent = "";
+        addPlanWindow();
         renderPlanKeyPicker("");
       }
       function editPlan(plan) {
@@ -7811,29 +7788,47 @@
         $("plan-id").value = plan.id;
         $("plan-save").textContent = "保存";
         $("plan-name").value = plan.name || "";
-        $("plan-amount").value = plan.amount_usd ?? 0;
-        const seconds = Number(plan.period_seconds);
-        const preset = String(seconds);
-        $("plan-period").value = PLAN_PERIOD_OPTIONS.has(preset) ? preset : "custom";
-        $("plan-seconds").value = String(seconds || 3600);
-        syncPlanFields();
+        $("plan-windows").replaceChildren();
+        $("plan-form-error").textContent = "";
+        plan.windows.forEach(addPlanWindow);
         renderPlanKeyPicker(plan.id);
         $("plan-dialog").showModal();
         $("plan-name").focus();
       }
       function planFromForm() {
-        const selected = $("plan-period").value;
-        const seconds = Number(selected === "custom" ? $("plan-seconds").value : selected);
-        const amount = Number($("plan-amount").value);
-        if (!Number.isFinite(amount) || amount <= 0) throw new Error("额度必须大于 0");
+        let firstInvalid = null;
+        const names = new Set(), periods = new Set();
+        const invalid = (input, message) => {
+          input.setAttribute("aria-invalid", "true");
+          input.closest(".field").querySelector(".field-error").textContent = message;
+          firstInvalid ||= input;
+        };
+        const windows = Array.from($("plan-windows").children, (row) => {
+          row.querySelectorAll("[aria-invalid]").forEach((input) => input.removeAttribute("aria-invalid"));
+          row.querySelectorAll(".field-error").forEach((error) => error.textContent = "");
+          const nameInput = row.querySelector('[name="window_name"]');
+          const amountInput = row.querySelector('[name="window_amount"]');
+          const periodInput = row.querySelector('[name="window_period"]');
+          const name = nameInput.value.trim();
+          const amount = amountInput.valueAsNumber;
+          const seconds = periodInput.valueAsNumber * Number(row.querySelector("select").value);
+          if (!name || new TextEncoder().encode(name).length > 128) invalid(nameInput, "名称不能为空且不能超过 128 字节");
+          else if (names.has(name.toLowerCase())) invalid(nameInput, "窗口名称重复");
+          names.add(name.toLowerCase());
+          if (!Number.isFinite(amount) || amount <= 0) invalid(amountInput, "额度必须为正数");
+          if (!Number.isInteger(seconds) || seconds <= 0 || seconds > 9223372036) invalid(periodInput, "周期须为 1 到 9223372036 秒的整数");
+          else if (periods.has(seconds)) invalid(periodInput, "周期与其他窗口重复");
+          periods.add(seconds);
+          return { ...(row.dataset.id ? { id: row.dataset.id } : {}), name, amount_usd: amount, period_seconds: seconds };
+        });
+        if (firstInvalid) {
+          firstInvalid.scrollIntoView({ block: "center" });
+          firstInvalid.focus();
+          return null;
+        }
         return {
-          name: $("plan-name").value.trim(),
-          amount_usd: amount,
-          period_seconds: seconds,
-          scopes: Array.from(
-            $("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
-            (input) => input.value,
-          ),
+          name: $("plan-name").value.trim(), windows,
+          scopes: Array.from($("plan-key-picker").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'), (input) => input.value),
         };
       }
 
@@ -7883,11 +7878,11 @@
               tokenThreshold(row.long_context.threshold_input_tokens) +
               " 阶梯：输入 " +
               usd(row.long_context.input_per_1m) +
-              " · 输出 " +
+              "·输出 " +
               usd(row.long_context.output_per_1m),
           );
         }
-        return prices.join(" · ");
+        return prices.join("·");
       }
 
       function syncPriceTierFields() {
@@ -8334,27 +8329,38 @@
         saveChoice("admin", "keys-include-deleted");
         renderKeys();
       });
-      $("plan-period").replaceChildren(
-        ...Array.from(PLAN_PERIOD_OPTIONS, ([value, label]) => el("option", { value, text: label })),
-      );
-      $("plan-period").addEventListener("change", syncPlanFields);
+      $("plan-window-add").onclick = () => addPlanWindow().querySelector("input").focus();
       $("plan-new").onclick = () => {
         resetPlanForm();
         $("plan-dialog").showModal();
         $("plan-name").focus();
       };
       $("plan-cancel").onclick = () => $("plan-dialog").close();
-      $("plan-dialog").addEventListener("close", resetPlanForm);
-      $("plan-save").onclick = () =>
-        guard(async () => {
-          const plan = planFromForm();
-          const id = $("plan-id").value;
+      $("plan-save").onclick = async () => {
+        if ($("plan-save").disabled) return;
+        const plan = planFromForm();
+        if (!plan) return;
+        const id = $("plan-id").value;
+        const existing = state.plans.find((entry) => entry.id === id);
+        const affected = (existing?.windows || []).filter((old) =>
+          !plan.windows.some((quotaWindow) => quotaWindow.id === old.id && quotaWindow.period_seconds === old.period_seconds));
+        $("plan-save").disabled = true;
+        $("plan-form-error").textContent = "";
+        try {
+          if (affected.length && !(await confirmAction("更新额度周期？",
+            "以下窗口的当前周期和消费将清零：" + affected.map((quotaWindow) => quotaWindow.name).join("、") +
+            "。所有绑定 Key 均受影响，包括已删除 Key；请求事件及其统计不受影响。"))) return;
           if (id) await plugin("PATCH", "/plans", { id, ...plan });
           else await plugin("POST", "/plans", plan);
           notify(id ? "订阅计划已保存" : "订阅计划已创建");
           $("plan-dialog").close();
           await refreshPage("foreground");
-        });
+        } catch (error) {
+          $("plan-form-error").textContent = error.message || String(error);
+        } finally {
+          $("plan-save").disabled = false;
+        }
+      };
 
       $("route-picker-search").addEventListener("input", () => {
         const searching = !!$("route-picker-search").value.trim();
@@ -8542,25 +8548,17 @@
         },
         { passive: true },
       );
-      $("keys-reset-periodic").onclick = () =>
+      $("keys-reset-all").onclick = () =>
         guard(async () => {
           if (
             !(await confirmAction(
-              "重置所有周期性额度？",
-              "未删除且绑定周期性计划的 API Key 会结束当前周期，下一次请求开启新周期；不重置的计划和累计用量不受影响。",
+              "重置全员订阅额度？",
+              "所有未删除且绑定计划的 API Key 将结束全部额度周期，下一次放行开启新周期。请求事件及其统计不受影响。",
             ))
           )
             return;
-          const periodicPlans = new Set(state.plans.filter((plan) => plan.period_seconds > 0).map((plan) => plan.id));
-          const scopes = state.keys
-            .filter((key) => !key.deleted_at && periodicPlans.has(key.plan_id))
-            .map((key) => key.scope);
-          if (!scopes.length) {
-            notify("没有需要重置的额度");
-            return;
-          }
-          const result = await plugin("POST", "/keys/reset", scopes);
-          notify(result.reset ? "已重置 " + result.reset + " 个 API Key 的额度" : "没有需要重置的额度");
+          const result = await plugin("POST", "/keys/reset", { mode: "global" });
+          notify(result.keys ? "已重置 " + result.keys + " 个 API Key 的额度" : "没有需要重置的额度");
           await refreshPage("foreground");
         });
       $("price-filter").addEventListener("input", () =>
