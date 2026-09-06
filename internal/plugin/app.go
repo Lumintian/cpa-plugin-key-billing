@@ -128,14 +128,14 @@ func registration() Registration {
 			GitHubRepository: GitHubRepository,
 			ConfigFields: []ConfigField{
 				{
-					Name:        "enabled",
+					Name:        "debug",
 					Type:        "boolean",
-					Description: "启用 API Key 路由、计费、并发限制和订阅额度控制",
+					Description: "记录 debug 日志，包括路由日志和参考价匹配日志",
 				},
 				{
 					Name:        "codex_fast_mode_billing",
 					Type:        "boolean",
-					Description: "请求 Codex 上游时指定 priority 档位，按 2.5 倍计费，默认关闭",
+					Description: "请求 Codex 上游时指定 priority 档位，按 2.5 倍计费",
 				},
 				{
 					Name:        "state_file",

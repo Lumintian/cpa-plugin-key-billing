@@ -40,8 +40,8 @@ func TestRegisterDeclaresExpectedCapabilities(t *testing.T) {
 	for _, field := range registration.Metadata.ConfigFields {
 		fields[field.Name] = field
 	}
-	if fields["state_file"].Type != "string" || fields["enabled"].Type != "boolean" ||
-		fields["codex_fast_mode_billing"].Type != "boolean" {
+	if fields["state_file"].Type != "string" || fields["debug"].Type != "boolean" ||
+		fields["codex_fast_mode_billing"].Type != "boolean" || fields["enabled"].Name != "" {
 		t.Fatalf("ConfigFields = %+v", registration.Metadata.ConfigFields)
 	}
 }
