@@ -156,18 +156,31 @@ func TestRequestEventRowsFollowTheKeyTheyName(t *testing.T) {
 
 func TestRequestEventsKeepTheRetentionWindow(t *testing.T) {
 	database, state := requestEventDatabase(t)
-	later := eventStart.Add(billing.RequestEventRetention + time.Hour)
+	cutoff := eventStart.Add(180*24*time.Hour - billing.RequestEventRetention)
+	view, err := database.RequestEvents(billing.RequestEventQuery{}, cutoff)
+	if err != nil || view.Total != 6 {
+		t.Fatalf("six-month history: %+v, %v", view, err)
+	}
+	failures, err := database.RequestErrors(billing.RequestErrorQuery{}, cutoff)
+	if err != nil || failures.Total != 2 {
+		t.Fatalf("six-month error history: %+v, %v", failures, err)
+	}
+	later := eventStart.Add(366 * 24 * time.Hour)
 
 	mustSave(t, database, state, billing.Changes{
 		NormalRequestEvents: []billing.RequestEvent{requestEvent("scope-a", later)},
 		RequestEventCutoff:  later.Add(-billing.RequestEventRetention),
 	})
-	view, err := database.RequestEvents(billing.RequestEventQuery{}, later.Add(-billing.RequestEventRetention))
+	view, err = database.RequestEvents(billing.RequestEventQuery{}, later.Add(-billing.RequestEventRetention))
 	if err != nil {
 		t.Fatalf("RequestEvents error = %v", err)
 	}
 	if view.Total != 1 || !view.Entries[0].At.Equal(later) {
 		t.Fatalf("view = %+v, want only the entry inside the window", view.Entries)
+	}
+	var errorCount int
+	if err := database.db.QueryRow("SELECT count(*) FROM request_errors").Scan(&errorCount); err != nil || errorCount != 0 {
+		t.Fatalf("expired error details: count=%d, err=%v", errorCount, err)
 	}
 }
 

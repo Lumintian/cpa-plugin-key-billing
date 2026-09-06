@@ -26,9 +26,9 @@
         --analysis-grid-color: rgb(45 42 38 / 0.08);
         --border-primary: #d5d2cb;
         --border-hover: #cecac4;
-        --primary-color: #8b8680;
-        --primary-hover: #7f7a74;
-        --primary-active: #726d67;
+        --primary-color: #766858;
+        --primary-hover: #655747;
+        --primary-active: #655747;
         --primary-contrast: #fff;
         --error-color: #c65746;
         --success-badge-bg: #d1fae5;
@@ -37,7 +37,7 @@
         --failure-badge-bg: #c6574624;
         --failure-badge-text: #8a3a30;
         --failure-badge-border: #c6574659;
-        --count-badge-bg: #8b86802e;
+        --count-badge-bg: color-mix(in srgb, var(--primary-color) 14%, transparent);
         --count-badge-text: var(--primary-active);
         --info-badge-bg: var(--count-badge-bg);
         --info-badge-text: var(--count-badge-text);
@@ -94,15 +94,16 @@
         --analysis-grid-color: rgb(246 244 241 / 0.07);
         --border-primary: #4a453f;
         --border-hover: #5a544d;
-        --primary-hover: #9a948e;
-        --primary-active: #a6a099;
+        --primary-color: #c3b4a1;
+        --primary-hover: #d2c4b2;
+        --primary-active: #d2c4b2;
+        --primary-contrast: #201d19;
         --success-badge-bg: #064e3b4d;
         --success-badge-text: #6ee7b7;
         --success-badge-border: #059669;
         --failure-badge-bg: #c657463d;
         --failure-badge-text: #f1b0a6;
         --failure-badge-border: #c6574680;
-        --count-badge-bg: #8b868047;
         --amber-color: #f59e0b;
         --amber-text: #fcd34d;
         --amber-10: color-mix(in srgb, var(--amber-color) 14%, transparent);
@@ -329,6 +330,7 @@
       select,
       textarea {
         font: inherit;
+        font-weight: 400;
         color: var(--text-primary);
         background: var(--bg-secondary);
         border: 1px solid var(--border-primary);
@@ -350,6 +352,7 @@
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
         outline: none;
       }
+      input[type="checkbox"], input[type="radio"] { accent-color: var(--primary-color); }
       input[type="number"] { width: 110px; }
       .native-select {
         position: relative;
@@ -396,10 +399,6 @@
         font-size: 12px;
         font-weight: 500;
         color: var(--text-secondary);
-      }
-      label.field input,
-      label.field select {
-        font-weight: 400;
       }
       :root:not([data-cpamp-plugin-host="true"]) label.field input,
       :root:not([data-cpamp-plugin-host="true"]) label.field select {
@@ -501,6 +500,7 @@
       }
       .page-tabs-row.controls-inline .page-tab-actions { grid-column: 2; grid-row: 1; }
       .page-tabs-row.controls-inline .shared-time-filter { flex: none; }
+      .page-tab-actions > button { flex: none; }
       .tab-refresh {
         display: none;
         grid-column: 2;
@@ -516,6 +516,13 @@
       }
       .page-tabs-row.controls-inline .tab-refresh { grid-column: 3; }
       body.embedded .tab-refresh { display: grid; }
+      .page-tabs-row:not(.controls-inline):has(.page-tab-actions:not(.hidden)) {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+      .page-tabs-row:not(.controls-inline):has(.page-tab-actions:not(.hidden)) > .tabs-scroll { grid-column: 1 / -1; }
+      .page-tabs-row:not(.controls-inline) .page-tab-actions { grid-column: 1; }
+      .page-tabs-row:not(.controls-inline):has(.page-tab-actions:not(.hidden)) .tab-refresh { grid-row: 2; }
+      body:not(.embedded) .page-tabs-row:not(.controls-inline) .page-tab-actions { grid-column: 1 / -1; }
       .tabs-scroll {
         --tabs-fade-surface: var(--bg-secondary);
         position: relative;
@@ -648,7 +655,6 @@
         border-color: var(--app-border, var(--border-color));
         border-radius: var(--app-radius-md, 12px);
         background: var(--app-surface-muted, var(--bg-tertiary));
-        font-weight: 600;
         line-height: 1.2;
       }
       :root[data-cpamp-plugin-host="true"] button:not(.link):not(.route-picker-group-toggle):hover:not(:disabled) {
@@ -678,7 +684,6 @@
         border-radius: 0;
         background: none;
         box-shadow: none;
-        font-weight: 500;
         line-height: 1.5;
       }
       :root[data-cpamp-plugin-host="true"] .tabs {
@@ -710,7 +715,7 @@
         background: transparent;
         color: color-mix(in srgb, var(--text-secondary) 84%, var(--text-primary));
         font-size: 13px;
-        font-weight: 700;
+        font-weight: 600;
         line-height: 1.2;
       }
       :root[data-cpamp-plugin-host="true"] .tabs button[data-tab]:hover,
@@ -729,7 +734,6 @@
         box-shadow:
           0 1px 3px #0f17211a,
           inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 16%, transparent);
-        font-weight: 800;
       }
       :root[data-cpamp-plugin-host="true"] thead,
       :root[data-cpamp-plugin-host="true"] thead th {
@@ -903,7 +907,7 @@
         color: var(--primary-color);
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 30%, transparent);
       }
-      .gate .field { gap: 6px; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+      .gate .field { gap: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500; }
       .gate .field input { width: 100%; min-height: 42px; padding: 8px 11px; font-size: 14px; }
       .remember-row {
         display: flex;
@@ -1152,12 +1156,12 @@
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: var(--bg-primary);
+        background: var(--text-primary);
         box-shadow: 0 1px 3px #0003;
         transition: transform 0.15s;
       }
       .toggle-filter input:checked + .toggle-track { background: var(--primary-color); }
-      .toggle-filter input:checked + .toggle-track::after { transform: translateX(12px); }
+      .toggle-filter input:checked + .toggle-track::after { transform: translateX(12px); background: var(--primary-contrast); }
       .toggle-filter:focus-within {
         border-color: var(--primary-color);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
@@ -1710,16 +1714,15 @@
       .event-list-card.plugin-log-card { height: auto; }
       .plugin-log-card .plugin-log-region { flex: 0 1 auto; max-height: clamp(180px, calc(100dvh - 240px), 420px); }
       .event-list-title-row { margin-bottom: 9px; }
-      .time-range-control { position: relative; }
-      .shared-time-filter .time-range-popover { left: auto; right: 0; }
+      .time-range-control { position: relative; min-width: 0; }
       .time-range-trigger {
         display: inline-flex;
         align-items: center;
         justify-content: space-between;
         gap: 8px;
-        min-width: 136px;
+        width: 100%;
+        min-width: 0;
         white-space: nowrap;
-        font-weight: 500;
       }
       .time-range-icon { width: 15px; height: 15px; flex: none; color: var(--text-tertiary); }
       .time-range-icon + span {
@@ -1730,6 +1733,7 @@
         text-overflow: ellipsis;
       }
       .time-range-chevron {
+        flex: none;
         width: 20px;
         height: 20px;
         margin-left: 3px;
@@ -1742,8 +1746,10 @@
         position: absolute;
         z-index: 1200;
         top: calc(100% + 6px);
-        left: 0;
-        width: min(320px, calc(100vw - 24px));
+        right: 0;
+        width: min(360px, calc(100vw - 24px));
+        max-height: calc(100dvh - 100px);
+        overflow: auto;
         padding: 12px;
         border: 1px solid var(--floating-border, var(--border-color));
         border-radius: 12px;
@@ -1756,66 +1762,43 @@
         from { opacity: 0; transform: translateY(-3px) scale(0.985); }
       }
       .time-range-heading { padding: 1px 3px 9px; color: var(--text-tertiary); font-size: 11px; font-weight: 600; }
-      .time-range-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-      .time-range-presets button {
-        min-width: 0;
-        min-height: 34px;
-        padding: 0 12px;
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        background: var(--bg-secondary);
-        color: var(--text-secondary);
-        font-size: 12px;
-        font-weight: 500;
-        text-align: left;
-        white-space: nowrap;
+      .time-range-options { font-size: 12px; }
+      .time-range-options button { min-width: 0; }
+      .time-range-modes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+      :root .time-range-popover .time-range-modes button { padding-inline: 4px; white-space: nowrap; }
+      .time-range-custom { display: grid; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+      .time-range-units, .time-range-endpoints, .time-range-hours { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      :root .time-range-popover .time-range-endpoints button { padding-block: 8px; display: grid; gap: 4px; text-align: left; overflow-wrap: anywhere; }
+      .time-range-endpoints button.active .muted { color: inherit; opacity: 0.8; }
+      .time-range-endpoints.summary { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+      .time-range-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px 0; text-align: center; }
+      .time-range-calendar > span { padding-block: 6px; }
+      :root .time-range-popover .time-range-calendar button { padding: 8px 0; border-color: transparent; background: transparent; }
+      :root .time-range-popover .time-range-calendar button.in-range { background: var(--bg-tertiary); border-radius: 0; }
+      :root .time-range-popover .time-range-calendar button.range-start { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+      :root .time-range-popover .time-range-calendar button.range-end { border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+      :root .time-range-popover .time-range-calendar button.range-start.range-end { border-radius: var(--radius-md); }
+      :root .time-range-popover .time-range-calendar .outside-month { color: var(--text-tertiary); }
+      .time-range-hour-list { position: relative; display: grid; gap: 4px; max-height: 220px; overflow: auto; margin-top: 8px; overscroll-behavior: contain; }
+      .time-range-hour-list button { display: flex; align-items: center; justify-content: space-between; gap: 4px; text-align: left; }
+      .time-range-actions { justify-content: flex-end; margin-left: auto; }
+      .time-range-rolling { display: grid; gap: 8px; margin-top: 16px; }
+      :root .range-control input.range-input[type="range"] {
+        --range-track: linear-gradient(to right, var(--primary-color) var(--range-progress), var(--border-color) var(--range-progress));
+        appearance: none;
+        width: 100%; min-width: 0; height: 24px; min-height: 0; margin: 0; padding: 0;
+        border: 0; box-shadow: none; background: transparent;
       }
-      .time-range-presets button:hover {
-        border-color: var(--border-hover);
-        background: var(--bg-hover);
-        color: var(--text-primary);
-      }
-      .time-range-presets button.active {
-        border-color: var(--border-hover);
-        background: var(--bg-tertiary);
-        color: var(--text-primary);
-        box-shadow: none;
-      }
-      .time-range-presets button.active::after {
-        content: "";
-        display: block;
-        float: right;
-        width: 14px;
-        height: 14px;
-        margin-top: 2px;
-        background: currentColor;
-        color: var(--primary-color);
-        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
-          center / contain no-repeat;
-        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E")
-          center / contain no-repeat;
-      }
-      .time-range-presets button:last-child { grid-column: 1/-1; }
-      :root:not([data-cpamp-plugin-host="true"]) .time-range-presets button.active::after {
-        color: var(--text-secondary);
-      }
-      .time-range-custom {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 8px;
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px solid var(--border-color);
-      }
-      .time-range-custom .field { min-width: 0; }
-      .time-range-custom input { width: 100%; min-width: 0; }
-      .time-range-custom > span { display: none; }
-      .time-range-actions { grid-column: 1/-1; justify-content: flex-end; margin-top: 3px; }
+      .range-input::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: var(--range-track); }
+      .range-input::-moz-range-track { height: 6px; border-radius: 999px; background: var(--range-track); }
+      .range-input::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; margin-top: -5px; border: 0; border-radius: 50%; background: var(--primary-color); }
+      .range-input::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--primary-color); }
+      .range-ticks { position: relative; height: 18px; margin-inline: 8px; }
+      .range-ticks > span { position: absolute; transform: translateX(-50%); }
       .time-range-backdrop { display: none; }
       :root[data-cpamp-plugin-host="true"] .time-range-trigger {
         border-color: var(--app-input-border, var(--border-color));
         background: var(--app-input-bg, var(--bg-primary));
-        font-weight: 500;
       }
       :root[data-cpamp-plugin-host="true"] .time-range-trigger[aria-expanded="true"] {
         border-color: var(--app-input-border-focus, var(--primary-color));
@@ -2055,11 +2038,15 @@
         .shared-time-filter .time-range-popover {
           position: fixed;
           z-index: 1301;
-          inset: auto 10px 10px;
-          width: auto;
-          max-height: calc(100dvh - 20px);
+          inset: 50% auto auto 50%;
+          width: min(400px, calc(100vw - 24px));
+          transform: translate(-50%, -50%);
+          animation: none;
+          max-height: calc(100dvh - 24px);
           overflow: auto;
         }
+        html:has(.time-range-popover:not(.hidden)),
+        body:has(.time-range-popover:not(.hidden)) { overflow: hidden; }
         .time-range-backdrop:not(.hidden) {
           display: block;
           position: fixed;
@@ -2067,7 +2054,6 @@
           inset: 0;
           background: #0006;
         }
-        .time-range-custom { grid-template-columns: 1fr; }
         .request-failure .event-entry-head {
           grid-template-columns: minmax(0, 1fr);
           grid-template-areas: "time" "tags" "meta";
@@ -2127,7 +2113,6 @@
         min-width: 0;
       }
       .shared-time-filter > .native-select { flex: 0 1 auto; max-width: 320px; }
-      .shared-time-filter label { color: var(--text-tertiary); font-size: 12px; }
       .labeled-icon-button {
         display: inline-flex;
         align-items: center;
@@ -2243,10 +2228,12 @@
       .usage-distribution-header { margin-bottom: 18px; }
       .usage-distribution-controls { gap: 12px; }
       .usage-distribution-tabs { display: flex; gap: 8px; flex-wrap: nowrap; }
-      .usage-distribution-tabs button.active {
+      :root .usage-distribution-tabs button.active,
+      :root .time-range-popover .time-range-options button.active {
         border-color: var(--primary-color);
         color: var(--primary-active);
         box-shadow: inset 0 0 0 1px var(--primary-color);
+        background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-primary));
       }
       .usage-distribution-layout {
         display: grid;
@@ -2303,6 +2290,16 @@
         .usage-distribution-chart { width: min(240px, 75vw); height: min(240px, 75vw); }
       }
       @media (max-width: 520px) {
+        .page-tabs-row:not(.controls-inline) .page-tab-actions {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+        }
+        .page-tabs-row:not(.controls-inline) .shared-time-filter { display: contents; }
+        .page-tab-actions .shared-time-filter > .native-select { grid-column: 1 / -1; max-width: none; }
+        .page-tab-actions .shared-time-filter select { width: 100%; }
+        .page-tab-actions .time-range-control { grid-column: 1; }
+        .page-tab-actions:not(:has(> button:not(.hidden))) .time-range-control { grid-column: 1 / -1; }
+        .page-tabs-row .tab-refresh { align-self: end; }
         .analysis-summary-grid { grid-template-columns: 1fr; }
         .analysis-summary-details { gap: 5px; }
         .analysis-summary-line { gap: 2px; font-size: 10px; }
@@ -2516,26 +2513,7 @@
                   <span id="shared-time-label">最近 30 天</span
                   ><span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
                 </button>
-                <div id="shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围">
-                  <div class="time-range-heading">时间范围</div>
-                  <div class="time-range-presets" role="group" aria-label="常用时间范围">
-                    <button type="button" data-shared-time-preset="8h">最近 8 小时</button>
-                    <button type="button" data-shared-time-preset="24h">最近 24 小时</button>
-                    <button type="button" data-shared-time-preset="7d">最近 7 天</button>
-                    <button type="button" data-shared-time-preset="30d">最近 30 天</button>
-                    <button type="button" data-shared-time-preset="today">今天</button>
-                    <button type="button" data-shared-time-preset="yesterday">昨天</button>
-                    <button type="button" data-shared-time-preset="custom">自定义</button>
-                  </div>
-                  <div id="shared-time-custom" class="time-range-custom hidden">
-                    <label class="field">开始时间<input id="shared-time-from" type="datetime-local" step="60" /></label>
-                    <label class="field">结束时间<input id="shared-time-to" type="datetime-local" step="60" /></label>
-                    <div class="row time-range-actions">
-                      <button id="shared-time-cancel" type="button">取消</button>
-                      <button id="shared-time-apply" type="button" class="primary">应用</button>
-                    </div>
-                  </div>
-                </div>
+                <div id="shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
               </div>
             </div>
             <button id="request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -2820,34 +2798,7 @@
                     <span id="account-shared-time-label">最近 30 天</span
                     ><span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
                   </button>
-                  <div
-                    id="account-shared-time-popover"
-                    class="time-range-popover hidden"
-                    role="dialog"
-                    aria-label="选择时间范围">
-                    <div class="time-range-heading">时间范围</div>
-                    <div class="time-range-presets" role="group" aria-label="常用时间范围">
-                      <button type="button" data-account-shared-time-preset="8h">最近 8 小时</button>
-                      <button type="button" data-account-shared-time-preset="24h">最近 24 小时</button>
-                      <button type="button" data-account-shared-time-preset="7d">最近 7 天</button>
-                      <button type="button" data-account-shared-time-preset="30d">最近 30 天</button>
-                      <button type="button" data-account-shared-time-preset="today">今天</button>
-                      <button type="button" data-account-shared-time-preset="yesterday">昨天</button>
-                      <button type="button" data-account-shared-time-preset="custom">自定义</button>
-                    </div>
-                    <div id="account-shared-time-custom" class="time-range-custom hidden">
-                      <label class="field"
-                        >开始时间<input id="account-shared-time-from" type="datetime-local" step="60"
-                      /></label>
-                      <label class="field"
-                        >结束时间<input id="account-shared-time-to" type="datetime-local" step="60"
-                      /></label>
-                      <div class="row time-range-actions">
-                        <button id="account-shared-time-cancel" type="button">取消</button>
-                        <button id="account-shared-time-apply" type="button" class="primary">应用</button>
-                      </div>
-                    </div>
-                  </div>
+                  <div id="account-shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
                 </div>
               </div>
               <button id="account-request-events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -3324,15 +3275,9 @@
         admin: ["request-event-model", "request-event-source", "request-event-status"],
         account: ["account-request-event-model", "account-request-event-source", "account-request-event-status"],
       };
-      const SHARED_TIME_LABELS = {
-        "8h": "最近 8 小时",
-        "24h": "最近 24 小时",
-        "7d": "最近 7 天",
-        "30d": "最近 30 天",
-        today: "今天",
-        yesterday: "昨天",
-        custom: "自定义",
-      };
+      const SHARED_TIME_LABELS = { hour: "小时", day: "天", today: "今天", yesterday: "昨天", custom: "自定义" };
+      const sharedTimeDrafts = { admin: null, account: null };
+      const sharedTimeChoices = { admin: { hour: 8, day: 7, custom: null }, account: { hour: 8, day: 7, custom: null } };
       function emptyLoadState() {
         return { promise: null, error: "", generation: 0 };
       }
@@ -3414,7 +3359,7 @@
 
       function storedTimeRange(role) {
         const range = viewPreference(role, "time-range", { mode: "30d" });
-        if (!range || !Object.hasOwn(SHARED_TIME_LABELS, range.mode)) return { mode: "30d" };
+        if (!range || !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode))) return { mode: "30d" };
         if (range.mode !== "custom") return { mode: range.mode };
         const from = new Date(range.from);
         const to = new Date(range.to);
@@ -3422,11 +3367,13 @@
           !Number.isFinite(from.getTime()) ||
           !Number.isFinite(to.getTime()) ||
           from >= to ||
-          to.getTime() - from.getTime() > 30 * 86400000
+          (range.unit === "day"
+            ? localDay(new Date(to.getTime() - 1)) > shiftLocalDay(localDay(from), 364)
+            : to.getTime() - from.getTime() > 365 * 86400000)
         ) {
           return { mode: "30d" };
         }
-        return { mode: "custom", from: from.toISOString(), to: to.toISOString() };
+        return { mode: "custom", unit: range.unit, from: from.toISOString(), to: to.toISOString() };
       }
 
       function restoreRolePreferences(role) {
@@ -3444,6 +3391,10 @@
           restoreChoice(role, "plugin-log-level", "all");
         }
         sharedTimeRanges[role] = storedTimeRange(role);
+        const range = sharedTimeRanges[role];
+        const rolling = rollingTimeMode(range.mode);
+        sharedTimeChoices[role] = { hour: 8, day: 7, custom: range.mode === "custom" ? range : null };
+        if (rolling) sharedTimeChoices[role][rolling.unit] = rolling.value;
         const defaultDimension = account ? "models" : "api_keys";
         const dimension = viewPreference(role, "analysis-dimension", defaultDimension);
         const allowedDimensions = account ? ["models", "sources"] : ["api_keys", "models", "sources"];
@@ -4153,9 +4104,7 @@
           from.setDate(from.getDate() - 1);
           return { from: from.toISOString(), to: today.toISOString() };
         }
-        const to = new Date(today);
-        to.setDate(to.getDate() + 1);
-        return { from: today.toISOString(), to: to.toISOString() };
+        return { from: today.toISOString(), to: now.toISOString() };
       }
 
       function selectedRange(account) {
@@ -7028,6 +6977,7 @@
               ),
             );
             select.value = keys.some((key) => key.scope === selected) ? selected : "";
+            schedulePageTabLayout();
             if (select.value !== selected) {
               saveChoice("admin", "analysis-key");
               resetLoadState(detailLoads.adminAnalysis);
@@ -7069,102 +7019,336 @@
         return (account ? "account-shared" : "shared") + "-time-" + suffix;
       }
 
-      function sharedTimePresetSelector(account) {
-        return "[data-" + (account ? "account-" : "") + "shared-time-preset]";
+      function rollingTimeMode(mode) {
+        const match = /^(\d+)([hd])$/.exec(mode || "");
+        if (!match) return null;
+        const value = Number(match[1]);
+        const unit = match[2] === "h" ? "hour" : "day";
+        return value >= (unit === "hour" ? 5 : 1) && value <= (unit === "hour" ? 24 : 30) ? { unit, value } : null;
       }
 
-      function localDateTimeValue(date) {
-        const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-        return local.toISOString().slice(0, 16);
+      function timeRangeLabel(range) {
+        const rolling = rollingTimeMode(range.mode);
+        if (rolling) return "最近 " + rolling.value + (rolling.unit === "hour" ? " 小时" : " 天");
+        if (range.mode !== "custom") return SHARED_TIME_LABELS[range.mode];
+        const options = { year: "numeric", month: "2-digit", day: "2-digit" };
+        if (range.unit !== "day") Object.assign(options, { hour: "2-digit", minute: "2-digit", hour12: false });
+        const format = (value) => new Date(value).toLocaleString("zh-CN", options);
+        const end = new Date(new Date(range.to).getTime() - 1);
+        if (range.unit === "hour") end.setMinutes(0, 0, 0);
+        return format(range.from) + " – " + format(end);
       }
 
-      function updateSharedTimeControl(account) {
-        const range = sharedTimeRanges[account ? "account" : "admin"];
-        let label = SHARED_TIME_LABELS[range.mode] || SHARED_TIME_LABELS["30d"];
-        if (range.mode === "custom") {
-          const format = (value) =>
-            new Date(value).toLocaleString("zh-CN", {
-              month: "numeric",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
-            });
-          label = format(range.from) + " – " + format(range.to);
-        }
+      function updateSharedTimeControl(account, range = sharedTimeRanges[account ? "account" : "admin"]) {
+        const label = timeRangeLabel(range);
         $(sharedTimeID(account, "label")).textContent = label;
+        const current = $(sharedTimeID(account, "popover")).querySelector(".time-range-current");
+        if (current) current.textContent = label;
+        schedulePageTabLayout();
       }
 
-      function closeSharedTimePopover(account) {
-        $(sharedTimeID(account, "popover")).classList.add("hidden");
+      function closeSharedTimePopover(account, restoreFocus = false) {
+        const popover = $(sharedTimeID(account, "popover"));
+        if (popover.classList.contains("hidden")) return;
+        popover.classList.add("hidden");
         $(sharedTimeID(account, "backdrop")).classList.add("hidden");
         $(sharedTimeID(account, "trigger")).setAttribute("aria-expanded", "false");
+        sharedTimeDrafts[account ? "account" : "admin"] = null;
+        updateSharedTimeControl(account);
+        if (restoreFocus) $(sharedTimeID(account, "trigger")).focus();
       }
 
-      function renderSharedTimePopover(account, mode) {
-        document.querySelectorAll(sharedTimePresetSelector(account)).forEach((button) => {
-          const value = button.dataset[account ? "accountSharedTimePreset" : "sharedTimePreset"];
-          button.classList.toggle("active", value === mode);
-        });
-        $(sharedTimeID(account, "custom")).classList.toggle("hidden", mode !== "custom");
-        if (mode === "custom") {
-          const current = sharedTimeRanges[account ? "account" : "admin"];
-          const fallback = recentTimeRange("24h");
-          $(sharedTimeID(account, "from")).value = localDateTimeValue(
-            new Date(current.mode === "custom" ? current.from : fallback.from),
+      function localDay(date) {
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      }
+
+      function shiftLocalDay(value, days) {
+        const date = new Date(value);
+        date.setDate(date.getDate() + days);
+        return date.getTime();
+      }
+
+      function defaultCustomTimeRange(draft, unit) {
+        return unit === "hour"
+          ? { unit, start: draft.hours[16], end: draft.hours[23] }
+          : { unit, start: shiftLocalDay(draft.today, -6), end: draft.today };
+      }
+
+      function renderCustomTimeRange(account, draft) {
+        const custom = draft.custom;
+        const content = el("div", { class: "time-range-custom" });
+        const redraw = () => {
+          const popover = $(sharedTimeID(account, "popover"));
+          const focused = document.activeElement;
+          const label = focused.getAttribute("aria-label") || focused.textContent;
+          const matchingButtons = () => Array.from(popover.querySelectorAll("button:not(:disabled)")).filter(
+            (button) => (button.getAttribute("aria-label") || button.textContent) === label,
           );
-          $(sharedTimeID(account, "to")).value = localDateTimeValue(
-            new Date(current.mode === "custom" ? current.to : fallback.to),
-          );
+          const index = matchingButtons().indexOf(focused);
+          renderSharedTimePopover(account);
+          const next = matchingButtons()[index];
+          (next || popover.querySelector(".time-range-modes .active")).focus({ preventScroll: true });
+        };
+        const format = (value) => new Date(value).toLocaleString("zh-CN", custom.unit === "day"
+          ? { year: "numeric", month: "short", day: "numeric" }
+          : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+        const pickerCancel = () => {
+          draft.custom = draft.snapshot;
+          draft.view = "summary";
+          redraw();
+        };
+        const apply = () => {
+          const to = Math.min(Date.now(), custom.unit === "day" ? shiftLocalDay(custom.end, 1) : custom.end + 3600000);
+          guard(() => applyTimeRange(account, { mode: "custom", unit: custom.unit,
+            from: new Date(custom.start).toISOString(), to: new Date(to).toISOString() }));
+        };
+        if (draft.view === "summary") {
+          content.append(el("div", { class: "time-range-options time-range-units", role: "group", "aria-label": "自定义单位" },
+            ["hour", "day"].map((unit) => el("button", { type: "button", class: unit === custom.unit ? "active" : "",
+              "aria-pressed": String(unit === custom.unit), text: unit === "hour" ? "小时" : "天", onclick: () => {
+                if (unit === custom.unit) return;
+                draft.custom = defaultCustomTimeRange(draft, unit);
+                redraw();
+              } })),
+          ));
+        } else {
+          content.append(el("div", { class: "row spread" },
+            el("button", { type: "button", class: "link small", text: "返回", onclick: pickerCancel }),
+            el("span", { class: "small", text: custom.unit === "day" ? "选择日期" : "选择小时" }),
+            el("span", { class: "small muted", text: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+          ));
+        }
+        const endpoints = el("div", { class: "time-range-options time-range-endpoints" + (draft.view === "summary" ? " summary" : "") }, ["start", "end"].map((endpoint) =>
+          el("button", { type: "button", class: draft.view !== "summary" && draft.endpoint === endpoint ? "active" : "",
+            "aria-label": endpoint === "start" ? "选择开始时间" : "选择结束时间", onclick: () => {
+              if (draft.view === "summary") draft.snapshot = { ...custom };
+              draft.endpoint = endpoint;
+              draft.view = custom.unit;
+              draft.month = new Date(custom[endpoint]);
+              draft.month.setDate(1);
+              redraw();
+            } },
+            el("span", { class: "small muted", text: endpoint === "start" ? "开始时间" : "结束时间" }),
+            el("span", { text: format(custom[endpoint]) }),
+            draft.view === "summary" ? el("span", { class: "small muted", text: endpoint === "end" && custom.start === custom.end ? "与开始时间相同" : "点击修改" }) : null,
+          ),
+        ));
+        if (draft.view === "summary") endpoints.insertBefore(el("span", { class: "muted", "aria-hidden": "true", text: "→" }), endpoints.lastChild);
+        content.append(endpoints);
+        if (custom.unit === "day") content.append(el("div", { class: "small muted", text: "可选择最近 365 天内的日期" }));
+        if (draft.view === "day") {
+          const month = draft.month;
+          const monthStart = month.getTime();
+          const nextMonth = new Date(month.getFullYear(), month.getMonth() + 1, 1).getTime();
+          const moveMonth = (amount) => {
+            draft.month = new Date(month.getFullYear(), month.getMonth() + amount, 1);
+            redraw();
+          };
+          const grid = el("div", { class: "time-range-calendar time-range-options" });
+          for (const name of ["日", "一", "二", "三", "四", "五", "六"]) grid.append(el("span", { class: "small muted", text: name }));
+          const first = shiftLocalDay(monthStart, -month.getDay());
+          for (let i = 0; i < 42; i++) {
+            const day = shiftLocalDay(first, i);
+            const selected = day === custom.start || day === custom.end;
+            grid.append(el("button", { type: "button", "data-range-day": String(day),
+              class: [selected ? "active" : "", day === custom.start ? "range-start" : "", day === custom.end ? "range-end" : "", day >= custom.start && day <= custom.end ? "in-range" : "",
+                new Date(day).getMonth() !== month.getMonth() ? "outside-month" : ""].filter(Boolean).join(" "),
+              disabled: day < draft.firstDay || day > draft.today,
+              "aria-label": new Date(day).toLocaleDateString("zh-CN"), "aria-pressed": String(selected),
+              text: String(new Date(day).getDate()), onclick: () => {
+                if (draft.endpoint === "start") {
+                  custom.start = day;
+                  custom.end = Math.max(custom.end, day);
+                  draft.endpoint = "end";
+                  draft.month = new Date(custom.end);
+                  draft.month.setDate(1);
+                } else {
+                  custom.end = day;
+                  custom.start = Math.min(custom.start, day);
+                }
+                redraw();
+              } }));
+          }
+          content.append(el("div", { class: "row spread" },
+            el("button", { type: "button", class: "link small", text: "上一月", disabled: monthStart <= draft.firstDay, onclick: () => moveMonth(-1) }),
+            el("span", { class: "small", text: month.toLocaleDateString("zh-CN", { year: "numeric", month: "long" }) }),
+            el("button", { type: "button", class: "link small", text: "下一月", disabled: nextMonth > draft.today, onclick: () => moveMonth(1) }),
+          ), grid);
+        } else if (draft.view === "hour") {
+          content.append(el("div", { class: "time-range-hours" }, ["start", "end"].map((endpoint) =>
+            el("div", {}, el("div", { class: "small muted", text: endpoint === "start" ? "开始时间" : "结束时间" }),
+              el("div", { class: "time-range-hour-list time-range-options" }, draft.hours.map((hour, index) =>
+                el("button", { type: "button", class: custom[endpoint] === hour ? "active" : "",
+                  "aria-pressed": String(custom[endpoint] === hour),
+                  disabled: endpoint === "start" ? index > 19 : hour < custom.start + 4 * 3600000,
+                  onclick: () => {
+                    custom[endpoint] = hour;
+                    if (endpoint === "start") custom.end = Math.max(custom.end, hour + 4 * 3600000);
+                    redraw();
+                  } },
+                  el("span", { text: new Date(hour).toLocaleDateString("zh-CN", { month: "short", day: "numeric" }) }),
+                  el("span", { text: endpoint === "end" && index === 23 ? "现在" : new Date(hour).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false }) }),
+                ),
+              )),
+            ),
+          )));
+        }
+        const count = custom.unit === "hour" ? (custom.end - custom.start) / 3600000 + 1
+          : Math.round((custom.end - custom.start) / 86400000) + 1;
+        if (draft.view === "summary") {
+          content.append(el("div", { class: "row spread small muted" },
+            el("span", { text: "共 " + count + (custom.unit === "hour" ? " 小时" : " 天") }),
+            el("span", { text: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+          ));
+        }
+        content.append(el("div", { class: "row spread" },
+          draft.view === "summary" ? null : el("span", { class: "small muted", text: format(custom.start) + " – " + format(custom.end) }),
+          el("div", { class: "row time-range-actions" },
+            el("button", { type: "button", text: "取消", onclick: draft.view === "summary" ? () => closeSharedTimePopover(account, true) : pickerCancel }),
+            el("button", { type: "button", class: "primary", text: "应用", onclick: apply }),
+          ),
+        ));
+        return content;
+      }
+
+      function renderSharedTimePopover(account) {
+        const role = account ? "account" : "admin";
+        const draft = sharedTimeDrafts[role];
+        const popover = $(sharedTimeID(account, "popover"));
+        popover.replaceChildren(el("div", { class: "row spread time-range-heading" },
+          el("span", { text: "时间范围" }),
+          el("span", { class: "time-range-current", text: timeRangeLabel(sharedTimeRanges[role]) }),
+        ), el("div", { class: "time-range-options time-range-modes", role: "group", "aria-label": "时间范围模式" },
+          Object.entries(SHARED_TIME_LABELS).map(([mode, label]) => el("button", { type: "button", text: label,
+            "aria-pressed": String(mode === draft.mode), class: mode === draft.mode ? "active" : "", onclick: () => {
+              if (mode === "custom") resetCustomTimeDraft(account, draft);
+              draft.mode = mode;
+              draft.view = "summary";
+              renderSharedTimePopover(account);
+              popover.querySelector(".time-range-modes .active").focus();
+              if (mode !== "custom") guard(() => applyTimeRange(account, { mode: mode === "hour" || mode === "day"
+                ? draft[mode] + (mode === "hour" ? "h" : "d") : mode }, false));
+            } })),
+        ));
+        if (draft.mode === "custom") {
+          popover.append(renderCustomTimeRange(account, draft));
+          for (const list of popover.querySelectorAll(".time-range-hour-list")) {
+            const selected = list.querySelector(".active");
+            if (selected) list.scrollTop = Math.max(0, selected.offsetTop - (list.clientHeight - selected.clientHeight) / 2);
+          }
+        } else if (draft.mode === "hour" || draft.mode === "day") {
+          const unit = draft.mode;
+          const min = unit === "hour" ? 5 : 1, max = unit === "hour" ? 24 : 30;
+          const label = unit === "hour" ? " 小时" : " 天";
+          const value = el("b", { text: draft[unit] + label });
+          let activePointer = null;
+          const commit = () => {
+            activePointer = null;
+            if (sharedTimeDrafts[role] === draft && draft.mode === unit) guard(() => applyTimeRange(account, { mode: draft[unit] + (unit === "hour" ? "h" : "d") }, false));
+          };
+          const finishPointer = (event) => {
+            if (activePointer === event.pointerId) commit();
+          };
+          const slider = el("input", { type: "range", class: "range-input", min, max, step: 1, value: draft[unit],
+            style: "--range-progress:" + ((draft[unit] - min) / (max - min) * 100) + "%", "aria-label": "最近" + label.trim(),
+            oninput: (event) => {
+              draft[unit] = Number(event.target.value);
+              value.textContent = draft[unit] + label;
+              updateSharedTimeControl(account, { mode: draft[unit] + (unit === "hour" ? "h" : "d") });
+              event.currentTarget.style.setProperty("--range-progress", ((draft[unit] - min) / (max - min) * 100) + "%");
+            },
+            onpointerdown: (event) => {
+              if (activePointer !== null && activePointer !== event.pointerId) return event.preventDefault();
+              activePointer = event.pointerId;
+              event.currentTarget.setPointerCapture(event.pointerId);
+            },
+            onpointerup: finishPointer,
+            onpointercancel: finishPointer,
+            onkeyup: (event) => {
+              if (/^(Arrow(Left|Right|Up|Down)|Home|End|PageUp|PageDown)$/.test(event.key)) commit();
+            },
+            onblur: commit,
+          });
+          const ticks = unit === "hour" ? [5, 8, 12, 18, 24] : [1, 7, 14, 21, 30];
+          popover.append(el("div", { class: "time-range-rolling" },
+            el("div", { class: "row spread small" }, el("span", { class: "muted", text: "最近时间范围" }), value),
+            el("div", { class: "range-control" }, slider,
+              el("div", { class: "range-ticks small muted", "aria-hidden": "true" },
+                ticks.map((tick) => el("span", { text: String(tick), style: "left:" + ((tick - min) / (max - min) * 100) + "%" })))),
+          ));
+        } else {
+          popover.append(el("div", { class: "time-range-rolling" },
+            el("span", { class: "small", text: SHARED_TIME_LABELS[draft.mode] }),
+            el("span", { class: "small muted", text: draft.mode === "today" ? "00:00 → 现在" : "00:00 → 24:00" }),
+          ));
+        }
+      }
+
+      function resetCustomTimeDraft(account, draft) {
+        const range = sharedTimeChoices[account ? "account" : "admin"].custom;
+        const now = new Date();
+        const hour = new Date(now);
+        hour.setMinutes(0, 0, 0);
+        draft.today = localDay(now);
+        draft.firstDay = shiftLocalDay(draft.today, -364);
+        draft.hours = Array.from({ length: 24 }, (_, i) => hour.getTime() - (23 - i) * 3600000);
+        draft.custom = defaultCustomTimeRange(draft, range?.unit === "hour" ? "hour" : "day");
+        if (!range) return;
+        const start = new Date(range.from).getTime(), end = new Date(range.to).getTime() - 1;
+        if (range.unit === "hour") {
+          const first = draft.hours.find((value) => value >= start);
+          const last = draft.hours.findLast((value) => value <= end);
+          if (first !== undefined && last - first >= 4 * 3600000) draft.custom = { unit: "hour", start: first, end: last };
+        } else if (end >= draft.firstDay && start <= now.getTime()) {
+          draft.custom = { unit: "day", start: Math.max(draft.firstDay, localDay(new Date(start))), end: Math.min(draft.today, localDay(new Date(end))) };
+        } else {
+          draft.custom = { unit: "day", start: draft.today, end: draft.today };
         }
       }
 
       function openSharedTimePopover(account) {
         const popover = $(sharedTimeID(account, "popover"));
-        if (!popover.classList.contains("hidden")) {
-          closeSharedTimePopover(account);
-          return;
-        }
-        const mode = sharedTimeRanges[account ? "account" : "admin"].mode;
-        renderSharedTimePopover(account, mode);
+        if (!popover.classList.contains("hidden")) return closeSharedTimePopover(account, true);
+        closeSharedTimePopover(!account);
+        const role = account ? "account" : "admin";
+        const range = sharedTimeRanges[role];
+        const rolling = rollingTimeMode(range.mode);
+        const draft = { ...sharedTimeChoices[role], mode: rolling?.unit || range.mode, view: "summary", endpoint: "start" };
+        if (rolling) draft[rolling.unit] = rolling.value;
+        resetCustomTimeDraft(account, draft);
+        sharedTimeDrafts[role] = draft;
+        renderSharedTimePopover(account);
         popover.classList.remove("hidden");
         $(sharedTimeID(account, "backdrop")).classList.remove("hidden");
         $(sharedTimeID(account, "trigger")).setAttribute("aria-expanded", "true");
+        popover.querySelector('.time-range-modes .active').focus();
       }
 
-      function applyTimeRange(account, range) {
+      function applyTimeRange(account, range, close = true) {
         const role = account ? "account" : "admin";
+        const previous = sharedTimeRanges[role];
         sharedTimeRanges[role] = range;
+        const rolling = rollingTimeMode(range.mode);
+        if (rolling) sharedTimeChoices[role][rolling.unit] = rolling.value;
+        if (range.mode === "custom") sharedTimeChoices[role].custom = range;
         saveViewPreference(role, "time-range", range);
         updateSharedTimeControl(account);
-        closeSharedTimePopover(account);
-        return applySharedTimeRange(account);
+        if (close) closeSharedTimePopover(account, true);
+        if (JSON.stringify(previous) !== JSON.stringify(range)) return applySharedTimeRange(account);
       }
 
       function bindSharedTimeControls(account) {
         $(sharedTimeID(account, "trigger")).onclick = () => openSharedTimePopover(account);
-        $(sharedTimeID(account, "backdrop")).onclick = () => closeSharedTimePopover(account);
-        document.querySelectorAll(sharedTimePresetSelector(account)).forEach((button) => {
-          button.onclick = () => {
-            const mode = button.dataset[account ? "accountSharedTimePreset" : "sharedTimePreset"];
-            renderSharedTimePopover(account, mode);
-            if (mode !== "custom") guard(() => applyTimeRange(account, { mode }));
-          };
-        });
-        $(sharedTimeID(account, "cancel")).onclick = () => closeSharedTimePopover(account);
-        $(sharedTimeID(account, "apply")).onclick = () =>
-          guard(() => {
-            const from = new Date($(sharedTimeID(account, "from")).value);
-            const to = new Date($(sharedTimeID(account, "to")).value);
-            if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime())) {
-              throw new Error("请选择开始时间和结束时间");
-            }
-            if (from >= to) throw new Error("开始时间必须早于结束时间");
-            if (to.getTime() - from.getTime() > 30 * 86400000) {
-              throw new Error("时间范围不能超过 30 天");
-            }
-            return applyTimeRange(account, { mode: "custom", from: from.toISOString(), to: to.toISOString() });
-          });
+        $(sharedTimeID(account, "backdrop")).onclick = () => closeSharedTimePopover(account, true);
+        $(sharedTimeID(account, "popover")).onkeydown = (event) => {
+          if (event.key !== "Tab") return;
+          const controls = Array.from(event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled)'));
+          const target = event.shiftKey ? controls.at(-1) : controls[0];
+          if (!event.currentTarget.contains(document.activeElement) || document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
+            event.preventDefault();
+            target.focus();
+          }
+        };
       }
 
       function csvCell(value) {
@@ -8537,6 +8721,10 @@
       );
       addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
+        closeSharedTimePopover(false, true);
+        closeSharedTimePopover(true, true);
+      });
+      matchMedia("(max-width: 768px)").addEventListener("change", () => {
         closeSharedTimePopover(false);
         closeSharedTimePopover(true);
       });

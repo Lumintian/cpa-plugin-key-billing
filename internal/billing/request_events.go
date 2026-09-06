@@ -26,7 +26,7 @@ type RequestEvent struct {
 	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
 }
 
-const RequestEventRetention = 30 * 24 * time.Hour
+const RequestEventRetention = 365 * 24 * time.Hour
 
 // Display identity is joined rather than copied into every entry, so Key and
 // credential renames update historical rows without rewriting request events.
