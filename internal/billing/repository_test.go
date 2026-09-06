@@ -207,6 +207,7 @@ func testConfig(t *testing.T) Config {
 	t.Helper()
 	cfg := DefaultConfig()
 	cfg.Enabled = true
+	cfg.Debug = true
 	cfg.StateFile = filepath.Join(t.TempDir(), "state.db")
 	return cfg
 }

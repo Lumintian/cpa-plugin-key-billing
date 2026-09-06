@@ -86,6 +86,7 @@ plugins:
   configs:
     cpa-key-billing:
       enabled: true
+      debug: false # 是否记录 debug 日志，例如路由日志、匹配参考价日志
       state_file: "plugins/cpa-key-billing-state-v1.db"
 ```
 

@@ -74,6 +74,7 @@ func mustMarshal(t *testing.T, v any) []byte {
 func testConfigYAML(t *testing.T, enabled bool) []byte {
 	t.Helper()
 	return []byte("enabled: " + strconv.FormatBool(enabled) +
+		"\ndebug: true" +
 		"\nstate_file: \"" + filepath.Join(t.TempDir(), "state.db") + "\"\n")
 }
 

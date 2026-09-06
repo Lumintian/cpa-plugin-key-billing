@@ -41,8 +41,11 @@ func (s *Store) AddPluginLog(level PluginLogLevel, format string, args ...any) {
 	if s == nil {
 		return
 	}
-	entry := PluginLog{At: s.Now(), Level: level, Message: fmt.Sprintf(format, args...)}
 	_, _ = withRepository(s, func(repo Repository) (struct{}, error) {
+		if level == PluginLogDebug && !s.cfg.Debug {
+			return struct{}{}, nil
+		}
+		entry := PluginLog{At: s.Now(), Level: level, Message: fmt.Sprintf(format, args...)}
 		return struct{}{}, repo.AppendPluginLog(entry, entry.At.Add(-PluginLogRetention))
 	})
 }

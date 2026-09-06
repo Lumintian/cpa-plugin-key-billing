@@ -16,6 +16,40 @@ func mustPluginLogs(t *testing.T, store *Store) []PluginLog {
 	return page.Entries
 }
 
+func TestDebugPluginLogsFollowConfig(t *testing.T) {
+	repo := &memoryRepository{}
+	cfg := testConfig(t)
+	cfg.Debug = false
+	store := NewStore(func(string) (Repository, error) { return repo, nil }, nil)
+	if err := store.Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(store.Close)
+	if _, err := store.ClearPluginLogs(); err != nil {
+		t.Fatal(err)
+	}
+	store.AddPluginLog(PluginLogDebug, "disabled")
+	store.AddPluginLog(PluginLogInfo, "info")
+	store.AddPluginLog(PluginLogError, "error")
+	events := mustPluginLogs(t, store)
+	if len(events) != 2 || events[0].Level != PluginLogError || events[1].Level != PluginLogInfo {
+		t.Fatalf("debug-disabled logs = %+v", events)
+	}
+
+	cfg.Debug = true
+	if err := store.Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ClearPluginLogs(); err != nil {
+		t.Fatal(err)
+	}
+	store.AddPluginLog(PluginLogDebug, "enabled")
+	events = mustPluginLogs(t, store)
+	if len(events) != 1 || events[0].Level != PluginLogDebug || events[0].Message != "enabled" {
+		t.Fatalf("debug-enabled logs = %+v", events)
+	}
+}
+
 // The store stamps each line with its own clock and reads back the window that
 // clock says is current; the order and the storage of them belong to the
 // repository and are exercised against a real database.

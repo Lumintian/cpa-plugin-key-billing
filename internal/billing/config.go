@@ -13,12 +13,14 @@ const DefaultStateFile = "plugins/cpa-key-billing-state-v1.db"
 
 type Config struct {
 	Enabled   bool   `yaml:"enabled"`
+	Debug     bool   `yaml:"debug"`
 	StateFile string `yaml:"state_file"`
 }
 
 // Priority and Store belong to the host and are ignored by this plugin.
 type configDocument struct {
 	Enabled   bool      `yaml:"enabled"`
+	Debug     bool      `yaml:"debug"`
 	StateFile string    `yaml:"state_file"`
 	Priority  int       `yaml:"priority"`
 	Store     yaml.Node `yaml:"store"`
@@ -44,6 +46,7 @@ func DecodeConfig(raw []byte) (Config, error) {
 			return Config{}, fmt.Errorf("解析插件配置：只能包含一个 YAML 文档")
 		}
 		cfg.Enabled = document.Enabled
+		cfg.Debug = document.Debug
 		cfg.StateFile = document.StateFile
 	}
 	return cfg.normalized(), nil
