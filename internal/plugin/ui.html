@@ -490,6 +490,7 @@
         grid-column: 2;
         grid-row: 1;
         place-items: center;
+        justify-self: end;
         width: 36px;
         height: 36px;
         min-width: 36px;
@@ -500,13 +501,6 @@
       }
       .page-tabs-row.controls-inline .tab-refresh { grid-column: 3; }
       body.embedded .tab-refresh { display: grid; }
-      .page-tabs-row:not(.controls-inline):has(.page-tab-actions:not(.hidden)) {
-        grid-template-columns: minmax(0, 1fr) auto;
-      }
-      .page-tabs-row:not(.controls-inline):has(.page-tab-actions:not(.hidden)) > .tabs-scroll { grid-column: 1 / -1; }
-      .page-tabs-row:not(.controls-inline) .page-tab-actions { grid-column: 1; }
-      .page-tabs-row:not(.controls-inline):has(.page-tab-actions:not(.hidden)) .tab-refresh { grid-row: 2; }
-      body:not(.embedded) .page-tabs-row:not(.controls-inline) .page-tab-actions { grid-column: 1 / -1; }
       .tabs-scroll {
         --tabs-fade-surface: var(--bg-secondary);
         position: relative;
@@ -2248,17 +2242,15 @@
         .usage-distribution-layout { grid-template-columns: 1fr; gap: 16px; }
         .usage-distribution-chart { width: min(240px, 75vw); height: min(240px, 75vw); }
       }
-      @media (max-width: 520px) {
-        .page-tabs-row:not(.controls-inline) .page-tab-actions {
+      @media (max-width: 420px) {
+        .page-tabs-row:not(.controls-inline) .shared-time-filter:has(> .native-select) {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          flex: 1;
         }
-        .page-tabs-row:not(.controls-inline) .shared-time-filter { display: contents; }
-        .page-tab-actions .shared-time-filter > .native-select { grid-column: 1 / -1; max-width: none; }
-        .page-tab-actions .shared-time-filter select { width: 100%; }
-        .page-tab-actions .time-range-control { grid-column: 1; }
-        .page-tab-actions:not(:has(> button:not(.hidden))) .time-range-control { grid-column: 1 / -1; }
-        .page-tabs-row .tab-refresh { align-self: end; }
+        .page-tabs-row:not(.controls-inline) .shared-time-filter select { width: 100%; }
+      }
+      @media (max-width: 520px) {
         .analysis-summary-grid { grid-template-columns: 1fr; }
         .analysis-summary-details { gap: 5px; }
         .analysis-summary-line { gap: 2px; font-size: 10px; }
@@ -4216,8 +4208,16 @@
       }
 
       function schedulePageTabLayout() {
-        if (tabLayoutFrame) cancelAnimationFrame(tabLayoutFrame);
+        if (tabLayoutFrame) return;
         tabLayoutFrame = requestAnimationFrame(updatePageTabLayouts);
+      }
+
+      const pageTabResizeObserver = new ResizeObserver(schedulePageTabLayout);
+      for (const row of PAGE_TAB_ROWS) {
+        pageTabResizeObserver.observe(row, { box: "border-box" });
+        for (const control of row.querySelectorAll("button, select")) {
+          pageTabResizeObserver.observe(control, { box: "border-box" });
+        }
       }
 
       function updateTabScrollHint(tabBar) {
@@ -6977,7 +6977,6 @@
               ),
             );
             select.value = keys.some((key) => key.scope === selected) ? selected : "";
-            schedulePageTabLayout();
             if (select.value !== selected) {
               saveChoice("admin", "analysis-key");
               resetLoadState(detailLoads.adminAnalysis);
@@ -7044,7 +7043,6 @@
         $(sharedTimeID(account, "label")).textContent = label;
         const current = $(sharedTimeID(account, "popover")).querySelector(".time-range-current");
         if (current) current.textContent = label;
-        schedulePageTabLayout();
       }
 
       function closeSharedTimePopover(account, restoreFocus = false) {
@@ -8835,10 +8833,7 @@
         renderRoutePicker();
       };
       addEventListener("scroll", positionRoutePicker, { passive: true, capture: true });
-      addEventListener("resize", () => {
-        positionRoutePicker();
-        schedulePageTabLayout();
-      });
+      addEventListener("resize", positionRoutePicker);
       addEventListener(
         "pointerdown",
         (event) => {
