@@ -3274,21 +3274,25 @@
         admin: { hour: 8, day: 7, custom: null },
         account: { hour: 8, day: 7, custom: null },
       };
-      function emptyLoadState() {
-        return { promise: null, error: "", generation: 0 };
+      const LIVE_CACHE_MS = 30000;
+      const CONFIG_CACHE_MS = 5 * 60000;
+
+      function emptyLoadState(maxAge = LIVE_CACHE_MS) {
+        return { promise: null, error: "", generation: 0, maxAge };
       }
 
       const detailLoads = {
         adminAccess: emptyLoadState(),
-        adminEventKeys: emptyLoadState(),
-        adminPrices: emptyLoadState(),
+        adminEventKeys: emptyLoadState(CONFIG_CACHE_MS),
+        adminAPIKeys: emptyLoadState(CONFIG_CACHE_MS),
+        adminPrices: emptyLoadState(CONFIG_CACHE_MS),
         accountAccess: emptyLoadState(),
-        accountPrices: emptyLoadState(),
+        accountPrices: emptyLoadState(CONFIG_CACHE_MS),
         adminAnalysis: emptyLoadState(),
         accountAnalysis: emptyLoadState(),
         adminAuthFiles: emptyLoadState(),
         accountAuthFiles: emptyLoadState(),
-        adminInventory: emptyLoadState(),
+        adminInventory: emptyLoadState(CONFIG_CACHE_MS),
       };
 
       // Views describe their API and markup; the controller owns paging and refresh state.
@@ -3368,6 +3372,11 @@
             if (list.active()) view.render(account);
           },
           load(action = "replace", selected = selectedRange(account)) {
+            const cacheKey = timeRangeCacheKey(account, selected);
+            if (action === "navigation" && list.promise) return list.promise;
+            if (action === "navigation" && list.cache?.key === cacheKey && Date.now() - list.cache.at < list.maxAge) {
+              return list.promise || Promise.resolve();
+            }
             const append = action === "append";
             const background = action === "background";
             if (append && (list.cursor === null || list.promise)) return list.promise || Promise.resolve();
@@ -3399,6 +3408,7 @@
                 list.range = range;
                 list.cursor = incoming.length ? view.next(page, entries) : null;
                 list.pages = append ? list.pages + 1 : 1;
+                if (!append) list.cache = { key: cacheKey, at: Date.now() };
                 if (!append) list.scroller.scrollTop = 0;
               })
               .catch((error) => {
@@ -3425,7 +3435,8 @@
             if (list.data) return false;
             const message = list.promise ? "加载中…" : list.error ? view.label + "加载失败" : "暂无" + view.label;
             const retry = list.error && !list.promise
-              ? el("button", { class: "retry-button", onclick: () => guard(() => list.load()) }, "重试") : null;
+              ? el("button", { class: "retry-button", onclick: () => guard(() => list.load()) }, "重试")
+              : null;
             replaceContent(list.scroller, el("div", { class: "empty" }, el("div", { text: message }), retry));
             return true;
           },
@@ -3567,6 +3578,8 @@
         load.generation++;
         load.promise = null;
         load.error = "";
+        load.cache = null;
+        load.requestKey = "";
       }
 
       function resetRoleControls(role) {
@@ -3594,17 +3607,7 @@
         delete $(account ? "account-analysis-body" : "analysis-body").dataset.analysisSignature;
         if (role === "account") accountState = emptyAccountState();
         else state = emptyAdminState();
-        for (const name of role === "account"
-          ? ["accountAccess", "accountPrices", "accountAnalysis", "accountAuthFiles"]
-          : [
-              "adminAccess",
-              "adminEventKeys",
-              "adminPrices",
-              "adminAnalysis",
-              "adminAuthFiles",
-              "adminInventory",
-            ])
-          resetLoadState(detailLoads[name]);
+        invalidateResources(role);
         for (const list of Object.values(pagedLists[role])) list.reset();
         resetRoleControls(role);
       }
@@ -3910,9 +3913,20 @@
         setLoginMode(mode, true);
       }
 
-      function loadResource(load, request, apply, render) {
+      function invalidateResources(role) {
+        for (const [name, load] of Object.entries(detailLoads)) {
+          if (name.startsWith(role)) resetLoadState(load);
+        }
+      }
+
+      function loadResource(load, request, apply, render, { cacheKey = "", maxAge = load.maxAge } = {}) {
+        if (load.promise && load.requestKey !== cacheKey) resetLoadState(load);
         if (load.promise) return load.promise;
         load.error = "";
+        if (maxAge && load.cache?.key === cacheKey && Date.now() - load.cache.at < maxAge) {
+          return Promise.resolve(load.cache.value);
+        }
+        load.requestKey = cacheKey;
         const generation = load.generation;
         const task = Promise.resolve()
           .then(() => {
@@ -3920,7 +3934,10 @@
             return request();
           })
           .then((result) => {
-            if (load.generation === generation) apply?.(result);
+            if (load.generation !== generation) return;
+            apply?.(result);
+            if (maxAge) load.cache = { key: cacheKey, at: Date.now(), value: result };
+            return result;
           })
           .catch((err) => {
             if (load.generation !== generation || err instanceof StaleRequestError) return;
@@ -4128,11 +4145,8 @@
             state.plans = access.plans || [];
             state.routes = access.routes || [];
             state.credentials = access.credentials || [];
+            renderAdminAccess();
           },
-          () =>
-            currentRole === "admin" &&
-            ["keys", "settings"].includes(activeAdminTab()) &&
-            renderAdminTab(activeAdminTab(), true),
         );
       }
 
@@ -4163,11 +4177,19 @@
         return [...prices.values()];
       }
 
+      function loadConfiguredAPIKeys() {
+        return loadResource(detailLoads.adminAPIKeys, async () => {
+          const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
+          return result["api-keys"] || [];
+        });
+      }
+
       async function fetchPricingModels(account) {
         let key = authKey;
         if (!account) {
-          const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
-          key = (result["api-keys"] || []).find((value) => value.trim()) || "";
+          const keys = await loadConfiguredAPIKeys();
+          if (!keys) throw new StaleRequestError();
+          key = keys.find((value) => value.trim()) || "";
         }
         const result = await api("GET", "/v1/models", null, { raw: true, key });
         if (!Array.isArray(result.data)) throw new Error("CPA 模型列表格式无效");
@@ -4197,11 +4219,8 @@
             state.prices = prices.map((price) => ({ ...price, in_models: modelError ? undefined : price.in_models }));
             state.priceModelError = modelError;
             renderReferencePriceStatus(status.metadata);
+            renderAdminPrices();
           },
-          () =>
-            currentRole === "admin" &&
-            ["keys", "settings"].includes(activeAdminTab()) &&
-            renderAdminTab(activeAdminTab(), true),
         );
       }
 
@@ -4223,8 +4242,8 @@
           () => accountAPI("/access"),
           (access) => {
             accountState.access = access;
+            if (currentRole === "account") renderAccount(false);
           },
-          () => currentRole === "account" && renderAccount(false),
         );
       }
 
@@ -4239,8 +4258,8 @@
           ({ models, prices }) => {
             accountState.models = models;
             accountState.prices = prices || [];
+            if (currentRole === "account") renderAccount(false);
           },
-          () => currentRole === "account" && renderAccount(false),
         );
       }
 
@@ -4292,6 +4311,7 @@
             target.analysis = analysis;
           },
           render,
+          { cacheKey: JSON.stringify([timeRangeCacheKey(account, range), account ? "" : $("analysis-key").value]) },
         );
       }
 
@@ -4314,7 +4334,6 @@
         }
         return params;
       }
-
 
       function activeAdminTab() {
         return document.querySelector(".tabs button[data-tab].active")?.dataset.tab || "keys";
@@ -4380,84 +4399,115 @@
         tabBar.addEventListener("scroll", () => updateTabScrollHint(tabBar), { passive: true });
       }
 
+      // Foreground loads include configuration; background loads only live view data.
       const VIEW_DEPENDENCIES = {
         admin: {
-          keys: ["access", "prices"],
-          analysis: ["analysis"],
-          "request-events": ["events"],
-          errors: ["errors"],
-          "auth-files": ["authFiles"],
-          settings: ["access", "prices", "logs"],
+          keys: { foreground: ["access", "prices"], background: ["access"] },
+          analysis: { foreground: ["eventKeys", "analysis"], background: ["analysis"] },
+          "request-events": { foreground: ["eventKeys", "events"], background: ["events"] },
+          errors: { foreground: ["eventKeys", "errors"], background: ["errors"] },
+          "auth-files": { foreground: ["authFiles"], background: [] },
+          settings: { foreground: ["access", "prices", "logs"], background: ["logs"] },
         },
         account: {
-          subscription: ["access", "prices"],
-          analysis: ["access", "analysis"],
-          "request-events": ["access", "events"],
-          errors: ["access", "errors"],
-          "auth-files": ["access", "authFiles"],
+          subscription: { foreground: ["access", "prices"], background: ["access"] },
+          analysis: { foreground: ["access", "analysis"], background: ["analysis"] },
+          "request-events": { foreground: ["access", "events"], background: ["events"] },
+          errors: { foreground: ["access", "errors"], background: ["errors"] },
+          "auth-files": { foreground: ["access", "authFiles"], background: [] },
         },
       };
 
+      function viewDependencies(account, tab, background, range) {
+        const dependencies = VIEW_DEPENDENCIES[account ? "account" : "admin"][tab];
+        if (!background) return dependencies.foreground;
+        const duration = Date.parse(range.to) - Date.parse(range.from);
+        if (tab === "analysis" && !(duration > 0 && duration <= 86400000)) return [];
+        return dependencies.background;
+      }
+
+      async function loadAccessForView(account, background) {
+        if (account) return loadAccountAccess();
+        const generation = sessionGeneration;
+        let syncError;
+        if (!background) {
+          try {
+            await loadResource(detailLoads.adminInventory, async () => {
+              const summary = await autoSyncKeys();
+              if (summary) notify(summary);
+              await loadConfiguredCredentials();
+            });
+          } catch (error) {
+            syncError = error;
+          }
+        }
+        if (generation !== sessionGeneration) return;
+        await loadAdminAccess();
+        if (syncError) throw syncError;
+      }
+
+      function viewResources(account, reason, range) {
+        const background = reason === "background";
+        const resources = {
+          eventKeys: { state: detailLoads.adminEventKeys, load: () => loadEventKeys(range) },
+          access: {
+            state: account ? detailLoads.accountAccess : detailLoads.adminAccess,
+            load: () => loadAccessForView(account, background),
+          },
+          prices: {
+            state: account ? detailLoads.accountPrices : detailLoads.adminPrices,
+            load: () => account
+              ? loadAccountPrices(reason === "login" ? accountState.models : undefined)
+              : loadAdminPrices(),
+          },
+          analysis: {
+            requires: account || background ? [] : ["eventKeys"],
+            state: account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis,
+            load: () => loadAnalysis(account, range),
+          },
+          authFiles: {
+            state: account ? detailLoads.accountAuthFiles : detailLoads.adminAuthFiles,
+            load: () => loadAuthFiles(account),
+          },
+        };
+        for (const [name, list] of Object.entries(pagedLists[account ? "account" : "admin"])) {
+          resources[name] = {
+            requires: account || background || name === "logs" ? [] : ["eventKeys"],
+            load: () => list.load(background ? "background" : reason === "navigation" ? "navigation" : "replace", range),
+          };
+        }
+        return resources;
+      }
+
+      const viewLoadGenerations = { admin: 0, account: 0 };
+
       async function loadView(account, reason = "navigation") {
         const role = account ? "account" : "admin";
+        const viewGeneration = ++viewLoadGenerations[role];
         const tab = activeTab(account);
         const generation = sessionGeneration;
         const background = reason === "background";
-        if (reason === "foreground") {
-          const names = {
-            access: "Access",
-            prices: "Prices",
-            analysis: "Analysis",
-            authFiles: "AuthFiles",
-          };
-          for (const resource of VIEW_DEPENDENCIES[role][tab]) {
-            if (!pagedLists[role][resource]) resetLoadState(detailLoads[role + names[resource]]);
+        const range = selectedRange(account);
+        const dependencies = viewDependencies(account, tab, background, range);
+        const resources = viewResources(account, reason, range);
+        if (reason === "foreground") invalidateResources(account ? "account" : "admin");
+        if (background) {
+          for (const name of dependencies) {
+            if (resources[name].state) resources[name].state.cache = null;
           }
         }
-        const range = selectedRange(account);
-        const refreshEventKeys =
-          !background ||
-          (tab === "request-events" && canBackgroundRefreshRequestEvents(account)) ||
-          (tab === "errors" && canBackgroundRefreshErrors(account));
-        if (!account && refreshEventKeys && ["analysis", "request-events", "errors"].includes(tab)) {
-          const keyGeneration = detailLoads.adminEventKeys.generation;
-          await loadEventKeys(range);
-          if (generation !== sessionGeneration || keyGeneration !== detailLoads.adminEventKeys.generation) return;
-        }
-        let syncError;
-        const inventory =
-          !account && !background && ["keys", "settings"].includes(tab)
-            ? loadResource(detailLoads.adminInventory, async () => {
-                const summary = await autoSyncKeys();
-                if (summary) notify(summary);
-                await loadConfiguredCredentials();
-              }).catch((err) => {
-                syncError = err;
-              })
-            : Promise.resolve();
-        const loaders = {
-          access: async () => {
-            if (account) return loadAccountAccess();
-            await inventory;
-            if (generation !== sessionGeneration) return;
-            await loadAdminAccess();
-            if (syncError) throw syncError;
-          },
-          prices: async () => {
-            if (account) return loadAccountPrices(reason === "login" ? accountState.models : undefined);
-            if (generation === sessionGeneration) return loadAdminPrices();
-          },
-          analysis: () => (background ? undefined : loadAnalysis(account, range)),
-          events: () =>
-            !background || canBackgroundRefreshRequestEvents(account)
-              ? pagedList("events", account).load(background ? "background" : "replace", range)
-              : undefined,
-          errors: () =>
-            pagedList("errors", account).load(background ? "background" : "replace", range),
-          authFiles: () => loadAuthFiles(account),
-          logs: () => pagedList("logs").load(background ? "background" : "replace"),
+        const jobs = new Map();
+        const run = (name) => {
+          if (!jobs.has(name)) {
+            const resource = resources[name];
+            jobs.set(name, Promise.all((resource.requires || []).map(run)).then(() => {
+              if (generation !== sessionGeneration || viewGeneration !== viewLoadGenerations[role]) return;
+              return resource.load();
+            }));
+          }
+          return jobs.get(name);
         };
-        const results = await Promise.allSettled(VIEW_DEPENDENCIES[role][tab].map((resource) => loaders[resource]()));
+        const results = await Promise.allSettled(dependencies.map(run));
         if (generation !== sessionGeneration) return;
         const failed =
           results.find((result) => result.status === "rejected" && result.reason instanceof AuthError) ||
@@ -4554,7 +4604,8 @@
           : subscription.blocked
             ? "额度用尽"
             : "正常";
-        $("account-windows").replaceChildren(renderQuotaWindows(subscription, true));
+        // Countdown labels depend on time even when the access response is unchanged.
+        replaceContent($("account-windows"), renderQuotaWindows(subscription, true));
 
         const routingValid = access.routing_valid !== false;
         const modelScope = new Set((access.models || []).map((model) => model.toLowerCase()));
@@ -4639,7 +4690,7 @@
               ...(access.warnings || []).map((warning) => el("span", { class: "tag warn", text: warning })),
             ),
           );
-        $("account-access").replaceChildren(...nodes);
+        replaceContent($("account-access"), ...nodes);
       }
 
       function accountModelPrice(model) {
@@ -5910,10 +5961,26 @@
         }
       }
 
-      function renderAdminTab(tab, preserveRoutePicker) {
+      function renderAdminAccess() {
+        if (currentRole !== "admin") return;
+        if (activeAdminTab() === "keys" && !routePicker.scope) renderKeys();
+        if (activeAdminTab() === "settings") {
+          renderPlans();
+          renderRoutes();
+        }
+      }
+
+      function renderAdminPrices() {
+        if (currentRole !== "admin") return;
+        if (activeAdminTab() === "settings") {
+          renderPriceTable("prices-body", state.prices || [], $("price-filter").value, true);
+        }
+      }
+
+      function renderAdminTab(tab) {
         if (tab === "keys") {
           // Replacing the anchor row would close a picker the user is working in.
-          if (!preserveRoutePicker || !routePicker.scope) renderKeys();
+          if (!routePicker.scope) renderKeys();
         } else if (tab === "analysis") {
           renderAnalysis(false);
         } else if (tab === "request-events") {
@@ -6758,11 +6825,6 @@
             ? el("div", { class: "event-list settings-card-list", role: "list" }, cards)
             : el("div", { class: "empty", text: "暂无路由规则" }),
         );
-        if ($("route-dialog").open) {
-          renderRouteModelList();
-          renderRouteCredentialList();
-          renderRouteKeyList($("route-id").value);
-        }
       }
 
       let routeModels = new Set();
@@ -7179,7 +7241,7 @@
           options.push(el("option", { value, text: labelOf(item) }));
         }
         if (selected && !found) options.push(el("option", { value: selected, text: selectedLabel }));
-        select.replaceChildren(...options);
+        replaceContent(select, ...options);
         select.value = selected;
       }
 
@@ -7190,6 +7252,13 @@
         populateEventFilterSelect($(prefix + "-source"), "全部来源", filters.sources, undefined, sourceLabel);
       }
 
+      function timeRangeCacheKey(account, range) {
+        const mode = sharedTimeRanges[account ? "account" : "admin"].mode;
+        if (mode === "custom") return JSON.stringify([mode, range.from, range.to]);
+        // Natural-day ranges change at midnight; rolling ranges share a short TTL.
+        return mode === "today" || mode === "yesterday" ? JSON.stringify([mode, range.from]) : mode;
+      }
+
       function loadEventKeys(range) {
         const load = detailLoads.adminEventKeys;
         return loadResource(
@@ -7198,7 +7267,8 @@
           (keys) => {
             const select = $("analysis-key");
             const selected = select.value;
-            select.replaceChildren(
+            replaceContent(
+              select,
               el("option", { value: "", text: "全部 API Key" }),
               ...keys.map((key) =>
                 el("option", {
@@ -7210,14 +7280,11 @@
             select.value = keys.some((key) => key.scope === selected) ? selected : "";
             if (select.value !== selected) {
               saveChoice("admin", "analysis-key");
-              resetLoadState(detailLoads.adminAnalysis);
-              pagedList("errors").reset();
-              pagedList("events").reset();
+              resetEventViews(false);
             }
           },
-          () => {
-            $("analysis-key").disabled = !!load.promise;
-          },
+          undefined,
+          { cacheKey: timeRangeCacheKey(false, range) },
         );
       }
 
@@ -7837,7 +7904,6 @@
         return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= EVENT_LOAD_MORE_THRESHOLD_PX;
       }
 
-
       function renderRequestEvents(account = false) {
         hideCostTooltip();
         const owner = account ? accountState : state;
@@ -8008,7 +8074,6 @@
           ),
         );
       }
-
 
       function renderPluginLogs() {
         const list = pagedList("logs");
@@ -8458,8 +8523,8 @@
         const summaries = [];
         let keys = [];
         try {
-          const list = await api("GET", "/v0/management/api-keys", null, { raw: true });
-          keys = (list && list["api-keys"]) || [];
+          keys = await loadConfiguredAPIKeys();
+          if (!keys) throw new StaleRequestError();
           const result = await plugin("POST", "/keys/sync", { keys, allow_empty: true });
           if (result.added || result.deleted) {
             summaries.push("API Key 同步完成：新增 " + result.added + " 个，删除 " + result.deleted + " 个");
@@ -8590,7 +8655,7 @@
       });
       window.addEventListener("billing-theme-change", updateThemedVisuals);
 
-      const AUTO_REFRESH_MS = 10000;
+      const AUTO_REFRESH_MS = 60000;
       let autoRefreshTimer = 0;
       let pageRefreshPromise = null;
       let queuedForegroundRefresh = null;
@@ -8604,13 +8669,6 @@
         return account ? accountTab : activeAdminTab();
       }
 
-      function canBackgroundRefreshRequestEvents(account) {
-        return pagedList("events", account).canRefresh();
-      }
-
-      function canBackgroundRefreshErrors(account) {
-        return pagedList("errors", account).canRefresh();
-      }
       function scheduleAutoRefresh() {
         stopAutoRefresh();
         if (!currentRole || document.hidden) return;
@@ -8678,6 +8736,7 @@
       });
       document.querySelectorAll("[data-account-tab]").forEach((button) => {
         button.onclick = () => {
+          if (activeTab(true) === button.dataset.accountTab) return;
           setAccountTab(button.dataset.accountTab);
           guard(() => loadView(true));
         };
@@ -8685,20 +8744,22 @@
       $("analysis-key").addEventListener("change", () =>
         guard(() => {
           saveChoice("admin", "analysis-key");
-          return applySharedTimeRange(false);
+          resetEventViews(false);
+          return loadView(false);
         }),
       );
 
-
-      function applySharedTimeRange(account) {
-        if (!account) resetLoadState(detailLoads.adminEventKeys);
+      function resetEventViews(account) {
         const owner = account ? accountState : state;
         owner.analysis = null;
-        owner.errors = null;
-        owner.requestEvents = null;
         resetLoadState(account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis);
         pagedList("errors", account).reset();
         pagedList("events", account).reset();
+      }
+
+      function applySharedTimeRange(account) {
+        if (!account) resetLoadState(detailLoads.adminEventKeys);
+        resetEventViews(account);
         return loadView(account);
       }
 
@@ -8781,12 +8842,13 @@
         }
         schedulePageTabLayout();
         if (currentRole === "admin") {
-          renderAdminTab(selected, selected === "keys" && !!routePicker.scope);
+          renderAdminTab(selected);
         }
         revealTab(document.querySelector(`[data-tab="${selected}"]`));
       }
       for (const tab of TABS)
         tab.onclick = () => {
+          if (activeTab(false) === tab.dataset.tab) return;
           setAdminTab(tab.dataset.tab);
           guard(() => loadView(false));
         };
