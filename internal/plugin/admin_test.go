@@ -528,6 +528,8 @@ func TestPluginLogManagementPaginatesAndFiltersDebugRows(t *testing.T) {
 	for _, message := range []string{"first", "second", "third"} {
 		app.store.AddPluginLog(billing.PluginLogDebug, "%s", message)
 	}
+	app.store.AddPluginLog(billing.PluginLogInfo, "info row")
+	app.store.AddPluginLog(billing.PluginLogError, "error row")
 	var first billing.PluginLogPage
 	callOK(t, app, http.MethodGet, routePluginLogs, url.Values{"level": {"debug"}, "limit": {"2"}}, nil, http.StatusOK, &first)
 	if len(first.Entries) != 2 || first.NextBeforeID == 0 || first.Entries[0].Message != "third" || first.Entries[1].Message != "second" {
@@ -537,6 +539,21 @@ func TestPluginLogManagementPaginatesAndFiltersDebugRows(t *testing.T) {
 	callOK(t, app, http.MethodGet, routePluginLogs, url.Values{"level": {"debug"}, "limit": {"2"}, "before_id": {strconv.FormatInt(first.NextBeforeID, 10)}}, nil, http.StatusOK, &second)
 	if len(second.Entries) != 1 || second.NextBeforeID != 0 || second.Entries[0].Message != "first" {
 		t.Fatalf("second page=%+v", second)
+	}
+	var info billing.PluginLogPage
+	callOK(t, app, http.MethodGet, routePluginLogs, url.Values{"level": {"info"}}, nil, http.StatusOK, &info)
+	if len(info.Entries) != 1 || info.Entries[0].Level != billing.PluginLogInfo {
+		t.Fatalf("info page=%+v", info)
+	}
+	for _, page := range []billing.PluginLogPage{first, second, info} {
+		if page.LevelCounts[billing.PluginLogDebug] != 3 || page.LevelCounts[billing.PluginLogInfo] != 1 || page.LevelCounts[billing.PluginLogError] != 1 {
+			t.Fatalf("counts must ignore level and pagination: %+v", page.LevelCounts)
+		}
+	}
+	var future billing.PluginLogPage
+	callOK(t, app, http.MethodGet, routePluginLogs, url.Values{"since": {app.store.Now().Add(time.Hour).Format(time.RFC3339)}}, nil, http.StatusOK, &future)
+	if len(future.Entries) != 0 || len(future.LevelCounts) != 0 {
+		t.Fatalf("counts must respect time range: %+v", future)
 	}
 }
 

@@ -1635,7 +1635,7 @@
         margin-bottom: 0;
       }
       .event-list-card.plugin-log-card { height: auto; }
-      .plugin-log-card .plugin-log-region { flex: 0 1 auto; max-height: clamp(180px, calc(100dvh - 240px), 420px); }
+      .plugin-log-card .plugin-log-region { flex: none; height: clamp(180px, calc(100dvh - 240px), 420px); }
       .event-list-title-row { margin-bottom: 9px; }
       .time-range-control { position: relative; min-width: 0; }
       .time-range-trigger {
@@ -1945,7 +1945,7 @@
         border-top: 1px solid var(--border-color);
         font-weight: 600;
       }
-      .request-event-load-state {
+      .event-load-state {
         display: flex;
         min-height: 42px;
         align-items: center;
@@ -1955,7 +1955,7 @@
         color: var(--text-tertiary);
         font-size: 12px;
       }
-      .request-event-load-state button { padding: 5px 10px; }
+      .event-load-state button { padding: 5px 10px; }
       @media (max-width: 768px) {
         .wrap { padding: 14px 12px 40px; }
         .account-subscription-stats { grid-template-columns: 1fr; }
@@ -2714,7 +2714,7 @@
             </div>
             <div id="plugin-logs-body" class="event-list-region plugin-log-region"></div>
             <div class="event-list-footer">
-              <button id="plugin-logs-more" class="link hidden" type="button">加载更多</button>
+              <span id="plugin-log-note" class="muted small"></span>
             </div>
           </div>
         </section>
@@ -3082,6 +3082,7 @@
           errors: null,
           analysis: null,
           pluginLogs: null,
+          pluginLogCounts: {},
           pluginLogsNext: 0,
           authFiles: null,
           authQuotas: new Map(),
@@ -3211,7 +3212,7 @@
       ];
       const REQUEST_EVENT_BATCH_SIZE = 50;
       const REQUEST_EVENT_EXPORT_BATCH_SIZE = 1000;
-      const REQUEST_EVENT_LOAD_MORE_THRESHOLD_PX = 320;
+      const EVENT_LOAD_MORE_THRESHOLD_PX = 320;
       const REQUEST_EVENT_CSV_COLUMNS = [
         "at",
         "scope",
@@ -7601,10 +7602,8 @@
         }
       }
 
-      function shouldLoadMoreRequestEvents(scroller) {
-        return (
-          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= REQUEST_EVENT_LOAD_MORE_THRESHOLD_PX
-        );
+      function isNearScrollEnd(scroller) {
+        return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= EVENT_LOAD_MORE_THRESHOLD_PX;
       }
 
       function requestEventLoadState(account) {
@@ -7625,7 +7624,7 @@
           !load.hasMore ||
           load.loading ||
           load.loadingMore ||
-          !shouldLoadMoreRequestEvents(scroller)
+          !isNearScrollEnd(scroller)
         )
           return;
         guard(() => loadRequestEvents(true, account));
@@ -7864,12 +7863,12 @@
           ),
         ];
         if (load.loadingMore) {
-          content.push(el("div", { class: "request-event-load-state", role: "status", text: "正在加载更多…" }));
+          content.push(el("div", { class: "event-load-state", role: "status", text: "正在加载更多…" }));
         } else if (!load.autoLoadMore && load.hasMore) {
           content.push(
             el(
               "div",
-              { class: "request-event-load-state" },
+              { class: "event-load-state" },
               el("button", { onclick: () => guard(() => loadRequestEvents(true, account)) }, "重试加载"),
             ),
           );
@@ -7885,18 +7884,6 @@
         error: { label: "错误", class: "tag bad" },
         info: { label: "信息", class: "tag info" },
       };
-
-      function matchesPluginLogLevel(pluginLog, level) {
-        return level === "all" || pluginLog.level === level;
-      }
-
-      function labelPluginLogLevels(pluginLogs) {
-        for (const option of $("plugin-log-level").options) {
-          const label = option.value === "all" ? "全部级别" : pluginLogLevels[option.value].label;
-          const count = pluginLogs.filter((pluginLog) => matchesPluginLogLevel(pluginLog, option.value)).length;
-          option.textContent = label + "·" + int(count);
-        }
-      }
 
       function errorEventField(label, value, mono = true) {
         if (!value) return null;
@@ -7915,6 +7902,20 @@
         );
       }
 
+      function maybeLoadMorePluginLogs() {
+        const load = detailLoads.adminPluginLogs;
+        if (
+          currentRole !== "admin" ||
+          activeAdminTab() !== "settings" ||
+          !state.pluginLogsNext ||
+          load.promise ||
+          load.error ||
+          !isNearScrollEnd($("plugin-logs-body"))
+        )
+          return;
+        guard(() => loadPluginLogs({ append: true }));
+      }
+
       function loadPluginLogs(options = {}) {
         const background = options.background === true;
         const append = options.append === true;
@@ -7929,6 +7930,7 @@
             if (!background || canBackgroundRefreshPluginLogs()) {
               state.pluginLogs = append ? (state.pluginLogs || []).concat(result.entries || []) : result.entries || [];
               state.pluginLogsNext = Number(result.next_before_id || 0);
+              state.pluginLogCounts = result.level_counts;
             }
           },
           () => currentRole === "admin" && activeAdminTab() === "settings" && renderPluginLogs(),
@@ -7939,8 +7941,9 @@
         const pluginLogs = state.pluginLogs;
         const load = detailLoads.adminPluginLogs;
         const scroller = $("plugin-logs-body");
+        const note = $("plugin-log-note");
         if (!pluginLogs) {
-          $("plugin-logs-more").classList.add("hidden");
+          note.textContent = "";
           if (load.promise) {
             scroller.replaceChildren(el("div", { class: "empty", text: "加载中…" }));
           } else if (load.error) {
@@ -7962,13 +7965,20 @@
         for (const id of expandedPluginLogIDs) if (!currentIDs.has(id)) expandedPluginLogIDs.delete(id);
         const searched = pluginLogs.filter((pluginLog) => {
           if (!filter) return true;
-          return [pluginLog.message].filter(Boolean).join(" ").toLowerCase().includes(filter);
+          return (pluginLog.message || "").toLowerCase().includes(filter);
         });
-        // The counts ignore the level choice itself, so each option says how many
-        // entries picking it would show.
-        labelPluginLogLevels(searched);
-        const matched = searched.filter((pluginLog) => matchesPluginLogLevel(pluginLog, $("plugin-log-level").value));
-        const entries = matched.map((pluginLog) => {
+        const counts = {
+          ...state.pluginLogCounts,
+          all: Object.values(state.pluginLogCounts).reduce((sum, count) => sum + count, 0),
+        };
+        const levelSelect = $("plugin-log-level");
+        for (const option of levelSelect.options) {
+          const label = option.value === "all" ? "全部级别" : pluginLogLevels[option.value].label;
+          option.textContent = label + "·" + int(counts[option.value] || 0);
+        }
+        const total = counts[levelSelect.value] || 0;
+        note.textContent = "已加载 " + int(pluginLogs.length) + " / " + int(total) + " 条";
+        const entries = searched.map((pluginLog) => {
           const level = pluginLogLevels[pluginLog.level] || pluginLogLevels.info;
           return el(
             "article",
@@ -7984,16 +7994,26 @@
         });
         const previousScrollTop = scroller.scrollTop;
         const previousScrollLeft = scroller.scrollLeft;
-        replaceContent(
-          scroller,
+        const content = [
           entries.length
             ? el("div", { class: "event-list", role: "list", "aria-label": "插件日志列表" }, entries)
             : el("div", { class: "empty", text: pluginLogs.length ? "没有匹配的日志" : "暂无插件日志" }),
-        );
+        ];
+        if (load.promise) {
+          content.push(el("div", { class: "event-load-state", role: "status", text: "加载中…" }));
+        } else if (load.error && state.pluginLogsNext) {
+          content.push(
+            el(
+              "div",
+              { class: "event-load-state" },
+              el("button", { onclick: () => guard(() => loadPluginLogs({ append: true })) }, "重试加载"),
+            ),
+          );
+        }
+        replaceContent(scroller, ...content);
         scroller.scrollTop = previousScrollTop;
         scroller.scrollLeft = previousScrollLeft;
-        $("plugin-logs-more").classList.toggle("hidden", !state.pluginLogsNext);
-        $("plugin-logs-more").disabled = !!load.promise;
+        requestAnimationFrame(maybeLoadMorePluginLogs);
       }
 
       function renderPluginLogMessage(pluginLog) {
@@ -8930,7 +8950,7 @@
         state.pluginLogsNext = 0;
         guard(() => loadPluginLogs());
       });
-      $("plugin-logs-more").onclick = () => guard(() => loadPluginLogs({ append: true }));
+      $("plugin-logs-body").addEventListener("scroll", maybeLoadMorePluginLogs, { passive: true });
       $("plugin-logs-clear").onclick = () =>
         guard(async () => {
           if (

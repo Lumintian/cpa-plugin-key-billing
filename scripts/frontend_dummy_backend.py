@@ -1164,7 +1164,16 @@ def payload_for(path, query):
     if path == f"{API_BASE}/analysis":
         return analysis_view(query)
     if path == f"{API_BASE}/plugin-logs":
-        return {"entries": PLUGIN_LOGS}
+        counts = {level: sum(entry["level"] == level for entry in PLUGIN_LOGS)
+                  for level in ("debug", "info", "error")}
+        levels = query.get("level", ["all"])[0].split(",")
+        before = int(query.get("before_id", ["0"])[0])
+        limit = int(query.get("limit", ["100"])[0])
+        entries = [entry for entry in PLUGIN_LOGS
+                   if ("all" in levels or entry["level"] in levels)
+                   and (not before or entry["id"] < before)]
+        return {"entries": entries[:limit], "level_counts": counts,
+                "next_before_id": entries[limit - 1]["id"] if len(entries) > limit else 0}
     if path == f"{API_BASE}/auth-files":
         return {"files": AUTH_FILES}
     if path == f"{API_BASE}/auth-files/quota":

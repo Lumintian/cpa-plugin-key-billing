@@ -30,14 +30,13 @@ type PluginLogQuery struct {
 }
 
 type PluginLogPage struct {
-	Entries      []PluginLog `json:"entries"`
-	NextBeforeID int64       `json:"next_before_id,omitempty"`
+	Entries      []PluginLog            `json:"entries"`
+	LevelCounts  map[PluginLogLevel]int `json:"level_counts"`
+	NextBeforeID int64                  `json:"next_before_id,omitempty"`
 }
 
-// Event tolerates a nil store because the panic handler reports through it; a
-// diagnostics sink that can itself fail is worse than no diagnostics. For the
-// same reason a database that refuses the line drops it rather than reporting
-// the refusal, which would be another write to the same database.
+// Panic reporting may run before the store exists. Ignore write failures to
+// avoid logging another error through the same database.
 func (s *Store) AddPluginLog(level PluginLogLevel, format string, args ...any) {
 	if s == nil {
 		return

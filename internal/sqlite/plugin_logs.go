@@ -31,6 +31,27 @@ func prunePluginLogs(exec execer, cutoff time.Time) error {
 }
 
 func (d *DB) PluginLogsPage(query billing.PluginLogQuery) (billing.PluginLogPage, error) {
+	counts, err := d.db.Query("SELECT level, count(*) FROM plugin_logs WHERE at >= ? GROUP BY level", nanos(query.Since))
+	if err != nil {
+		return billing.PluginLogPage{}, fmt.Errorf("统计插件日志：%w", err)
+	}
+	page := billing.PluginLogPage{Entries: []billing.PluginLog{}, LevelCounts: map[billing.PluginLogLevel]int{}}
+	for counts.Next() {
+		var level billing.PluginLogLevel
+		var count int
+		if err := counts.Scan(&level, &count); err != nil {
+			counts.Close()
+			return billing.PluginLogPage{}, fmt.Errorf("统计插件日志：%w", err)
+		}
+		page.LevelCounts[level] = count
+	}
+	if err := counts.Close(); err != nil {
+		return billing.PluginLogPage{}, fmt.Errorf("统计插件日志：%w", err)
+	}
+	if err := counts.Err(); err != nil {
+		return billing.PluginLogPage{}, fmt.Errorf("统计插件日志：%w", err)
+	}
+
 	where := []string{"at >= ?"}
 	args := []any{nanos(query.Since)}
 	if query.BeforeID > 0 {
@@ -51,7 +72,6 @@ func (d *DB) PluginLogsPage(query billing.PluginLogQuery) (billing.PluginLogPage
 		return billing.PluginLogPage{}, fmt.Errorf("读取插件日志：%w", err)
 	}
 	defer rows.Close()
-	page := billing.PluginLogPage{Entries: []billing.PluginLog{}}
 	for rows.Next() {
 		var entry billing.PluginLog
 		var at int64
