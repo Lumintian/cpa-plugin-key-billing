@@ -95,6 +95,7 @@ jobs:
       - name: Check embedded UI JavaScript
         run: |
           ui_script="$RUNNER_TEMP/cpa-key-billing-ui.js"
-          sed -n '/^<script>$/,/^<\/script>$/p' internal/plugin/ui.html \
-            | sed -e '/^<script>$/d' -e '/^<\/script>$/d' > "$ui_script"
+          sed -n '/^[[:space:]]*<script>$/,/^[[:space:]]*<\/script>$/p' internal/plugin/ui.html \
+            | sed -e '/^[[:space:]]*<script>$/d' -e '/^[[:space:]]*<\/script>$/d' > "$ui_script"
+          test -s "$ui_script"
           node --check "$ui_script"
