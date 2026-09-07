@@ -57,7 +57,7 @@ func TestBuiltinPriceAdmissionAndListing(t *testing.T) {
 		model      string
 		input, out float64
 	}{
-		{model: "codex-auto-review", input: 0, out: 0},
+		{model: "codex-auto-review", input: 2.5, out: 15},
 		{model: "gpt-image-1.5", input: 5, out: 32},
 	} {
 		price, model, err := app.store.ResolveModelPrice(test.model, test.model, true)

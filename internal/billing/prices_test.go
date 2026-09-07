@@ -31,8 +31,13 @@ func TestResolveBuiltinPrice(t *testing.T) {
 		t.Fatalf("gpt-image-1.5 builtin price = %+v", price)
 	}
 	price = ResolveBuiltinPrice("codex-auto-review")
-	if price.Source != PriceSourceBuiltin || price.InputPer1M != 0 || price.OutputPer1M != 0 {
+	if price.Source != PriceSourceBuiltin || price.InputPer1M != 2.5 || price.OutputPer1M != 15 ||
+		price.CacheReadPer1M != 0.25 || price.CacheWritePer1M != 2.5 {
 		t.Fatalf("codex-auto-review builtin price = %+v", price)
+	}
+	if tier := price.LongContext; tier == nil || tier.ThresholdInputTokens != 272000 ||
+		tier.InputPer1M != 5 || tier.OutputPer1M != 22.5 || tier.CacheReadPer1M != 0.5 || tier.CacheWritePer1M != 5 {
+		t.Fatalf("codex-auto-review long context price = %+v", tier)
 	}
 	if price := ResolveBuiltinPrice("unknown"); price.Source != PriceSourceNone {
 		t.Fatalf("unknown model has a builtin price: %+v", price)

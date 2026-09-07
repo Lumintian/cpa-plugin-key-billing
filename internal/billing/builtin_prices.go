@@ -4,9 +4,17 @@ package billing
 var builtinPrices = map[string]CustomPrice{
 	NormalizeModelID("codex-auto-review"): {
 		ModelID: "codex-auto-review",
+		// Matches models.dev openai/gpt-5.4.
 		PriceRates: PriceRates{
-			InputPer1M:  0,
-			OutputPer1M: 0,
+			InputPer1M:     2.5,
+			OutputPer1M:    15,
+			CacheReadPer1M: float64Ptr(0.25),
+			LongContext: &LongContextPrice{
+				ThresholdInputTokens: 272000,
+				InputPer1M:           5,
+				OutputPer1M:          22.5,
+				CacheReadPer1M:       float64Ptr(0.5),
+			},
 		},
 	},
 	NormalizeModelID("gpt-image-1.5"): {
