@@ -8400,6 +8400,7 @@
         const columns = EVENT_CSV_COLUMNS[kind].filter((column) => !account || !["preview", "label"].includes(column));
         const lines = [columns.map(csvCell).join(",")];
         for (const entry of entries) {
+          const measured = entry.accounting_quality === "complete";
           const row =
             kind === "events"
               ? {
@@ -8407,10 +8408,14 @@
                   ...entry.cost,
                   multiplier: entry.cost.multiplier || 1,
                   input_tokens: requestInputTokens(entry.cost),
-                  output_tps: outputTPS(entry.cost, entry.latency_ms, entry.accounting_quality === "complete"),
+                  output_tps: outputTPS(entry.cost, entry.latency_ms, measured),
                 }
               : entry;
-          lines.push(columns.map((column) => csvCell(row[column])).join(","));
+          lines.push(
+            columns
+              .map((column) => csvCell(kind === "events" && column.endsWith("_tokens") && !measured ? null : row[column]))
+              .join(","),
+          );
         }
         return "\ufeff" + lines.join("\r\n") + "\r\n";
       }
