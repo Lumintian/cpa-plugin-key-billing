@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	analysisModelSQL         = "coalesce(NULLIF(r.billing_model, ''), NULLIF(r.upstream_model, ''), '未知模型')"
-	analysisInputTokensSQL   = `(r.uncached_input_tokens + r.cache_read_tokens + r.cache_write_tokens)`
-	analysisTokensSQL        = `(` + analysisInputTokensSQL + ` + r.billed_output_tokens)`
-	analysisCostAvailableSQL = `(r.price_source != 'none' OR ` + analysisTokensSQL + ` = 0)`
+	analysisModelSQL       = "coalesce(NULLIF(r.billing_model, ''), NULLIF(r.upstream_model, ''), '未知模型')"
+	analysisInputTokensSQL = `(r.uncached_input_tokens + r.cache_read_tokens + r.cache_write_tokens)`
+	analysisTokensSQL      = `(` + analysisInputTokensSQL + ` + r.billed_output_tokens)`
 )
 
 type analysisDimension struct {
@@ -41,9 +40,6 @@ func (d *DB) Analysis(query billing.RequestEventQuery, since time.Time) (billing
 	trends, errTrends := d.analysisTrends(query, where, args)
 	if errTrends != nil {
 		return billing.AnalysisView{}, errTrends
-	}
-	if !summary.Cost.Available {
-		trends.TotalCost = []billing.AnalysisTrendPoint{}
 	}
 	view.Trends = trends
 	if query.Scope == "" && query.KeyScope == "" {
@@ -77,7 +73,6 @@ func (d *DB) Analysis(query billing.RequestEventQuery, since time.Time) (billing
 
 func (d *DB) analysisSummary(where string, args []any) (billing.AnalysisSummary, error) {
 	var summary billing.AnalysisSummary
-	var costAvailable int
 	err := d.db.QueryRow(`SELECT count(*),
 		coalesce(sum(CASE WHEN r.failed != 0 THEN 1 ELSE 0 END), 0),
 		coalesce(sum(`+analysisTokensSQL+`), 0),
@@ -85,17 +80,15 @@ func (d *DB) analysisSummary(where string, args []any) (billing.AnalysisSummary,
 		coalesce(sum(r.billed_output_tokens), 0), coalesce(sum(r.cache_read_tokens), 0),
 		coalesce(sum(r.cache_write_tokens), 0), coalesce(sum(r.total_usd), 0),
 		coalesce(sum(r.uncached_input_usd), 0), coalesce(sum(r.cache_read_usd), 0),
-		coalesce(sum(r.cache_write_usd), 0), coalesce(sum(r.output_usd), 0),
-		coalesce(min(CASE WHEN `+analysisCostAvailableSQL+` THEN 1 ELSE 0 END), 1)`+where, args...).Scan(
+		coalesce(sum(r.cache_write_usd), 0), coalesce(sum(r.output_usd), 0)`+where, args...).Scan(
 		&summary.Requests, &summary.Failed, &summary.TotalTokens, &summary.InputTokens, &summary.OutputTokens,
 		&summary.CacheReadTokens, &summary.CacheWriteTokens,
 		&summary.Cost.TotalUSD, &summary.Cost.InputUSD, &summary.Cost.CacheReadUSD,
-		&summary.Cost.CacheWriteUSD, &summary.Cost.OutputUSD, &costAvailable,
+		&summary.Cost.CacheWriteUSD, &summary.Cost.OutputUSD,
 	)
 	if err != nil {
 		return billing.AnalysisSummary{}, fmt.Errorf("汇总分析数据：%w", err)
 	}
-	summary.Cost.Available = costAvailable != 0
 	summary.Succeeded = summary.Requests - summary.Failed
 	if summary.Requests > 0 {
 		summary.SuccessRate = float64(summary.Succeeded) * 100 / float64(summary.Requests)
@@ -192,8 +185,7 @@ func (d *DB) analysisTrends(query billing.RequestEventQuery, where string, args 
 
 func (d *DB) analysisComposition(where string, args []any, keySQL, labelSQL, previewSQL, name string) ([]billing.AnalysisComposition, error) {
 	rows, err := d.db.Query(`SELECT `+keySQL+`, `+labelSQL+`, `+previewSQL+`, sum(`+analysisTokensSQL+`),
-		count(*), sum(r.total_usd),
-		min(CASE WHEN `+analysisCostAvailableSQL+` THEN 1 ELSE 0 END)`+
+		count(*), sum(r.total_usd)`+
 		where+` GROUP BY 1, 2, 3`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("聚合%s用量分布：%w", name, err)
@@ -202,11 +194,9 @@ func (d *DB) analysisComposition(where string, args []any, keySQL, labelSQL, pre
 	result := []billing.AnalysisComposition{}
 	for rows.Next() {
 		var row billing.AnalysisComposition
-		var available int
-		if err := rows.Scan(&row.Key, &row.Label, &row.Preview, &row.TotalTokens, &row.Requests, &row.CostUSD, &available); err != nil {
+		if err := rows.Scan(&row.Key, &row.Label, &row.Preview, &row.TotalTokens, &row.Requests, &row.CostUSD); err != nil {
 			return nil, fmt.Errorf("读取%s用量分布：%w", name, err)
 		}
-		row.CostAvailable = available != 0
 		result = append(result, row)
 	}
 	if err := rows.Err(); err != nil {

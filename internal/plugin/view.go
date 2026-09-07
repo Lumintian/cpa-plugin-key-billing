@@ -134,7 +134,6 @@ func (a *App) listRequestErrors(req ManagementRequest, access viewAccess) Manage
 func (a *App) analysis(req ManagementRequest, access viewAccess) ManagementResponse {
 	if access.APIKey && !access.Tracked {
 		return viewJSON(access, http.StatusOK, billing.AnalysisView{
-			Summary: billing.AnalysisSummary{Cost: billing.AnalysisCostSummary{Available: true}},
 			UsageDistribution: billing.UsageDistribution{
 				APIKeys: []billing.AnalysisComposition{}, Models: []billing.AnalysisComposition{}, Sources: []billing.AnalysisComposition{},
 			},

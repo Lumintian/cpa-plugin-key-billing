@@ -5582,7 +5582,7 @@
           );
         const costDetail = (label, amount) => {
           const value = Number(amount || 0);
-          return detail(label, cost.available ? (value === 0 ? "$0.0000" : usd(value)) : "—");
+          return detail(label, value === 0 ? "$0.0000" : usd(value));
         };
         const hasCacheWriteTokens = Number(summary.cache_write_tokens || 0) > 0;
         const hasCacheWriteCost = Number(cost.cache_write_usd || 0) > 0;
@@ -5628,8 +5628,8 @@
           ),
           card(
             "总成本",
-            cost.available ? usd(cost.total_usd) : "—",
-            detail(averageLabel, cost.available ? usd(average(cost.total_usd)) : "—"),
+            usd(cost.total_usd),
+            detail(averageLabel, usd(average(cost.total_usd))),
             costRows,
             "total_cost",
           ),

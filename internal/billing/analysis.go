@@ -19,14 +19,13 @@ type AnalysisTrends struct {
 }
 
 type AnalysisComposition struct {
-	Key           string  `json:"key"`
-	Label         string  `json:"label"`
-	Preview       string  `json:"preview,omitempty"`
-	TotalTokens   int64   `json:"total_tokens"`
-	Requests      int64   `json:"requests"`
-	CostUSD       float64 `json:"cost_usd"`
-	CostAvailable bool    `json:"cost_available"`
-	Percent       float64 `json:"percent"`
+	Key         string  `json:"key"`
+	Label       string  `json:"label"`
+	Preview     string  `json:"preview,omitempty"`
+	TotalTokens int64   `json:"total_tokens"`
+	Requests    int64   `json:"requests"`
+	CostUSD     float64 `json:"cost_usd"`
+	Percent     float64 `json:"percent"`
 }
 
 type UsageDistribution struct {
@@ -36,7 +35,6 @@ type UsageDistribution struct {
 }
 
 type AnalysisCostSummary struct {
-	Available     bool    `json:"available"`
 	TotalUSD      float64 `json:"total_usd"`
 	InputUSD      float64 `json:"input_usd"`
 	CacheReadUSD  float64 `json:"cache_read_usd"`

@@ -980,7 +980,7 @@ def analysis_view(query, scope=""):
                 label = entry.get("preview", "")
             item = grouped.setdefault(key, {"key": key, "label": label or key,
                                             "total_tokens": 0, "requests": 0,
-                                            "cost_usd": 0, "cost_available": True})
+                                            "cost_usd": 0})
             if field == "scope":
                 item["preview"] = entry.get("preview", "")
             cost = entry.get("cost", {})
@@ -1007,13 +1007,6 @@ def analysis_view(query, scope=""):
     cache_write_tokens = sum(entry.get("cost", {}).get("cache_write_tokens", 0) for entry in rows)
     output_tokens = sum(entry.get("cost", {}).get("billed_output_tokens", 0) for entry in rows)
     cost = {
-        "available": all(
-            entry.get("price_source") != "none" or
-            sum(entry.get("cost", {}).get(name, 0) for name in (
-                "uncached_input_tokens", "cache_read_tokens", "cache_write_tokens", "billed_output_tokens"
-            )) == 0
-            for entry in rows
-        ),
         "input_usd": sum(entry.get("cost", {}).get("uncached_input_usd", 0) for entry in rows),
         "cache_read_usd": sum(entry.get("cost", {}).get("cache_read_usd", 0) for entry in rows),
         "cache_write_usd": sum(entry.get("cost", {}).get("cache_write_usd", 0) for entry in rows),
@@ -1077,7 +1070,7 @@ def analysis_view(query, scope=""):
         "cache_write_tokens": trend(lambda item: item["cache_write_tokens"]),
         "cache_rate": trend(lambda item: item["cache_read_tokens"] * 100 / total_input(item)
                             if total_input(item) else 0),
-        "total_cost": trend(lambda item: item["total_cost"]) if cost["available"] else [],
+        "total_cost": trend(lambda item: item["total_cost"]),
     }
 
     return {
