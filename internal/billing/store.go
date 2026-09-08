@@ -203,7 +203,7 @@ func updateResult[T any](s *Store, fn func(*State) (T, Changes)) T {
 	return value
 }
 
-// Management edits publish keys, plans and routes only after saving succeeds.
+// Management edits publish configuration only after saving succeeds.
 // Failed edits must not enter the retry queue for already-recorded usage.
 func editConfiguration[T any](s *Store, fn func(*State) (T, Changes, error)) (T, error) {
 	var value T

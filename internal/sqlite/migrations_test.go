@@ -321,11 +321,12 @@ CREATE TABLE plugin_logs (
 CREATE INDEX plugin_logs_at ON plugin_logs(at);
 `
 
-func TestV13AccountMigrationAndRollback(t *testing.T) {
+func TestV13CredentialMigrationAndRollback(t *testing.T) {
 	for _, scenario := range []struct{ name, sql string }{
 		{"migrate", ""},
 		{"incompatible-table", "ALTER TABLE credentials ADD COLUMN unknown_field TEXT"},
 		{"update-failure", "CREATE TRIGGER reject_update BEFORE UPDATE ON request_events BEGIN SELECT RAISE(ABORT, 'dummy failure'); END"},
+		{"config-table-conflict", "CREATE TABLE config_credentials(marker TEXT); INSERT INTO config_credentials VALUES('keep')"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "v13.db")
@@ -377,6 +378,12 @@ func TestV13AccountMigrationAndRollback(t *testing.T) {
 				if err := raw.QueryRow("SELECT count(*) FROM request_events").Scan(&events); err != nil || events != 3 {
 					t.Fatal("history was lost", events, err)
 				}
+				if scenario.name == "config-table-conflict" {
+					var marker string
+					if err := raw.QueryRow("SELECT marker FROM config_credentials").Scan(&marker); err != nil || marker != "keep" {
+						t.Fatal("incompatible config table was lost", marker, err)
+					}
+				}
 				return
 			}
 			if err != nil {
@@ -392,6 +399,9 @@ func TestV13AccountMigrationAndRollback(t *testing.T) {
 			}
 			if err := raw.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='credentials'").Scan(&credentials); err != nil || credentials != 0 {
 				t.Fatal("old credentials table remains", credentials, err)
+			}
+			if err := raw.QueryRow("SELECT count(*) FROM config_credentials").Scan(&credentials); err != nil || credentials != 0 {
+				t.Fatal("config snapshot must start empty", credentials, err)
 			}
 			view, err := database.RequestEvents(billing.RequestEventQuery{}, time.Time{})
 			if err != nil || len(view.Entries) != 3 || view.Total != 3 || view.Statuses.Failed != 1 {

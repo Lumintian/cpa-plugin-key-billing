@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"sync"
 
@@ -19,7 +20,6 @@ type App struct {
 	credentials           map[string]credentialView
 	credentialsByRawID    map[string]string
 	credentialRefsByIndex map[string]string
-	syncedCredentialRefs  map[string]struct{}
 	scheduler             subsetScheduler
 	pending               map[string]pendingRouteLog
 	pendingSequence       uint64
@@ -40,7 +40,6 @@ func newApp(store *billing.Store) *App {
 		credentials:           make(map[string]credentialView),
 		credentialsByRawID:    make(map[string]string),
 		credentialRefsByIndex: make(map[string]string),
-		syncedCredentialRefs:  make(map[string]struct{}),
 		pending:               make(map[string]pendingRouteLog),
 	}
 }
@@ -110,7 +109,18 @@ func (a *App) configure(raw []byte) error {
 	if errDecode != nil {
 		return errDecode
 	}
-	if errConfigure := a.store.Configure(cfg); errConfigure != nil {
+	if errConfigure := func() error {
+		a.routingMu.Lock()
+		defer a.routingMu.Unlock()
+		previous := a.store.ConfigCredentials()
+		if err := a.store.Configure(cfg); err != nil {
+			return err
+		}
+		if loaded := a.store.ConfigCredentials(); !maps.Equal(previous, loaded) {
+			a.replaceSyncedCredentials(previous, loaded)
+		}
+		return nil
+	}(); errConfigure != nil {
 		return errConfigure
 	}
 	// Refresh records its result; a download failure does not disable custom prices.

@@ -7,16 +7,24 @@ import "time"
 // grow with traffic and are queried directly from the repository.
 type State struct {
 	// Prices is keyed by NormalizeModelID; each value retains its stored spelling.
-	Prices map[string]CustomPrice
-	Plans  []Plan
-	Keys   map[string]*KeyState
-	Routes []Route
+	Prices            map[string]CustomPrice
+	Plans             []Plan
+	Keys              map[string]*KeyState
+	Routes            []Route
+	ConfigCredentials map[string]ConfigCredential
+}
+
+type ConfigCredential struct {
+	Provider   string
+	KeyPreview string
+	Disabled   bool
 }
 
 func NewState() *State {
 	return &State{
-		Prices: make(map[string]CustomPrice),
-		Keys:   make(map[string]*KeyState),
+		Prices:            make(map[string]CustomPrice),
+		Keys:              make(map[string]*KeyState),
+		ConfigCredentials: make(map[string]ConfigCredential),
 	}
 }
 

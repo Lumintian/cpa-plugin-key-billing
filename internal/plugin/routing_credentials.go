@@ -22,7 +22,6 @@ type credentialView struct {
 
 var secretLikeToken = regexp.MustCompile(`(?i)(?:(?:sk|key|token)-[a-z0-9_\-]{4,}|[a-z0-9_\-]{24,})`)
 var emailLikeToken = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
-var credentialFingerprint = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 func cleanText(value string) string {
 	return strings.Map(func(r rune) rune {
@@ -154,8 +153,7 @@ func (a *App) refreshCredentialInventory() error {
 		raw[id] = ref
 	}
 	a.routingMu.Lock()
-	// host.auth.list does not enumerate every config-backed AI Provider on all
-	// supported CPA builds. Keep safe request-time discoveries until restart.
+	// host.auth.list may omit config-backed credentials.
 	for ref, item := range a.credentials {
 		if item.Source == billing.CredentialSourceAIProviders {
 			if _, ok := next[ref]; !ok {
@@ -237,44 +235,61 @@ func (a *App) syncConfiguredCredentials(req ManagementRequest) ManagementRespons
 		return JSONError(http.StatusBadRequest, "invalid", "配置凭证数量超限")
 	}
 
-	next := make(map[string]credentialView, len(body.Credentials))
+	next := make(map[string]billing.ConfigCredential, len(body.Credentials))
 	for _, item := range body.Credentials {
 		ref := strings.ToLower(strings.TrimSpace(item.Ref))
 		provider := strings.ToLower(strings.TrimSpace(item.Provider))
-		if !credentialFingerprint.MatchString(ref) || provider == "" || len(provider) > 160 || cleanText(provider) != provider {
+		if !billing.ValidCredentialFingerprint(ref) || provider == "" || len(provider) > 160 || cleanText(provider) != provider {
 			return JSONError(http.StatusBadRequest, "invalid", "配置凭证标识无效")
 		}
-		displayName := boundedLogValue(item.DisplayName, 160)
-		if displayName == "" {
-			displayName = "未配置 API Key"
+		preview := cleanText(item.DisplayName)
+		if preview == "未配置 API Key" {
+			preview = ""
+		}
+		next[ref] = billing.ConfigCredential{
+			Provider: provider, KeyPreview: billing.PreviewKey(preview), Disabled: item.Disabled,
+		}
+	}
+
+	if err := func() error {
+		a.routingMu.Lock()
+		defer a.routingMu.Unlock()
+		previous := a.store.ConfigCredentials()
+		if err := a.store.SyncConfigCredentials(next); err != nil {
+			return err
+		}
+		a.replaceSyncedCredentials(previous, next)
+		return nil
+	}(); err != nil {
+		return errorResponse(err)
+	}
+	return JSONResponse(http.StatusOK, map[string]any{"credentials": a.credentialInventory()})
+}
+
+// Caller holds routingMu across persistence and inventory publication.
+func (a *App) replaceSyncedCredentials(previous, next map[string]billing.ConfigCredential) {
+	for id, ref := range a.credentialsByRawID {
+		if _, synced := previous[ref]; synced {
+			delete(a.credentialsByRawID, id)
+		}
+	}
+	for ref := range previous {
+		delete(a.credentials, ref)
+	}
+	for ref, item := range next {
+		name := item.KeyPreview
+		if name == "" {
+			name = "未配置 API Key"
 		}
 		status := "active"
 		if item.Disabled {
 			status = "disabled"
 		}
-		next[ref] = credentialView{
-			Ref: ref, Source: billing.CredentialSourceAIProviders, Provider: provider,
-			DisplayName: displayName, Status: status, Disabled: item.Disabled,
+		a.credentials[ref] = credentialView{
+			Ref: ref, Source: billing.CredentialSourceAIProviders, Provider: item.Provider,
+			DisplayName: name, Status: status, Disabled: item.Disabled,
 		}
 	}
-
-	a.routingMu.Lock()
-	for id, ref := range a.credentialsByRawID {
-		if _, synced := a.syncedCredentialRefs[ref]; synced {
-			delete(a.credentialsByRawID, id)
-		}
-	}
-	for ref := range a.syncedCredentialRefs {
-		delete(a.credentials, ref)
-	}
-	a.syncedCredentialRefs = make(map[string]struct{}, len(next))
-	for ref, item := range next {
-		a.credentials[ref] = item
-		a.syncedCredentialRefs[ref] = struct{}{}
-	}
-	a.routingMu.Unlock()
-
-	return JSONResponse(http.StatusOK, map[string]any{"credentials": a.credentialInventory()})
 }
 
 func shortCredentialRef(ref string) string {

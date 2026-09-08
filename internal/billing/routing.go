@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -96,7 +97,24 @@ func CredentialFingerprint(rawID string) string {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
-func validCredentialFingerprint(value string) bool {
+func (s *Store) ConfigCredentials() map[string]ConfigCredential {
+	var credentials map[string]ConfigCredential
+	s.read(func(state *State) { credentials = maps.Clone(state.ConfigCredentials) })
+	return credentials
+}
+
+func (s *Store) SyncConfigCredentials(credentials map[string]ConfigCredential) error {
+	_, err := editConfiguration(s, func(state *State) (struct{}, Changes, error) {
+		if maps.Equal(state.ConfigCredentials, credentials) {
+			return struct{}{}, Changes{}, nil
+		}
+		state.ConfigCredentials = maps.Clone(credentials)
+		return struct{}{}, Changes{ConfigCredentials: true}, nil
+	})
+	return err
+}
+
+func ValidCredentialFingerprint(value string) bool {
 	if len(value) != len("sha256:")+sha256.Size*2 || !strings.HasPrefix(value, "sha256:") {
 		return false
 	}
@@ -174,7 +192,7 @@ func normalizeCredentialIDs(values []string) ([]string, error) {
 		return nil, err
 	}
 	for _, value := range values {
-		if !validCredentialFingerprint(value) {
+		if !ValidCredentialFingerprint(value) {
 			return nil, invalidf("上游凭证引用无效")
 		}
 	}

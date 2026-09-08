@@ -51,6 +51,9 @@ func TestRepositoryRoundTrip(t *testing.T) {
 	state.Plans = []billing.Plan{{ID: "weekly", Name: "Weekly 10", Windows: []billing.QuotaWindow{{ID: "default", Name: "额度", AmountUSD: 10, PeriodSeconds: 604800}, {ID: "long", Name: "预算", AmountUSD: 50, PeriodSeconds: 1209600}}}}
 	state.Prices = map[string]billing.CustomPrice{"gpt-5.5": {ModelID: "gpt-5.5", PriceRates: billing.PriceRates{InputPer1M: 1, OutputPer1M: 2, CacheReadPer1M: price(.1)}}}
 	state.Routes = []billing.Route{{ID: "fast", Name: "Fast", Rule: billing.RouteRule{Models: []string{"gpt-5.5"}, CredentialIDs: []string{}, CredentialProviders: []billing.CredentialProviderSelector{}}}}
+	state.ConfigCredentials[billing.CredentialFingerprint("dummy-config")] = billing.ConfigCredential{
+		Provider: "codex", KeyPreview: "sk-tes…0001", Disabled: true,
+	}
 	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", Label: "Alice", InConfig: true,
 		PlanID: "weekly", ConcurrencyLimit: 7, RouteBindings: billing.RouteBindings{
 			RouteIDs: []string{"fast"}, Models: []string{"other"}, CredentialIDs: []string{},
@@ -64,7 +67,7 @@ func TestRepositoryRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true, Routes: true,
+	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true, Routes: true, ConfigCredentials: true,
 		RequestErrorEvents: []billing.RequestErrorEvent{{Event: billing.RequestEvent{At: start, Scope: "scope-a", AuthIndex: "auth-1", Provider: "codex", Account: "ops@example.com", BillingModel: "gpt-5.5"},
 			Error: billing.RequestError{StatusCode: 429, ErrorType: "rate_limit", Body: "limited"}}}})
 	if err := database.Close(); err != nil {
@@ -119,7 +122,7 @@ func TestFreshSchemaVersionAndTables(t *testing.T) {
 	}
 	want := map[string]bool{
 		"api_keys": true, "routes": true, "plans": true,
-		"prices": true, "request_events": true,
+		"prices": true, "request_events": true, "config_credentials": true,
 		"request_errors": true, "plugin_logs": true, "reference_prices_metadata": true, "reference_prices": true,
 	}
 	rows, err := database.db.Query(`SELECT name FROM sqlite_master

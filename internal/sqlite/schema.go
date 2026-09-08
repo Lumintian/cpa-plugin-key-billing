@@ -21,6 +21,13 @@ CREATE TABLE routes (
 	rule_json TEXT   NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE config_credentials (
+	ref         TEXT PRIMARY KEY,
+	provider    TEXT NOT NULL,
+	key_preview TEXT NOT NULL DEFAULT '',
+	disabled    INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE plans (
 	position        INTEGER PRIMARY KEY,
 	id              TEXT    NOT NULL UNIQUE,

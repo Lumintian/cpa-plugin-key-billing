@@ -499,33 +499,119 @@ func TestRouteMutationRefreshesInventoryAndNeverReturnsRawCredentialID(t *testin
 	}
 }
 
-func TestConfiguredCredentialSyncMakesExactAPIKeysRoutable(t *testing.T) {
-	app := newConfiguredApp(t)
-	const rawID = "codex:apikey:0123456789ab"
+func TestConfigCredentialSyncSurvivesRestartAndRollsBack(t *testing.T) {
+	app, path := newAppWithPriceAndState(t, true)
+	configuration := mustMarshal(t, LifecycleRequest{ConfigYAML: []byte(fmt.Sprintf("state_file: %q\n", path))})
 	const rawKey = "sk-dummy-upstream-secret-1234"
-	var synced struct {
-		Credentials []credentialView `json:"credentials"`
+	ref := billing.CredentialFingerprint("dummy-config")
+	removed := billing.CredentialFingerprint("dummy-removed")
+	if _, err := app.store.SyncKeys([]string{accountTestKeyA}, false); err != nil {
+		t.Fatal(err)
 	}
-	callOK(t, app, http.MethodPost, routeCredentialsSync, nil, map[string]any{
-		"credentials": []map[string]any{{
-			"ref": billing.CredentialFingerprint(rawID), "provider": "codex", "display_name": rawKey,
-		}},
-	}, http.StatusOK, &synced)
-	ref := billing.CredentialFingerprint(rawID)
-	if len(synced.Credentials) != 1 || synced.Credentials[0].Ref != ref ||
-		synced.Credentials[0].DisplayName != billing.PreviewKey(rawKey) {
-		t.Fatalf("credentials=%+v", synced.Credentials)
+	if err := app.store.SetKeyRoutes(billing.CallerScope(accountTestKeyA), billing.RouteBindings{CredentialIDs: []string{ref}}); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(string(mustMarshal(t, synced)), rawKey) {
-		t.Fatalf("sync response leaked upstream key: %+v", synced)
+	response := callManagement(t, app, http.MethodPost, routeCredentialsSync, nil, map[string]any{"credentials": []map[string]any{
+		{"ref": ref, "provider": "codex", "display_name": rawKey},
+		{"ref": removed, "provider": "codex", "display_name": "未配置 API Key", "disabled": true},
+	}})
+	if response.StatusCode != http.StatusOK || strings.Contains(string(response.Body), rawKey) {
+		t.Fatalf("sync response = %+v", response)
 	}
-	if !candidateAllowed(SchedulerAuthCandidate{ID: rawID, Provider: "codex"}, billing.RoutingDecision{CredentialIDs: []string{ref}}) {
-		t.Fatal("synced credential did not match its scheduler candidate")
+	app.observeCandidates([]SchedulerAuthCandidate{{ID: "dummy-runtime", Provider: "codex", Attributes: map[string]string{"source_backend": "config"}}})
+	restart := func() {
+		app.Shutdown()
+		app = newTestApp(t)
+		t.Cleanup(app.Shutdown)
+		if err := app.configure(configuration); err != nil {
+			t.Fatal(err)
+		}
+		app.SetHostCaller(func(method string, _ any) (json.RawMessage, error) {
+			if method != hostAuthList {
+				t.Fatalf("host method = %q", method)
+			}
+			return json.RawMessage(`{"files":[{"id":"dummy-auth-file","provider":"codex","source":"file","email":"live@example.com"}]}`), nil
+		})
+	}
+	restart()
+	response = callAccount(t, app, routeRouting, accountTestKeyA, nil)
+	var routing accountRoutingResponse
+	if err := json.Unmarshal(response.Body, &routing); err != nil || response.StatusCode != http.StatusOK ||
+		!routing.RoutingValid || len(routing.Credentials) != 1 || routing.Credentials[0].Name != billing.PreviewKey(rawKey) ||
+		routing.Credentials[0].Status != "active" || len(routing.Warnings) != 0 {
+		t.Fatalf("routing after restart = %+v, response = %+v, err = %v", routing, response, err)
+	}
+	if snapshot := app.store.ConfigCredentials(); len(snapshot) != 2 || snapshot[removed].KeyPreview != "" || !snapshot[removed].Disabled {
+		t.Fatalf("persisted config snapshot = %+v", snapshot)
+	}
+	if inventory := app.credentialInventory(); len(inventory) != 3 {
+		t.Fatalf("host files and config snapshot were not merged: %+v", inventory)
+	}
+	app.observeCandidates([]SchedulerAuthCandidate{{ID: "dummy-config", Provider: "codex", Status: "cooldown", Attributes: map[string]string{"source_backend": "config"}}})
+	before := app.credentialInventory()
+	if err := app.configure(configuration); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(app.credentialInventory(), before) {
+		t.Fatal("reconfiguration replaced live credential state with the snapshot")
 	}
 
-	callOK(t, app, http.MethodPost, routeCredentialsSync, nil, map[string]any{"credentials": []any{}}, http.StatusOK, &synced)
-	if len(synced.Credentials) != 0 {
-		t.Fatalf("credentials after empty sync=%+v", synced.Credentials)
+	raw, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec("CREATE TRIGGER reject_config BEFORE INSERT ON config_credentials BEGIN SELECT RAISE(ABORT, 'dummy failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	update := map[string]any{"credentials": []map[string]any{
+		{"ref": ref, "provider": "codex", "display_name": "sk-new…5678", "disabled": true},
+	}}
+	if response := callManagement(t, app, http.MethodPost, routeCredentialsSync, nil, update); response.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("failed sync response = %+v", response)
+	}
+	if !reflect.DeepEqual(app.credentialInventory(), before) || app.store.ConfigCredentials()[ref].KeyPreview != billing.PreviewKey(rawKey) {
+		t.Fatal("failed sync changed the live snapshot")
+	}
+	var stored int
+	if err := raw.QueryRow("SELECT count(*) FROM config_credentials").Scan(&stored); err != nil || stored != 2 {
+		t.Fatal("failed replacement lost persisted credentials", stored, err)
+	}
+	var preview string
+	if err := raw.QueryRow("SELECT key_preview FROM config_credentials WHERE ref = ?", ref).Scan(&preview); err != nil || preview != billing.PreviewKey(rawKey) {
+		t.Fatal("failed replacement changed the persisted preview", preview, err)
+	}
+	if _, err := raw.Exec("DROP TRIGGER reject_config"); err != nil {
+		t.Fatal(err)
+	}
+	callOK(t, app, http.MethodPost, routeCredentialsSync, nil, update, http.StatusOK, nil)
+	restart()
+	if inventory := app.credentialInventory(); len(inventory) != 1 || inventory[0].Ref != ref ||
+		inventory[0].DisplayName != "sk-new…5678" || !inventory[0].Disabled || inventory[0].Status != "disabled" {
+		t.Fatalf("replacement after restart = %+v", inventory)
+	}
+	if err := app.configure(mustMarshal(t, LifecycleRequest{ConfigYAML: testConfigYAML(t, true)})); err != nil {
+		t.Fatal(err)
+	}
+	if len(app.credentialInventory()) != 0 || len(app.store.ConfigCredentials()) != 0 {
+		t.Fatal("old config credentials survived a database switch")
+	}
+	if err := app.configure(configuration); err != nil {
+		t.Fatal(err)
+	}
+	if inventory := app.credentialInventory(); len(inventory) != 1 || inventory[0].Ref != ref || !inventory[0].Disabled {
+		t.Fatalf("config snapshot was not restored after switching back: %+v", inventory)
+	}
+	if err := app.refreshCredentialInventory(); err != nil {
+		t.Fatal(err)
+	}
+	callOK(t, app, http.MethodPost, routeCredentialsSync, nil, map[string]any{"credentials": []any{}}, http.StatusOK, nil)
+	if inventory := app.credentialInventory(); len(inventory) != 1 || inventory[0].Source != billing.CredentialSourceAuthFiles {
+		t.Fatalf("empty sync did not remove only config credentials: %+v", inventory)
+	}
+	restart()
+	if inventory := app.credentialInventory(); len(inventory) != 0 || len(app.store.ConfigCredentials()) != 0 {
+		t.Fatalf("cleared credentials reappeared after restart: %+v", inventory)
 	}
 }
 

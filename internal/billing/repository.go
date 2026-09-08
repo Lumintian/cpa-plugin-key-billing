@@ -26,14 +26,14 @@ type Snapshot struct {
 	RequestEventCount int
 }
 
-// Usage accounting writes only the affected keys; plans and routes are replaced whole.
 type Changes struct {
 	// Keys lists the scopes to upsert. AllKeys upserts every key in State.
 	Keys    []string
 	AllKeys bool
 
-	Plans  bool
-	Routes bool
+	Plans             bool
+	Routes            bool
+	ConfigCredentials bool
 
 	NormalRequestEvents []RequestEvent
 	RequestErrorEvents  []RequestErrorEvent
@@ -43,7 +43,7 @@ type Changes struct {
 const maxPendingRequestRecords = 1000
 
 func (c Changes) empty() bool {
-	return len(c.Keys) == 0 && !c.AllKeys && !c.Plans && !c.Routes &&
+	return len(c.Keys) == 0 && !c.AllKeys && !c.Plans && !c.Routes && !c.ConfigCredentials &&
 		len(c.NormalRequestEvents) == 0 && len(c.RequestErrorEvents) == 0 && c.RequestEventCutoff.IsZero()
 }
 
@@ -58,6 +58,7 @@ func (c Changes) merge(next Changes) Changes {
 		AllKeys:             c.AllKeys || next.AllKeys,
 		Plans:               c.Plans || next.Plans,
 		Routes:              c.Routes || next.Routes,
+		ConfigCredentials:   c.ConfigCredentials || next.ConfigCredentials,
 		NormalRequestEvents: append(append([]RequestEvent(nil), c.NormalRequestEvents...), next.NormalRequestEvents...),
 		RequestErrorEvents:  append(append([]RequestErrorEvent(nil), c.RequestErrorEvents...), next.RequestErrorEvents...),
 		RequestEventCutoff:  next.RequestEventCutoff,

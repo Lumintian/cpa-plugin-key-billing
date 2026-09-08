@@ -23,7 +23,7 @@ func (d *DB) migrateToV14(version int) error {
 	if version <= 12 {
 		steps = append(steps, migrateModelPricing, migrateQuotaWindows)
 	}
-	steps = append(steps, migrateRequestEventAccounts)
+	steps = append(steps, migrateCredentials)
 	return d.transact(func(tx *sql.Tx) error {
 		for _, step := range steps {
 			if err := step(tx); err != nil {
@@ -35,7 +35,7 @@ func (d *DB) migrateToV14(version int) error {
 	})
 }
 
-func migrateRequestEventAccounts(tx *sql.Tx) error {
+func migrateCredentials(tx *sql.Tx) error {
 	// Do not discard unknown fields or ambiguous identities when dropping the table.
 	var compatible, invalid bool
 	if err := tx.QueryRow(`SELECT
@@ -63,9 +63,15 @@ func migrateRequestEventAccounts(tx *sql.Tx) error {
 			provider = coalesce(NULLIF(r.provider, ''), c.provider)
 		FROM credentials c WHERE c.auth_index = r.auth_index;
 		DROP TABLE credentials;
+		CREATE TABLE config_credentials (
+			ref         TEXT PRIMARY KEY,
+			provider    TEXT NOT NULL,
+			key_preview TEXT NOT NULL DEFAULT '',
+			disabled    INTEGER NOT NULL DEFAULT 0
+		);
 	`)
 	if err != nil {
-		return fmt.Errorf("迁移请求事件账户：%w", err)
+		return fmt.Errorf("迁移凭证数据：%w", err)
 	}
 	return nil
 }
