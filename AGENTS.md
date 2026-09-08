@@ -2,12 +2,10 @@
 
 ## Required Checks
 
-- **Before committing:** Run `gofmt -l .` before every commit. If any files are listed, format them and rerun the check; commit only when the output is empty.
-- **Release tags:** Update `Version` in `internal/plugin/types.go` before creating a tag.
-- **Tag type:** Version tags must be annotated tags (`git tag -a` with a message); do not create lightweight tags.
-- **Tag version increments:** When creating a tag, increment the patch version unless the user explicitly requests a major or minor version change.
-- **Frontend changes:** Start `python3 scripts/frontend_dummy_backend.py --port 18765`, then test the affected desktop and narrow-screen layouts with Playwright. Static checks alone are insufficient; do not use the script's default port.
-- **Billing changes:** Run `scripts/e2e_cpa_billing.sh v7.2.143` after modifying usage parsing, pricing calculations, quota enforcement, failure reporting, or other billing behavior. This suite is not required for frontend-only, documentation-only, or other non-billing changes.
+- **Before committing:** Run `gofmt -l .`; format any listed files and rerun until the output is empty.
+- **Frontend changes:** Start `python3 scripts/frontend_dummy_backend.py --port 18765` (not the default port) and verify affected desktop and narrow-screen layouts with Playwright, beyond static checks.
+- **Frontend regression scripts:** Store JavaScript scripts used with `playwright-cli` for browser regression testing in a temporary directory, never in the project's `scripts/` directory.
+- **Billing changes:** Run `scripts/e2e_cpa_billing.sh v7.2.143` after modifying any billing behavior, including usage parsing, pricing, quota enforcement, or failure reporting.
 
 ## Architecture Invariants
 
@@ -26,9 +24,10 @@
 - Preserve historical data during SQLite and legacy JSON migrations, including failed or all-zero usage rows. If a legacy schema is incompatible, fail and roll back instead of dropping or silently hiding its table.
 - Never persist or log plaintext downstream or upstream API keys. Mask API-key credentials, omit uncertain account values, and use dummy credentials in tests; do not copy real credentials into the workspace.
 
-## Changelog
+## Release and Changelog
 
-- Edit `Changelog.md` only when the user explicitly requests preparation for a tag or release. Ordinary code, documentation, and commit tasks do not authorize a changelog update.
+- Before tagging, increment the patch version unless the user explicitly requests a major or minor change, update `Version` in `internal/plugin/types.go`, and create an annotated tag with `git tag -a` and a message.
+- Edit `Changelog.md` only when the user explicitly requests preparation for a tag or release.
 - Prepend one `## vX.Y.Z` section directly below `# Changelog`; never append releases or add an unreleased placeholder.
 - Treat sections for tags that already exist as immutable history. Do not edit, move, merge, or delete them unless the user explicitly requests changes to that tag's entry.
 - Use concise Chinese bullets that describe released behavior, not the development process. Include only relevant sections, ordered as `### 升级须知`, `### 后端`, then `### 前端`.
@@ -36,33 +35,8 @@
 
 ## Commit Messages
 
-Follow Conventional Commits:
-
-```text
-<type>(<scope>): <imperative summary>
-```
-
-- Write concise, imperative English.
-- Keep each commit focused on one logical change.
-- Include `scope` only when it clearly identifies the affected module.
+- Use Conventional Commits: `<type>(<scope>): <imperative summary>`, in concise English. Include `scope` only when it clearly identifies the affected module.
 - Use one of these common types: `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, or `chore`.
-
-Use only a subject line when the change is genuinely simple, narrowly scoped, and fully explained by the summary:
-
-```text
-fix(viewport): prevent scrolling past content bounds
-```
-
-For every other commit, include a body. Separate it from the subject with a blank line and describe the motivation, important implementation details, and behavioral impact:
-
-- Wrap body text at approximately 72 columns so it remains readable with Git's standard log indentation.
-- Prefer one cohesive body paragraph. Use additional paragraphs only when the commit contains genuinely distinct concerns.
-
-```text
-refactor(tui): replace custom viewport handling
-
-Use the standard viewport implementation as the single scrolling path.
-Remove the legacy scroll state and compatibility logic.
-```
-
-Describe the final change, not the development process or implementation history.
+- Keep each commit focused on one logical change.
+- Omit the body only for simple, narrowly scoped changes fully explained by the subject. Otherwise, add a blank line and a body explaining motivation, important implementation details, and behavioral impact; wrap at approximately 72 columns.
+- Describe the final change, not the development process or implementation history.
