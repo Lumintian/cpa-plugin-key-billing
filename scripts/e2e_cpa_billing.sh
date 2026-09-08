@@ -636,11 +636,17 @@ assert_route_credential_policy() {
 
   management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$access_file"
   scope="$(jq -er 'first(.keys[] | select(.in_config) | .scope)' "$access_file")"
+  # The requested model is granted directly on the key and deliberately absent
+  # from the route. Provider and exact-credential limits must still apply.
   management_call POST "$port" "/v0/management/plugins/cpa-key-billing/routes" \
     -H "Content-Type: application/json" \
-    --data "$(jq -nc --arg scope "$scope" '{name:"e2e-凭证路由",rule:{models:["e2e-credential-route"],credential_ids:[],credential_providers:[{source:"ai-providers",provider:"openai-compatible-route-allowed-e2e"}]},scopes:[$scope]}')" \
+    --data "$(jq -nc --arg scope "$scope" '{name:"e2e-凭证路由",rule:{models:["e2e-other-route-model"],credential_ids:[],credential_providers:[{source:"ai-providers",provider:"openai-compatible-route-allowed-e2e"}]},scopes:[$scope]}')" \
     >"$runtime_dir/credential-route.json"
   route="$(jq -er '.route.id' "$runtime_dir/credential-route.json")"
+  management_call PUT "$port" "/v0/management/plugins/cpa-key-billing/keys/routes" \
+    -H "Content-Type: application/json" \
+    --data "$(jq -nc --arg scope "$scope" --arg route "$route" '{scope:$scope,bindings:{route_ids:[$route],models:["e2e-credential-route"],credential_ids:[],credential_providers:[]}}')" \
+    >/dev/null
 
   body="$(request_body chat "e2e-credential-route" false "Reply with exactly OK.")"
   api_call "$port" "凭证类别路由：仅允许 route-allowed-e2e" \
@@ -669,7 +675,7 @@ assert_route_credential_policy() {
   allowed_ref="$(jq -er 'first(.credentials[] | select(.source == "ai-providers" and .provider == "openai-compatible-route-allowed-e2e")).ref' "$access_file")"
   management_call PATCH "$port" "/v0/management/plugins/cpa-key-billing/routes" \
     -H "Content-Type: application/json" \
-    --data "$(jq -nc --arg id "$route" --arg ref "$allowed_ref" '{id:$id,rule:{models:["e2e-credential-route"],credential_ids:[$ref],credential_providers:[]}}')" \
+    --data "$(jq -nc --arg id "$route" --arg ref "$allowed_ref" '{id:$id,rule:{models:["e2e-other-route-model"],credential_ids:[$ref],credential_providers:[]}}')" \
     >/dev/null
 
   api_call "$port" "指定凭证路由：仅允许 route-allowed-e2e" \
@@ -685,7 +691,7 @@ assert_route_credential_policy() {
 
   management_call PATCH "$port" "/v0/management/plugins/cpa-key-billing/routes" \
     -H "Content-Type: application/json" \
-    --data "$(jq -nc --arg id "$route" '{id:$id,rule:{models:["e2e-credential-route"],credential_ids:[],credential_providers:[{source:"ai-providers",provider:"openai-compatible-route-missing-e2e"}]}}')" \
+    --data "$(jq -nc --arg id "$route" '{id:$id,rule:{models:["e2e-other-route-model"],credential_ids:[],credential_providers:[{source:"ai-providers",provider:"openai-compatible-route-missing-e2e"}]}}')" \
     >/dev/null
   response_file="$runtime_dir/responses/credential-route-blocked.json"
   http_status="$(curl -sS --max-time 30 \
@@ -718,7 +724,7 @@ assert_route_credential_policy() {
       ([ $rows[] | select(.status == 200) ] | length) == 2 and
       ([ $rows[] | select(.status == 503 and .credential_result == "no_match") ] | length) == 1 and
       all($rows[] | select(.status == 200);
-        .model_result == "allow" and .credential_result == "selected" and
+        .model_result == "allow" and .credential_policy == "restricted" and .credential_result == "selected" and
         ((.selected_credential // "") | length) > 0 and
         ((.selected_credential // "") | contains("上游凭证") | not))
     ' "$plugin_logs_file" >/dev/null; then

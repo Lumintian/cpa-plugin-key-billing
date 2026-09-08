@@ -125,8 +125,29 @@ http(s)://<CLIProxyAPI 地址>/v0/resource/plugins/cpa-key-billing/ui#account
 
 ## 路由规则
 
-- 在 API Key 页面可直接选择路由规则、整类凭证、单个凭证或单个模型；多个选择取并集。
-- 默认不限制模型和凭证。请求会先检查模型权限，再从允许的凭证中选择上游。
+在 API Key 页面绑定路由规则，也可直接选择模型、整类凭证或单个凭证。模型与凭证独立取并集，互不绑定；只有合并后的集合为空时，对应维度才不受限制。
+
+```mermaid
+---
+config:
+  themeVariables:
+    fontSize: "13px"
+  flowchart:
+    diagramPadding: 4
+    nodeSpacing: 20
+    rankSpacing: 28
+    padding: 3
+---
+flowchart TB
+    A["全部绑定路由<br/>＋ Key 直接选择"] --> M["模型取并集<br/>为空则不限制模型"]
+    A --> C["凭证取并集<br/>整类凭证 ＋ 单个凭证<br/>为空则不限制凭证"]
+    M --> D{请求模型是否允许？}
+    D -- 否 --> R[返回 HTTP 403]
+    D -- 是 --> P["在 CPA 可用候选中<br/>按凭证权限选择上游"]
+    C --> P
+    P -- 有可用凭证 --> U[调用上游]
+    P -- 无可用凭证 --> S[返回 HTTP 503]
+```
 
 ## 拦截请求的响应
 

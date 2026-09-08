@@ -40,6 +40,8 @@ func candidateWeight(candidate SchedulerAuthCandidate) int64 {
 }
 
 func routingPoolKey(model string, decision billing.RoutingDecision) string {
+	// Keep round-robin progress separate per model; this does not change which
+	// credentials the key is allowed to use.
 	policy := struct {
 		IDs       []string                             `json:"ids"`
 		Providers []billing.CredentialProviderSelector `json:"providers"`

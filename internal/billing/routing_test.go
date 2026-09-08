@@ -2,51 +2,106 @@ package billing
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
 
-func TestRoutingModelPrecedesCredentialPolicy(t *testing.T) {
+func TestRoutesAndDirectBindingsUnionModelsAndCredentialsIndependently(t *testing.T) {
 	store := newStore(t)
-	ref := CredentialFingerprint("auth-a")
+	refA, refB, refDirect := CredentialFingerprint("auth-a"), CredentialFingerprint("auth-b"), CredentialFingerprint("auth-direct")
+	codex := CredentialProviderSelector{Source: CredentialSourceAuthFiles, Provider: "codex"}
+	claude := CredentialProviderSelector{Source: CredentialSourceAuthFiles, Provider: "claude"}
+	configCodex := CredentialProviderSelector{Source: CredentialSourceAIProviders, Provider: "codex"}
 	store.ReplaceAll(func(state *State) {
-		state.Routes = []Route{{ID: "codex", Name: "Codex", Rule: RouteRule{Models: []string{"gpt-5.6-sol"}, CredentialProviders: []CredentialProviderSelector{{Source: CredentialSourceAuthFiles, Provider: "codex"}}}}}
-		state.Keys["scope-a"] = &KeyState{RouteBindings: RouteBindings{RouteIDs: []string{"codex"}, CredentialIDs: []string{ref}}}
+		state.Routes = []Route{
+			{ID: "gpt", Name: "GPT", Rule: RouteRule{Models: []string{"gpt-5.6-sol"}, CredentialIDs: []string{refA}, CredentialProviders: []CredentialProviderSelector{codex}}},
+			{ID: "claude", Name: "Claude", Rule: RouteRule{Models: []string{"claude-sonnet-4-6"}, CredentialIDs: []string{refB}, CredentialProviders: []CredentialProviderSelector{claude}}},
+		}
+		state.Keys["scope-a"] = &KeyState{RouteBindings: RouteBindings{
+			RouteIDs: []string{"gpt", "claude"}, Models: []string{"gpt-5.6-luna", "gpt-5.6-sol"},
+			CredentialIDs: []string{refA, refDirect}, CredentialProviders: []CredentialProviderSelector{codex, configCodex},
+		}}
 	})
 
-	denied := store.ResolveRouting("scope-a", "claude-sonnet-4-6", "claude-sonnet-4-6")
-	if denied.AllowsModel() || !denied.RestrictsModels() {
-		t.Fatalf("decision=%+v, want model denial", denied)
-	}
-	allowed := store.ResolveRouting("scope-a", "gpt-5.6-sol", "gpt-5.6-sol")
-	if !allowed.AllowsModel() || !allowed.RestrictsCredentials() || !slices.Contains(allowed.CredentialIDs, ref) {
-		t.Fatalf("decision=%+v", allowed)
-	}
-	if !slices.ContainsFunc(allowed.CredentialProviders, func(item CredentialProviderSelector) bool {
-		return item.Source == CredentialSourceAuthFiles && item.Provider == "codex"
-	}) {
-		t.Fatalf("providers=%+v", allowed.CredentialProviders)
+	wantModels := []string{"claude-sonnet-4-6", "gpt-5.6-luna", "gpt-5.6-sol"}
+	wantIDs := []string{refA, refB, refDirect}
+	slices.Sort(wantIDs)
+	wantProviders := []CredentialProviderSelector{configCodex, claude, codex}
+	for _, test := range []struct {
+		model string
+		allow bool
+	}{
+		{model: "gpt-5.6-sol", allow: true},
+		{model: "claude-sonnet-4-6", allow: true},
+		{model: "gpt-5.6-luna", allow: true},
+		{model: "unknown-model", allow: false},
+		{model: "", allow: true},
+	} {
+		t.Run(test.model, func(t *testing.T) {
+			decision := store.ResolveRouting("scope-a", test.model, test.model)
+			if decision.AllowsModel() != test.allow || !slices.Equal(decision.ModelScope, wantModels) {
+				t.Fatalf("model policy=%+v", decision)
+			}
+			if !slices.Equal(decision.CredentialIDs, wantIDs) || !slices.Equal(decision.CredentialProviders, wantProviders) {
+				t.Fatalf("credential union changed with request model: %+v", decision)
+			}
+		})
 	}
 }
 
-func TestConditionalRoutesUnionModelsAndFilterCredentialsByRequestedModel(t *testing.T) {
-	store := newStore(t)
-	store.ReplaceAll(func(state *State) {
-		state.Routes = []Route{
-			{ID: "gpt", Name: "GPT", Rule: RouteRule{Models: []string{"gpt-5.6-sol"}, CredentialProviders: []CredentialProviderSelector{{Source: CredentialSourceAuthFiles, Provider: "codex"}}}},
-			{ID: "claude", Name: "Claude", Rule: RouteRule{Models: []string{"claude-sonnet-4-6"}, CredentialProviders: []CredentialProviderSelector{{Source: CredentialSourceAuthFiles, Provider: "claude"}}}},
+func TestDirectModelKeepsBoundRouteCredentialRestrictions(t *testing.T) {
+	ref := CredentialFingerprint("auth-a")
+	provider := CredentialProviderSelector{Source: CredentialSourceAuthFiles, Provider: "codex"}
+	for _, rule := range []RouteRule{
+		{Models: []string{"gpt-5.6-sol", "gpt-5.6-terra"}, CredentialIDs: []string{ref}},
+		{Models: []string{"gpt-5.6-sol", "gpt-5.6-terra"}, CredentialProviders: []CredentialProviderSelector{provider}},
+	} {
+		store := newStore(t)
+		store.ReplaceAll(func(state *State) {
+			state.Routes = []Route{{ID: "codex", Name: "Codex", Rule: rule}}
+			state.Keys["scope-a"] = &KeyState{RouteBindings: RouteBindings{RouteIDs: []string{"codex"}, Models: []string{"gpt-5.6-luna"}}}
+		})
+		decision := store.ResolveRouting("scope-a", "gpt-5.6-luna", "gpt-5.6-luna")
+		if !decision.AllowsModel() || !decision.RestrictsCredentials() || !slices.Equal(decision.CredentialIDs, rule.CredentialIDs) || !slices.Equal(decision.CredentialProviders, rule.CredentialProviders) {
+			t.Fatalf("direct model lost bound route credentials: %+v", decision)
 		}
-		state.Keys["scope-a"] = &KeyState{RouteBindings: RouteBindings{RouteIDs: []string{"gpt", "claude"}}}
-	})
-
-	gpt := store.ResolveRouting("scope-a", "gpt-5.6-sol", "gpt-5.6-sol")
-	if !gpt.AllowsModel() || len(gpt.ModelScope) != 2 || len(gpt.CredentialProviders) != 1 || gpt.CredentialProviders[0].Provider != "codex" {
-		t.Fatalf("gpt decision=%+v", gpt)
 	}
-	claude := store.ResolveRouting("scope-a", "claude-sonnet-4-6", "claude-sonnet-4-6")
-	if !claude.AllowsModel() || len(claude.CredentialProviders) != 1 || claude.CredentialProviders[0].Provider != "claude" {
-		t.Fatalf("claude decision=%+v", claude)
+}
+
+func TestRoutingEmptyDimensionsRemainIndependent(t *testing.T) {
+	ref := CredentialFingerprint("auth-a")
+	for _, test := range []struct {
+		name        string
+		rules       []RouteRule
+		models      bool
+		credentials bool
+	}{
+		{name: "unbound"},
+		{name: "empty route", rules: []RouteRule{{}}},
+		{name: "models only", rules: []RouteRule{{Models: []string{"allowed-model"}}}, models: true},
+		{name: "credentials only", rules: []RouteRule{{CredentialIDs: []string{ref}}}, credentials: true},
+		{name: "separate routes", rules: []RouteRule{{Models: []string{"allowed-model"}}, {CredentialIDs: []string{ref}}, {}}, models: true, credentials: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := newStore(t)
+			store.ReplaceAll(func(state *State) {
+				key := &KeyState{}
+				for i, rule := range test.rules {
+					id := "route-" + strconv.Itoa(i)
+					state.Routes = append(state.Routes, Route{ID: id, Name: id, Rule: rule})
+					key.RouteBindings.RouteIDs = append(key.RouteBindings.RouteIDs, id)
+				}
+				state.Keys["scope-a"] = key
+			})
+			for _, model := range []string{"allowed-model", "other-model"} {
+				decision := store.ResolveRouting("scope-a", model, model)
+				if decision.RestrictsModels() != test.models || decision.RestrictsCredentials() != test.credentials || decision.AllowsModel() != (!test.models || model == "allowed-model") {
+					t.Fatalf("independent dimensions: %+v", decision)
+				}
+			}
+		})
 	}
 }
 

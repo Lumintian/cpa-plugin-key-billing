@@ -427,15 +427,15 @@ func (s *Store) DeleteRoute(id string) (RouteDeleteResult, error) {
 }
 
 func routingRestricted(state *State, key *KeyState) bool {
-	decision := resolveRoutingState(state, key, "")
+	decision := resolveRoutingState(state, key)
 	return decision.ConfigurationError != "" || decision.RestrictsModels() || decision.RestrictsCredentials()
 }
 
 func (s *Store) ResolveRouting(scope, upstreamModel, routeModel string) RoutingDecision {
 	var decision RoutingDecision
 	s.read(func(state *State) {
-		model := state.ResolveBillingModel(upstreamModel, routeModel)
-		decision = resolveRoutingState(state, state.Keys[normalizeScope(scope)], model)
+		decision = resolveRoutingState(state, state.Keys[normalizeScope(scope)])
+		decision.Model = strings.TrimSpace(state.ResolveBillingModel(upstreamModel, routeModel))
 	})
 	return decision
 }
@@ -448,9 +448,10 @@ func (s *Store) KeyDescription(scope string) string {
 	return result
 }
 
-func resolveRoutingState(state *State, key *KeyState, model string) RoutingDecision {
-	model = strings.TrimSpace(model)
-	d := RoutingDecision{Model: model, ModelScope: []string{}, CredentialIDs: []string{}, CredentialProviders: []CredentialProviderSelector{}}
+// Merge every bound route and direct binding without consulting the request
+// model. Each dimension is unrestricted only when its merged allowlist is empty.
+func resolveRoutingState(state *State, key *KeyState) RoutingDecision {
+	d := RoutingDecision{ModelScope: []string{}, CredentialIDs: []string{}, CredentialProviders: []CredentialProviderSelector{}}
 	if key == nil {
 		return d
 	}
@@ -466,12 +467,6 @@ func resolveRoutingState(state *State, key *KeyState, model string) RoutingDecis
 		rule := route.Rule
 		for _, allowed := range rule.Models {
 			modelSet[strings.ToLower(allowed)] = allowed
-		}
-		applicable := model == "" || len(rule.Models) == 0 || slices.ContainsFunc(rule.Models, func(allowed string) bool {
-			return strings.EqualFold(allowed, model)
-		})
-		if !applicable {
-			continue
 		}
 		for _, id := range rule.CredentialIDs {
 			ids[strings.ToLower(id)] = id

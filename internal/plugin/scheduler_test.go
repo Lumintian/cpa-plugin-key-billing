@@ -315,27 +315,73 @@ func TestSchedulerDelegatesAnUnchangedCandidateSet(t *testing.T) {
 	}
 }
 
-func TestSchedulerUsesClientRequestedModelForConditionalRoutes(t *testing.T) {
+func TestSchedulerCredentialPolicyIsIndependentOfRequestedModel(t *testing.T) {
 	app, scope := configuredRoutingApp(t, billing.RouteRule{
 		Models: []string{"public-model"},
 		CredentialProviders: []billing.CredentialProviderSelector{{
 			Source: billing.CredentialSourceAuthFiles, Provider: "codex",
 		}},
 	})
-	req := schedulerRequest(scope,
-		SchedulerAuthCandidate{ID: "file-codex", Provider: "codex", Attributes: map[string]string{"path": "/auth/codex.json"}},
-		SchedulerAuthCandidate{ID: "config-codex", Provider: "codex", Attributes: map[string]string{"source": "config:codex[0]"}},
-	)
-	req.Model = "upstream-model"
-	req.Options.Metadata[MetadataRequestedModel] = "public-model"
-	raw, err := app.HandleMethod(MethodSchedulerPick, mustMarshal(t, req))
-	if err != nil {
+	if err := app.store.SetKeyRoutes(scope, billing.RouteBindings{RouteIDs: []string{"route-test"}, Models: []string{"direct-model"}}); err != nil {
 		t.Fatal(err)
 	}
-	var response SchedulerPickResponse
-	decodeResult(t, raw, &response)
-	if !response.Handled || response.AuthID != "file-codex" {
-		t.Fatalf("response=%+v", response)
+	for _, test := range []struct {
+		upstream, requested string
+	}{
+		{upstream: "public-model"},
+		{upstream: "direct-model"},
+		{upstream: "upstream-model", requested: "public-model"},
+		{upstream: "upstream-model", requested: "direct-model"},
+	} {
+		t.Run(test.upstream+"/"+test.requested, func(t *testing.T) {
+			req := schedulerRequest(scope,
+				SchedulerAuthCandidate{ID: "file-codex", Provider: "codex", Attributes: map[string]string{"path": "/auth/codex.json"}},
+				SchedulerAuthCandidate{ID: "config-codex", Provider: "codex", Attributes: map[string]string{"source": "config:codex[0]"}},
+			)
+			req.Model = test.upstream
+			req.Options.Metadata[MetadataRequestedModel] = test.requested
+			raw, err := app.HandleMethod(MethodSchedulerPick, mustMarshal(t, req))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var response SchedulerPickResponse
+			decodeResult(t, raw, &response)
+			if !response.Handled || response.AuthID != "file-codex" {
+				t.Fatalf("response=%+v", response)
+			}
+		})
+	}
+}
+
+func TestSchedulerUsesCredentialsFromEveryBoundRoute(t *testing.T) {
+	app, scope := configuredRoutingApp(t, billing.RouteRule{
+		Models: []string{"model-a"}, CredentialIDs: []string{billing.CredentialFingerprint("auth-a")},
+	})
+	if _, err := app.store.CreateRoute(billing.Route{ID: "route-b", Name: "Route B", Rule: billing.RouteRule{
+		Models: []string{"model-b"}, CredentialIDs: []string{billing.CredentialFingerprint("auth-b")},
+	}}, []string{scope}); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		model, credential string
+	}{
+		{model: "model-a", credential: "auth-b"},
+		{model: "model-b", credential: "auth-a"},
+	} {
+		t.Run(test.model, func(t *testing.T) {
+			candidate := SchedulerAuthCandidate{ID: test.credential, Provider: "codex"}
+			req := schedulerRequest(scope, candidate, SchedulerAuthCandidate{ID: "outside", Provider: "codex"})
+			req.Model = test.model
+			raw, err := app.HandleMethod(MethodSchedulerPick, mustMarshal(t, req))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var response SchedulerPickResponse
+			decodeResult(t, raw, &response)
+			if !response.Handled || response.AuthID != test.credential {
+				t.Fatalf("credential from another route was not selected: %+v", response)
+			}
+		})
 	}
 }
 
