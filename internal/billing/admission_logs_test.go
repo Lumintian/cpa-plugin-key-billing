@@ -32,9 +32,12 @@ func admissionPluginLogs(t *testing.T, store *Store) []PluginLog {
 func TestQuotaBlockIsReportedOncePerCycle(t *testing.T) {
 	store := failingStore(t)
 	cycle := time.Date(2026, 8, 10, 0, 0, 0, 0, time.UTC)
+	window := QuotaWindow{ID: "d", Name: "额度", AmountUSD: 10, PeriodSeconds: 7 * 24 * 3600}
 	blocked := Decision{
 		PlanID: "weekly", PlanName: "Weekly 10",
-		QuotaView: QuotaView{Blocked: true, RetryAt: cycle.Add(7 * 24 * time.Hour), Windows: []QuotaWindowView{{QuotaWindow: QuotaWindow{ID: "d", Name: "额度", AmountUSD: 10}, SpentUSD: 10.4, Blocked: true, StartAt: cycle, EndAt: cycle.Add(7 * 24 * time.Hour)}}},
+		QuotaView: QuotaView{Blocked: true, RetryAt: cycle.Add(7 * 24 * time.Hour), Windows: []QuotaWindowView{
+			window.view(QuotaCycle{StartAt: cycle, EndAt: cycle.Add(7 * 24 * time.Hour), SpentUSD: 10.4}),
+		}},
 	}
 
 	for range 3 {

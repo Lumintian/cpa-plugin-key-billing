@@ -857,9 +857,10 @@ assert_quota_exhausted() {
   local port="$1"
   local runtime_dir="$2"
   local expected_count="$3"
+  local dimension="$4"
   local scope plan client endpoint body header_line http_status retry_after actual_count
   local response_file headers_file request_events_file plugin_logs_file
-  local plan_name="e2e-额度计划"
+  local plan_name="e2e-额度计划-$dimension"
   local -a headers
 
   response_file="$runtime_dir/responses/quota-blocked.json"
@@ -875,8 +876,14 @@ assert_quota_exhausted() {
   # plan rather than the one that is refused.
   management_call POST "$port" "/v0/management/plugins/cpa-key-billing/plans" \
     -H "Content-Type: application/json" \
-    --data "$(jq -nc --arg name "$plan_name" --arg scope "$scope" \
-      '{name: $name, windows: [{name: "Short", amount_usd: 0.0001, period_seconds: 3600}, {name: "Budget", amount_usd: 0.001, period_seconds: 86400}], scopes: [$scope]}')" \
+    --data "$(jq -nc --arg name "$plan_name" --arg scope "$scope" --arg dimension "$dimension" \
+      '{name: $name, windows: [
+        {name: "Short", period_seconds: 3600}, {name: "Budget", period_seconds: 86400}
+      ] | map(. + {
+        amount_usd: (if $dimension == "amount_usd" then 0.0001 else 0 end),
+        request_limit: (if $dimension == "requests" then 1 else 0 end),
+        token_limit: (if $dimension == "tokens" then 1 else 0 end)
+      }), scopes: [$scope]}')" \
     >"$runtime_dir/plan.json"
   plan="$(jq -er '.plan.id' "$runtime_dir/plan.json")"
 
@@ -890,13 +897,19 @@ assert_quota_exhausted() {
     "$runtime_dir/responses/quota-spend.json" false
 
   management_call GET "$port" "/v0/management/plugins/cpa-key-billing/keys" >"$runtime_dir/quota-access.json"
-  if ! jq -e --arg scope "$scope" \
+  if ! jq -e --arg scope "$scope" --arg dimension "$dimension" \
       --slurpfile events "$runtime_dir/quota-spend-request-events.json" '
       $events[0].entries[0].cost.total_usd as $cost |
       first(.keys[] | select(.scope == $scope)) |
       (.windows | length == 2) and .blocked and
       ([.windows[].period_seconds] == [3600, 86400]) and
-      all(.windows[]; .started and ((.spent_usd - $cost) | fabs) < 0.000000000001)
+      all(.windows[]; .started and (.dimensions | length == 1) and
+        .dimensions[0].metric == $dimension and .dimensions[0].blocked and
+        .dimensions[0].remaining == 0 and
+        (if $dimension == "amount_usd" then ((.dimensions[0].used - $cost) | fabs) < 0.000000000001
+         elif $dimension == "requests" then .dimensions[0].used == 1
+         else .dimensions[0].used == ($events[0].entries[0].cost |
+           .uncached_input_tokens + .cache_read_tokens + .cache_write_tokens + .billed_output_tokens) end))
     ' "$runtime_dir/quota-access.json" >/dev/null; then
     echo "多维度周期消费与单笔请求费用不一致。" >&2
     return 1
@@ -923,12 +936,14 @@ assert_quota_exhausted() {
       echo "额度耗尽后 ${client} 返回 HTTP ${http_status}，预期 429。" >&2
       return 1
     fi
-    if ! jq -e --arg client "$client" --arg plan "$plan_name" '
+    if ! jq -e --arg client "$client" --arg plan "$plan_name" --arg dimension "$dimension" '
         (if $client == "anthropic"
          then .type == "error" and .error.type == "rate_limit_error"
          else .error.type == "rate_limit_error" and .error.code == "rate_limit_exceeded"
          end)
         and (.error.message | startswith("API key subscription quota exhausted"))
+        and (if $dimension == "amount_usd" then (.error.message | contains("$"))
+             else (.error.message | contains($dimension + " ")) end)
         and (.error.message | contains("on plan \"" + $plan + "\""))
       ' "$response_file" >/dev/null; then
       echo "额度拦截 ${client} 的错误内容不正确：$(jq -c '.' "$response_file")" >&2
@@ -948,7 +963,7 @@ assert_quota_exhausted() {
     return 1
   fi
   management_call GET "$port" "/v0/management/plugins/cpa-key-billing/plugin-logs" >"$plugin_logs_file"
-  if ! jq -e '[.entries[] | select(.level == "info" and (.message | startswith("额度拦截：")))] | length == 1' \
+  if ! jq -e --arg plan "$plan_name" '[.entries[] | select(.level == "info" and (.message | startswith("额度拦截：")) and (.message | contains($plan)))] | length == 1' \
     "$plugin_logs_file" >/dev/null; then
     echo "插件日志的额度拦截记录数量不正确：$(jq -c '[.entries[] | select(.message | startswith("额度拦截："))]' "$plugin_logs_file")" >&2
     return 1
@@ -1376,8 +1391,11 @@ run_target() {
   log_step "路由凭证规则：整类与指定凭证均限制真实候选集"
   assert_route_credential_policy "$port" "$runtime_dir" "$expected_requests"
   expected_requests=$((expected_requests + 2))
-  log_step "订阅额度：消费、4 种协议拦截与恢复"
-  assert_quota_exhausted "$port" "$runtime_dir" "$expected_requests"
+  for dimension in amount_usd requests tokens; do
+    log_step "订阅额度 ${dimension}：消费、4 种协议拦截与恢复"
+    assert_quota_exhausted "$port" "$runtime_dir" "$expected_requests" "$dimension"
+    expected_requests=$((expected_requests + 2))
+  done
 
   management_call GET "$port" "/v0/management/plugins/cpa-key-billing/plugin-logs" >"$runtime_dir/plugin-logs.json"
   if ! jq -e '[.entries[] | select(.level == "info" and (.message | contains("已加载计费数据库")))] | length == 1' \
@@ -1391,7 +1409,7 @@ run_target() {
   kill "$active_pid" >/dev/null 2>&1 || true
   wait "$active_pid" >/dev/null 2>&1 || true
   active_pid=""
-  log_ok "${host_label}：45 个上游请求（含 4 个参考价请求），1 次并发拦截，3 次模型拦截，2 次凭证路由，1 次凭证拦截，4 次额度拦截"
+  log_ok "${host_label}：49 个上游请求（含 4 个参考价请求），1 次并发拦截，3 次模型拦截，2 次凭证路由，1 次凭证拦截，12 次额度拦截"
 }
 
 log_stage "启动 dummy provider"

@@ -32,11 +32,27 @@ func TestQuotaWindowsValidationAndIdentity(t *testing.T) {
 		func(p *Plan) { p.Windows[0].AmountUSD = math.NaN() },
 		func(p *Plan) { p.Windows[0].AmountUSD = math.Inf(1) },
 		func(p *Plan) { p.Windows[0].AmountUSD = 0 },
+		func(p *Plan) { p.Windows[0].AmountUSD = -1 },
+		func(p *Plan) { p.Windows[0].RequestLimit = -1 },
+		func(p *Plan) { p.Windows[0].RequestLimit = maxQuotaCount + 1 },
+		func(p *Plan) { p.Windows[0].TokenLimit = -1 },
+		func(p *Plan) { p.Windows[0].TokenLimit = maxQuotaCount + 1 },
 	} {
 		invalid := clonePlan(valid)
 		change(&invalid)
 		if invalid.Validate() == nil {
 			t.Fatalf("invalid plan accepted: %+v", invalid)
 		}
+	}
+}
+
+func TestPlanAcceptsIndependentQuotaDimensions(t *testing.T) {
+	plan := Plan{ID: "p", Windows: []QuotaWindow{
+		{ID: "requests", Name: "请求", PeriodSeconds: 3600, RequestLimit: maxQuotaCount},
+		{ID: "tokens", Name: "Token", PeriodSeconds: 86400, TokenLimit: maxQuotaCount},
+		{ID: "mixed", Name: "综合", PeriodSeconds: 604800, AmountUSD: 100, TokenLimit: 10000, RequestLimit: 100},
+	}}
+	if err := plan.Validate(); err != nil {
+		t.Fatal(err)
 	}
 }

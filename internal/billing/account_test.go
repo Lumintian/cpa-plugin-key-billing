@@ -118,23 +118,17 @@ func TestUsageRequestTimesPreserveWindowAttribution(t *testing.T) {
 		state.Keys["scope-a"] = &KeyState{PlanID: "p"}
 	})
 	store.Authorize("scope-a", start)
-	next := store.Authorize("scope-a", start.Add(2*time.Hour))
+	store.Authorize("scope-a", start.Add(2*time.Hour))
 	event := subsetEvent("scope-a", start.Add(150*time.Minute))
-	event.RequestedAt = start
-	store.RecordUsage(event)
-	store.Read(func(state *State) {
-		key := state.Keys["scope-a"]
-		if len(key.Cycles) != 2 || key.Cycles["short"].SpentUSD != 0 || key.Cycles["long"].SpentUSD != wantSubsetCost {
-			t.Fatalf("late usage attribution: %+v; admission=%+v", key.Cycles, next)
-		}
-	})
-	for _, requestedAt := range []time.Time{time.Time{}, start.Add(48 * time.Hour)} {
+	wantShort := QuotaCycle{PlanID: "p", StartAt: start.Add(2 * time.Hour), EndAt: start.Add(3 * time.Hour)}
+	wantLong := QuotaCycle{PlanID: "p", StartAt: start, EndAt: start.Add(24 * time.Hour),
+		SpentUSD: wantSubsetCost, UsedTokens: 1500, UsedRequests: 1}
+	for _, requestedAt := range []time.Time{start, {}, start.Add(48 * time.Hour)} {
 		event.RequestedAt = requestedAt
 		store.RecordUsage(event)
 		store.Read(func(state *State) {
 			cycles := state.Keys["scope-a"].Cycles
-			if len(cycles) != 2 || cycles["short"].SpentUSD != 0 || cycles["long"].SpentUSD != wantSubsetCost ||
-				!cycles["short"].StartAt.Equal(next.Windows[0].StartAt) || !cycles["long"].StartAt.Equal(start) {
+			if len(cycles) != 2 || cycles["short"] != wantShort || cycles["long"] != wantLong {
 				t.Fatalf("request time %s changed current cycles: %+v", requestedAt, cycles)
 			}
 		})

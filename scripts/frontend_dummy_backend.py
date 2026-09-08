@@ -242,12 +242,12 @@ def iso(value):
 
 PLANS = [
     {"id": "engineering", "name": "研发团队", "windows": [
-        {"id": "short", "name": "短时额度", "amount_usd": 15, "period_seconds": 18000},
+        {"id": "short", "name": "短时额度", "amount_usd": 15, "request_limit": 100, "token_limit": 1000000, "period_seconds": 18000},
         {"id": "budget", "name": "团队预算", "amount_usd": 300, "period_seconds": 2592000},
     ]},
     {"id": "production", "name": "生产服务", "windows": [
-        {"id": "short", "name": "峰值保护", "amount_usd": 30, "period_seconds": 7200},
-        {"id": "medium", "name": "服务额度", "amount_usd": 100, "period_seconds": 86400},
+        {"id": "short", "name": "峰值保护", "amount_usd": 0, "request_limit": 200, "token_limit": 0, "period_seconds": 7200},
+        {"id": "medium", "name": "服务额度", "amount_usd": 0, "request_limit": 0, "token_limit": 2000000, "period_seconds": 86400},
         {"id": "budget", "name": "生产预算", "amount_usd": 1000, "period_seconds": 2592000},
     ]},
     {"id": "project-credit", "name": "项目额度", "windows": [
@@ -256,24 +256,38 @@ PLANS = [
 ]
 
 
+QUOTA_CYCLES = {}
+
+
 def refresh_key_quota(key):
     plan = next((item for item in PLANS if item["id"] == key["plan_id"]), None)
-    previous = {window["id"]: window for window in key.get("windows", [])}
+    previous = QUOTA_CYCLES.get(key["scope"], {})
+    cycles = {}
     key.update(plan_name=plan["name"] if plan else "", unlimited=plan is None, blocked=False, windows=[])
     key.pop("retry_at", None)
     for window in plan["windows"] if plan else []:
-        old = previous.get(window["id"], {})
-        started = old.get("started", False) and old.get("period_seconds") == window["period_seconds"]
-        spent = old.get("spent_usd", 0) if started else 0
-        amount = window["amount_usd"]
-        view = dict(window, started=started, spent_usd=spent, remaining_usd=max(0, amount-spent),
-                    used_percent=spent / amount * 100, blocked=spent >= amount)
+        cycle = previous.get(window["id"], {})
+        started = (cycle.get("plan_id") == key["plan_id"]
+                   and cycle.get("period_seconds") == window["period_seconds"])
+        if not started:
+            cycle = {}
+        dimensions = [dict(metric=metric, limit=limit, used=used, remaining=max(0, limit-used),
+                           used_percent=min(100, used / limit * 100), blocked=used >= limit)
+                      for metric, limit, used in [
+                          ("amount_usd", window.get("amount_usd", 0), cycle.get("spent_usd", 0)),
+                          ("tokens", window.get("token_limit", 0), cycle.get("used_tokens", 0)),
+                          ("requests", window.get("request_limit", 0), cycle.get("used_requests", 0))] if limit > 0]
+        view = dict(id=window["id"], name=window["name"], period_seconds=window["period_seconds"],
+                    started=started, blocked=any(dimension["blocked"] for dimension in dimensions),
+                    dimensions=dimensions)
         if started:
-            view.update(start_at=old["start_at"], end_at=old["end_at"])
+            cycles[window["id"]] = cycle
+            view.update(start_at=cycle["start_at"], end_at=cycle["end_at"])
         if view["blocked"]:
             key["blocked"] = True
             key["retry_at"] = max(key.get("retry_at", ""), view["end_at"])
         key["windows"].append(view)
+    QUOTA_CYCLES[key["scope"]] = cycles
 
 
 CREDENTIALS = [
@@ -491,19 +505,22 @@ def make_key(index):
         "label": profile["label"],
         "in_config": True,
         "plan_id": profile["plan_id"],
-        "plan_name": plan["name"] if plan else "",
         "concurrency_limit": profile["concurrency_limit"],
         "current_concurrency": profile["current_concurrency"],
         "route_bindings": profile["route_bindings"],
-        "windows": [],
     }
+    cycles = {}
     for position, window in enumerate(plan["windows"] if plan else []):
         ratio = profile["spent_usd"] / plan["windows"][-1]["amount_usd"]
         if index == 2 and position == 0 or index == 3 and position < 2:
             ratio = 1.05
         end = NOW + timedelta(seconds=window["period_seconds"] * 0.4)
-        result["windows"].append(dict(window, started=True, spent_usd=window["amount_usd"]*ratio,
-            start_at=iso(end-timedelta(seconds=window["period_seconds"])), end_at=iso(end)))
+        cycles[window["id"]] = dict(plan_id=result["plan_id"], period_seconds=window["period_seconds"],
+            spent_usd=window["amount_usd"]*ratio,
+            used_requests=int(window.get("request_limit", 1000)*ratio),
+            used_tokens=int(window.get("token_limit", 10000000)*ratio),
+            start_at=iso(end-timedelta(seconds=window["period_seconds"])), end_at=iso(end))
+    QUOTA_CYCLES[result["scope"]] = cycles
     refresh_key_quota(result)
     return result
 
@@ -1414,7 +1431,7 @@ class Handler(BaseHTTPRequestHandler):
                 count = sum(window["started"] for window in key["windows"])
                 counts["keys"] += bool(count)
                 counts["windows"] += count
-                key["windows"] = []
+                QUOTA_CYCLES.pop(key["scope"], None)
                 refresh_key_quota(key)
             self.send_json(200, counts)
         elif route == ("POST", f"{API_BASE}/keys/concurrency"):
@@ -1530,7 +1547,7 @@ class Handler(BaseHTTPRequestHandler):
             PLANS[:] = [plan for plan in PLANS if plan["id"] != plan_id]
             for key in KEYS:
                 if key["plan_id"] == plan_id:
-                    key.update(plan_id="", windows=[])
+                    key["plan_id"] = ""
                     refresh_key_quota(key)
             self.send_json(200, {"deleted": plan_id})
         elif route in {("POST", f"{API_BASE}/keys/bind"), ("POST", f"{API_BASE}/keys/unbind")}:
@@ -1539,7 +1556,7 @@ class Handler(BaseHTTPRequestHandler):
                 if key["scope"] == body.get("scope"):
                     plan_id = body.get("plan_id", "")
                     if key["plan_id"] != plan_id:
-                        key.update(plan_id=plan_id, windows=[])
+                        key["plan_id"] = plan_id
                         refresh_key_quota(key)
             self.send_json(200, {"ok": True})
         elif route == ("POST", f"{API_BASE}/keys/label"):

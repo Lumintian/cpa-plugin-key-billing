@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -649,7 +650,7 @@ func TestManagementWriteFailureReturnsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := app.store.KeyViewForScope(scope)
-	if after.PlanID != before.PlanID || after.Windows[0].SpentUSD != before.Windows[0].SpentUSD {
+	if after.PlanID != before.PlanID || !reflect.DeepEqual(after.Windows[0].Dimensions, before.Windows[0].Dimensions) {
 		t.Fatalf("failed reset changed state: %+v", after)
 	}
 	reset, err := app.store.ResetCycles(billing.ResetRequest{Mode: "all", Scopes: []string{scope}})

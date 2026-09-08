@@ -94,7 +94,7 @@ func TestForbiddenModelLeavesTheSubscriptionUntouched(t *testing.T) {
 		t.Fatal("a model the key may not call was admitted")
 	}
 	for _, key := range app.store.KeyViews() {
-		if key.Scope == flowScope() && (!key.Windows[0].EndAt.IsZero() || key.Windows[0].SpentUSD != 0) {
+		if key.Scope == flowScope() && (!key.Windows[0].EndAt.IsZero() || key.Windows[0].Dimensions[0].Used != "0") {
 			t.Fatalf("key = %+v, want its cycle left inactive", key)
 		}
 	}

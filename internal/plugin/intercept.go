@@ -281,11 +281,13 @@ func quotaExhaustedMessage(decision billing.Decision) string {
 	var builder strings.Builder
 	builder.WriteString("API key subscription quota exhausted:")
 	for _, window := range decision.Windows {
-		if !window.Blocked {
-			continue
+		for _, balance := range window.Dimensions {
+			if !balance.Blocked {
+				continue
+			}
+			fmt.Fprintf(&builder, " %q %s, resets at %s;", window.Name,
+				balance.Description(), window.EndAt.UTC().Format(time.RFC3339))
 		}
-		fmt.Fprintf(&builder, " %q $%s / $%s, resets at %s;", window.Name,
-			formatUSD(window.SpentUSD), formatUSD(window.AmountUSD), window.EndAt.UTC().Format(time.RFC3339))
 	}
 	plan := strings.TrimSpace(decision.PlanName)
 	if plan == "" {
@@ -383,10 +385,6 @@ func retryAfterSeconds(resetAt, now time.Time) int {
 		return maxRetryAfterSeconds
 	}
 	return seconds
-}
-
-func formatUSD(amount float64) string {
-	return strconv.FormatFloat(amount, 'f', 4, 64)
 }
 
 func priceRefusal(format, code, message string) RequestInterceptResponse {

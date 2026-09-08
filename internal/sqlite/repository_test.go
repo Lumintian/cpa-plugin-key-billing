@@ -164,3 +164,39 @@ func TestOpenRejectsExistingSchemas(t *testing.T) {
 		})
 	}
 }
+
+func TestQuotaDimensionsExtendExistingJSON(t *testing.T) {
+	const tokenLimit = int64(1<<53 - 1)
+	path := filepath.Join(t.TempDir(), "state.db")
+	database := openDatabase(t, path)
+	// Persist the original amount-only JSON, with no fields for new dimensions.
+	if _, err := database.db.Exec(`INSERT INTO plans (position, id, name, windows_json)
+		VALUES (0, 'p', '团队', '[{"id":"w","name":"额度","period_seconds":3600,"amount_usd":10}]')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.db.Exec(insertKey, "dummy-scope", "sk-dum…0001", "", true, 0, "p", 0,
+		`{"w":{"plan_id":"p","start_at":"2026-09-08T12:00:00Z","end_at":"2026-09-08T13:00:00Z","spent_usd":3.5}}`, `{}`); err != nil {
+		t.Fatal(err)
+	}
+	state := mustLoad(t, database).State
+	cycle := state.Keys["dummy-scope"].Cycles["w"]
+	start := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	if cycle.SpentUSD != 3.5 || !cycle.StartAt.Equal(start) || cycle.UsedTokens != 0 || cycle.UsedRequests != 0 {
+		t.Fatalf("legacy cycle changed: %+v", cycle)
+	}
+	state.Plans[0].Windows[0].TokenLimit = tokenLimit
+	state.Plans[0].Windows[0].RequestLimit = 100
+	cycle.UsedTokens, cycle.UsedRequests = tokenLimit, 7
+	state.Keys["dummy-scope"].Cycles["w"] = cycle
+	state.Plans[0].Windows = append(state.Plans[0].Windows,
+		billing.QuotaWindow{ID: "tokens", Name: "Token", PeriodSeconds: 7200, TokenLimit: 1000},
+		billing.QuotaWindow{ID: "requests", Name: "请求", PeriodSeconds: 86400, RequestLimit: 100})
+	mustSave(t, database, state, billing.Changes{Plans: true, AllKeys: true})
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened := openDatabase(t, path)
+	if loaded := mustLoad(t, reopened).State; !reflect.DeepEqual(loaded, state) {
+		t.Fatalf("quota round trip lost data: got %+v, want %+v", loaded, state)
+	}
+}

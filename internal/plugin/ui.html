@@ -940,44 +940,68 @@
       .icon-action .lucide-icon { width: 16px; height: 16px; }
       body.embedded .standalone-actions { display: none; }
       .account-subscription-stats { margin-bottom: 16px; }
-      .account-plan { display: grid; gap: 10px; margin: 0; }
+      .account-plan { display: grid; align-content: start; gap: 10px; margin: 0; }
       .account-plan-value { font-size: 24px; }
       .quota-windows { display: grid; gap: 6px; min-width: 0; }
-      .quota-window { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+      .quota-window { display: flex; flex-direction: column; min-width: 0; gap: 5px; }
+      .quota-title { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+      .quota-metric { display: grid; gap: 3px; min-width: 0; }
       .quota-windows .bar { height: 4px; }
       .quota-heading {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         gap: 6px;
         font-size: 12px;
         white-space: nowrap;
       }
+      .quota-single .quota-heading { grid-template-columns: minmax(0, 1fr) auto auto; }
       .quota-heading > :first-child { overflow: hidden; text-overflow: ellipsis; }
       .quota-heading .blocked { color: var(--quota-low-color); }
-      #keys-body .quota-windows { width: 240px; }
-      .settings-dialog.plan-dialog { width: min(800px, calc(100vw - 32px)); }
-      .plan-windows-heading { margin-top: 20px; }
-      #plan-windows { display: grid; gap: 14px; margin-top: 12px; }
+      #keys-body .quota-windows { width: 260px; }
+      .settings-dialog.plan-dialog { width: min(720px, calc(100vw - 32px)); }
+      .plan-windows-heading { margin-top: 16px; }
+      #plan-windows { display: grid; gap: 10px; margin-top: 8px; }
       .plan-window {
+        position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1.2fr) auto;
-        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 12px;
+        border: 1px solid var(--border-primary);
+        border-radius: 8px;
+        gap: 10px;
         align-items: start;
       }
       .plan-window input, .plan-dialog > .field input { width: 100%; min-width: 0; }
+      .plan-window-limits { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
       .period-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
-      .window-delete { margin-top: 24px; }
+      .plan-window .window-delete {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        display: grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        min-width: 0;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--text-tertiary);
+        line-height: 1;
+      }
+      .plan-window .window-delete:hover:not(:disabled) { color: var(--error-color); background: var(--bg-hover); }
+      .plan-window button.window-delete:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--primary-color); }
       .field-error { color: var(--error-color); }
       .field-error:empty { display: none; }
       .plan-window [aria-invalid="true"] { border-color: var(--error-color); }
       @media (max-width: 640px) {
-        .plan-window {
-          grid-template-columns: 1fr;
-          padding-bottom: 14px;
-          border-bottom: 1px solid var(--border-primary);
-        }
-        .window-delete { margin-top: 0; justify-self: end; }
+        .plan-window { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); padding: 10px; gap: 8px; }
+        .plan-window-limits { gap: 8px; }
+        .plan-window input { padding-left: 8px; padding-right: 6px; font-size: 12px; }
+        .plan-window .field { font-size: 12px; }
       }
       .account-models {
         display: grid;
@@ -1451,6 +1475,7 @@
       .settings-entry-actions { flex: none; gap: 2px; white-space: nowrap; }
       .settings-entry-fields { display: grid; gap: 9px; }
       .settings-entry-field { align-items: flex-start; }
+      .settings-entry-field > .error-event-field-label { max-width: 45%; overflow-wrap: anywhere; }
       .key-picker label > .tag { flex: none; }
       .settings-entry-value { flex: 1; min-width: 0; color: var(--text-primary); }
       .settings-chip-list { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
@@ -3130,6 +3155,11 @@
 
       const CONCURRENCY_OPTIONS = [0, 1, 2, 3, 5, 10, 20, 50];
       const CUSTOM_CONCURRENCY = "__custom__";
+      const QUOTA_DIMENSIONS = [
+        { key: "amount_usd", metric: "amount_usd", label: "金额", unit: "USD", planUnit: "", format: usd, exact: usd },
+        { key: "token_limit", metric: "tokens", label: "Token", unit: "", planUnit: "Token", format: quotaTokens, exact: exactTokens },
+        { key: "request_limit", metric: "requests", label: "请求", unit: "次", planUnit: "次请求", format: int, exact: int },
+      ];
       const PERIOD_UNITS = [
         [86400, "天"],
         [3600, "小时"],
@@ -3664,6 +3694,11 @@
         if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
         if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
         return String(n);
+      }
+      function quotaTokens(n) {
+        const [scale, suffix] = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]
+          .find(([scale]) => n >= scale) || [1e3, "K"];
+        return Number((n / scale).toFixed(n < 1000 ? 3 : 2)) + suffix;
       }
       function exactTokens(value) {
         return Math.trunc(Number(value || 0)).toLocaleString("en-US");
@@ -7172,12 +7207,7 @@
           items.map((item) =>
             el(
               "span",
-              item.title
-                ? {
-                    class: "settings-chip settings-item-chip" + (item.tag ? " has-tag" : ""),
-                    title: item.title,
-                  }
-                : { class: "settings-chip settings-item-chip" + (item.tag ? " has-tag" : "") },
+              { class: "settings-chip settings-item-chip" + (item.tag ? " has-tag" : ""), title: item.title || null },
               item.tag ? el("span", { class: "settings-chip-label", text: item.text }) : item.text,
               item.tag ? el("span", { class: "tag warn", text: item.tag }) : null,
             ),
@@ -7191,6 +7221,19 @@
           { class: "error-event-field settings-entry-field" },
           el("span", { class: "error-event-field-label", text: label }),
           el("div", { class: "error-event-field-value settings-entry-value" }, content),
+        );
+      }
+
+      function settingsCard(title, fields, onEdit, onDelete) {
+        return el("article", { class: "auth-file-card", role: "listitem" },
+          el("div", { class: "event-entry-head settings-entry-header" },
+            el("div", { class: "settings-entry-title", text: title }),
+            el("div", { class: "row settings-entry-actions" },
+              el("button", { class: "link", text: "编辑", onclick: onEdit }),
+              el("button", { class: "link danger", text: "删除", onclick: onDelete }),
+            ),
+          ),
+          el("div", { class: "settings-entry-fields" }, fields),
         );
       }
 
@@ -7219,50 +7262,25 @@
           empty: "暂无订阅计划",
           render: ({ plan, boundKeys }) => {
             const name = plan.name || plan.id;
-            return el(
-              "article",
-              { class: "auth-file-card", role: "listitem" },
-              el(
-                "div",
-                { class: "event-entry-head settings-entry-header" },
-                el("div", { class: "settings-entry-title", text: name }),
-                el(
-                  "div",
-                  { class: "row settings-entry-actions" },
-                  el("button", { class: "link", text: "编辑", onclick: () => editPlan(plan) }),
-                  el("button", {
-                    class: "link danger",
-                    text: "删除",
-                    onclick: () =>
-                      openActionDialog(
-                        "删除订阅计划「" + name + "」？",
-                        boundKeys.length
-                          ? "将解除 " +
-                              bindingSummary(boundKeys) +
-                              " 的套餐绑定。解除后不再限制套餐额度。" +
-                              (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
-                          : "",
-                        undefined,
-                        async () => {
-                          await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
-                          notify("订阅计划已删除");
-                        },
-                      ),
-                  }),
-                ),
-              ),
-              el(
-                "div",
-                { class: "settings-entry-fields" },
-                plan.windows.map((quotaWindow) =>
-                  el(
-                    "div",
-                    { class: "event-request-meta" },
-                    settingsEntryField(quotaWindow.name, el("b", { class: "mono", text: usd(quotaWindow.amount_usd) })),
-                    settingsEntryField("周期", periodLabel(quotaWindow.period_seconds)),
-                  ),
-                ),
-                boundKeyField(boundKeys),
+            const windows = plan.windows.map((window) => settingsEntryField(
+              window.name + " · " + periodLabel(window.period_seconds),
+              settingsChipList(QUOTA_DIMENSIONS.filter((metric) => window[metric.key] > 0)
+                .map((metric) => ({ text: metric.format(window[metric.key]) + (metric.planUnit ? " " + metric.planUnit : ""),
+                  title: metric.label + "：" + metric.exact(window[metric.key]) }))),
+            ));
+            return settingsCard(name, [...windows, boundKeyField(boundKeys)],
+              () => editPlan(plan),
+              () => openActionDialog(
+                "删除订阅计划「" + name + "」？",
+                boundKeys.length
+                  ? "将解除 " + bindingSummary(boundKeys) + " 的套餐绑定。解除后不再限制套餐额度。" +
+                    (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
+                  : "",
+                undefined,
+                async () => {
+                  await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
+                  notify("订阅计划已删除");
+                },
               ),
             );
           },
@@ -7309,51 +7327,24 @@
                 }),
               );
             const name = route.name || route.id;
-            return el(
-              "article",
-              { class: "auth-file-card", role: "listitem" },
-              el(
-                "div",
-                { class: "event-entry-head settings-entry-header" },
-                el("div", { class: "settings-entry-title", text: name }),
-                el(
-                  "div",
-                  { class: "row settings-entry-actions" },
-                  el("button", { class: "link", text: "编辑", onclick: () => editRoute(route) }),
-                  el("button", {
-                    class: "link danger",
-                    text: "删除",
-                    onclick: () =>
-                      openActionDialog(
-                        "删除路由规则「" + name + "」？",
-                        boundKeys.length
-                          ? "将从 " +
-                              bindingSummary(boundKeys) +
-                              " 的绑定中解除此规则；其中 " +
-                              (route.fully_unrestricted_keys || 0) +
-                              " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
-                          : "此操作无法撤销。",
-                        undefined,
-                        async () => {
-                          await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
-                          notify("路由规则已删除");
-                        },
-                      ),
-                  }),
-                ),
-              ),
-              el(
-                "div",
-                { class: "settings-entry-fields" },
-                settingsEntryField(
-                  "模型范围",
-                  settingsChipList(
-                    models.map((text) => ({ text })),
-                    "全部模型",
-                  ),
-                ),
-                settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
-                boundKeyField(boundKeys),
+            return settingsCard(name, [
+              settingsEntryField("模型范围", settingsChipList(models.map((text) => ({ text })), "全部模型")),
+              settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
+              boundKeyField(boundKeys),
+            ],
+              () => editRoute(route),
+              () => openActionDialog(
+                "删除路由规则「" + name + "」？",
+                boundKeys.length
+                  ? "将从 " + bindingSummary(boundKeys) + " 的绑定中解除此规则；其中 " +
+                    (route.fully_unrestricted_keys || 0) +
+                    " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
+                  : "此操作无法撤销。",
+                undefined,
+                async () => {
+                  await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
+                  notify("路由规则已删除");
+                },
               ),
             );
           },
@@ -8745,55 +8736,35 @@
         );
       }
 
-      function renderQuotaWindows(view, showCountdown = false) {
+      function renderQuotaWindows(view, account = false) {
         if (view.unlimited) return el("span", { class: "muted", text: "不限制" });
-        return el(
-          "div",
-          { class: "quota-windows" },
-          view.windows.map((quotaWindow) => {
-            const quota = remainingQuota(quotaWindow.used_percent);
-            const resetAt = quotaWindow.started ? new Date(quotaWindow.end_at) : null;
-            const resetLabel = quotaWindowResetLabel(quotaWindow, showCountdown);
-            return el(
-              "div",
-              { class: "quota-window" },
-              el(
-                "div",
-                { class: "quota-heading" },
-                el("span", { text: quotaWindow.name, title: quotaWindow.name }),
-                el(
-                  "span",
-                  {
-                    class: "mono",
-                    title: "剩余 " + usd(quotaWindow.remaining_usd) + "/" + usd(quotaWindow.amount_usd),
-                  },
-                  el("span", {
-                    class: quotaWindow.blocked ? "blocked" : "",
-                    text: usd(quotaWindow.remaining_usd),
-                  }),
-                  el("span", { class: "muted", text: "/" + usd(quotaWindow.amount_usd) }),
+        return el("div", { class: "quota-windows" }, view.windows.map((window) => {
+          const dimensions = window.dimensions;
+          const single = dimensions.length === 1;
+          const reset = el("span", { class: "muted", text: quotaWindowResetLabel(window, account),
+            title: window.started ? when(window.end_at) + " 重置" : null });
+          return el("div", { class: "quota-window" + (single ? " quota-single" : "") },
+            single ? null : el("div", { class: "quota-title" }, el("b", { text: window.name }), reset),
+            dimensions.map((balance) => {
+              const metric = QUOTA_DIMENSIONS.find((item) => item.metric === balance.metric);
+              const quota = remainingQuota(balance.used_percent);
+              const label = single ? window.name + (account ? " · " + metric.label : "") : metric.label;
+              return el("div", { class: "quota-metric" },
+                el("div", { class: "quota-heading" },
+                  el(single ? "b" : "span", { class: single ? "" : "muted", text: label, title: single ? label : null }),
+                  el("span", { class: "mono" + (balance.blocked ? " blocked" : ""),
+                    text: metric.format(balance.remaining) + "/" + metric.format(balance.limit),
+                    title: metric.label + " · 剩余 " + metric.exact(balance.remaining) + " · 已用 " + metric.exact(balance.used) + "/" + metric.exact(balance.limit) }),
+                  single ? reset : null,
                 ),
-                el("span", {
-                  class: "muted",
-                  text: resetLabel,
-                  title: resetAt ? when(quotaWindow.end_at) + " 重置" : resetLabel,
-                }),
-              ),
-              el(
-                "div",
-                {
-                  class: "bar",
-                  role: "progressbar",
-                  "aria-label": quotaWindow.name + " 的剩余额度",
-                  "aria-valuemin": "0",
-                  "aria-valuemax": "100",
-                  "aria-valuenow": String(Math.round(quota.percent)),
-                },
-                el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" }),
-              ),
-            );
-          }),
-        );
+                el("div", { class: "bar", role: "progressbar",
+                  "aria-label": window.name + " · " + metric.label + "剩余额度",
+                  "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(quota.percent)) },
+                  el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" })),
+              );
+            }),
+          );
+        }));
       }
 
       function addPlanWindow(quotaWindow = {}) {
@@ -8805,17 +8776,7 @@
         row.append(
           field("窗口名称", el("input", { name: "window_name", value: quotaWindow.name || "", required: true })),
           field(
-            "额度（USD）",
-            el("input", {
-              name: "window_amount",
-              type: "number",
-              step: "any",
-              value: quotaWindow.amount_usd ?? "",
-              required: true,
-            }),
-          ),
-          field(
-            "周期长度",
+            "重置周期",
             el(
               "div",
               { class: "period-input" },
@@ -8841,14 +8802,21 @@
           ),
           el("button", {
             type: "button",
-            class: "link small danger window-delete",
-            text: "删除",
+            class: "icon-action window-delete",
+            "aria-label": "删除窗口",
+            title: "删除窗口",
             onclick: () => {
               row.remove();
               updateWindowDeleteButtons();
             },
-          }),
+          }, actionIcon("x")),
         );
+        row.append(el("div", { class: "plan-window-limits" }, QUOTA_DIMENSIONS.map((metric) => {
+          const input = el("input", { name: metric.key, "aria-label": metric.label, type: "number", min: "0",
+            step: metric.key === "amount_usd" ? "any" : "1", value: quotaWindow[metric.key] || "",
+            placeholder: "不限制" });
+          return field(metric.label + (metric.unit ? "（" + metric.unit + "）" : ""), input);
+        })));
         $("plan-windows").append(row);
         updateWindowDeleteButtons();
         return row;
@@ -8900,7 +8868,7 @@
             $("plan-save").textContent = current ? "保存" : "创建";
             $("plan-name").value = current?.name || "";
             $("plan-windows").replaceChildren();
-            (current?.windows || [{}]).forEach(addPlanWindow);
+            (current ? current.windows : [{}]).forEach(addPlanWindow);
             renderPlanKeyPicker(id || "");
             return {
               plan: current ? { ...structuredClone(current), windows: planFromForm().windows } : null,
@@ -8933,16 +8901,25 @@
           row.querySelectorAll("[aria-invalid]").forEach((input) => input.removeAttribute("aria-invalid"));
           row.querySelectorAll(".field-error").forEach((error) => (error.textContent = ""));
           const nameInput = row.querySelector('[name="window_name"]');
-          const amountInput = row.querySelector('[name="window_amount"]');
+          const limits = {};
           const periodInput = row.querySelector('[name="window_period"]');
           const name = nameInput.value.trim();
-          const amount = amountInput.valueAsNumber;
+
           const seconds = periodInput.valueAsNumber * Number(row.querySelector("select").value);
           if (!name || new TextEncoder().encode(name).length > 128)
             invalid(nameInput, "名称不能为空且不能超过 128 字节");
           else if (names.has(name.toLowerCase())) invalid(nameInput, "窗口名称重复");
           names.add(name.toLowerCase());
-          if (!Number.isFinite(amount) || amount <= 0) invalid(amountInput, "额度必须为正数");
+          for (const metric of QUOTA_DIMENSIONS) {
+            const input = row.querySelector('[name="' + metric.key + '"]');
+            const value = input.value === "" && !input.validity.badInput ? 0 : input.valueAsNumber;
+            if (!Number.isFinite(value) || value < 0) invalid(input, "请输入有效额度");
+            else if (metric.key !== "amount_usd" && !Number.isSafeInteger(value))
+              invalid(input, "请输入有效整数");
+            limits[metric.key] = value;
+          }
+          if (Object.values(limits).every((value) => value === 0))
+            invalid(row.querySelector('[name="amount_usd"]'), "至少设置一种额度");
           if (!Number.isInteger(seconds) || seconds <= 0 || seconds > 9223372036)
             invalid(periodInput, "周期须为 1 到 9223372036 秒的整数");
           else if (periods.has(seconds)) invalid(periodInput, "周期与其他窗口重复");
@@ -8950,7 +8927,7 @@
           return {
             ...(row.dataset.id ? { id: row.dataset.id } : {}),
             name,
-            amount_usd: amount,
+            ...limits,
             period_seconds: seconds,
           };
         });
@@ -9193,6 +9170,7 @@
 
       // @license Lucide Icons v1.40.0 - ISC; SVG assets are embedded locally.
       const LUCIDE_ICONS = {
+        x: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
         refresh: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-cw"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>`,
         sun: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sun"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`,
         moon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-moon"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>`,

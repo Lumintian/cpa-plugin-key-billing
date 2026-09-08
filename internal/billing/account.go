@@ -97,11 +97,16 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		}
 		var changedKeys []string
 		if key := state.ensureKey(scope, event.KeyPreview); key != nil {
-			if !failed || usageBreakdownPresent(event.Breakdown) {
-				missingCycleTime = event.RequestedAt.IsZero() && len(key.Cycles) > 0 && cost.TotalUSD > 0
-				chargeCycles(key, event, cost.TotalUSD)
+			usage := quotaUsage{AmountUSD: cost.TotalUSD}
+			if !failed {
+				usage.Requests = 1
 			}
-			// A completion may arrive after its period ended. Close it now, but do
+			if event.Breakdown.Valid() && event.Breakdown.Quality != TokenAccountingInconsistent {
+				usage.Tokens = event.Breakdown.TotalTokens
+			}
+			missingCycleTime = event.RequestedAt.IsZero() && len(key.Cycles) > 0 && usage != (quotaUsage{})
+			key.chargeCycles(event.RequestedAt, usage)
+			// A usage record may arrive after its period ended. Close it now, but do
 			// not start the next period until another request is admitted.
 			if _, hasPlan := state.FindPlan(key.PlanID); hasPlan {
 				settleExpiredCycles(key, at)
@@ -121,7 +126,7 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		return struct{}{}, changes
 	})
 	if missingCycleTime {
-		s.AddPluginLog(PluginLogError, "用量记录缺少请求时间，保留费用事件并跳过额度扣除")
+		s.AddPluginLog(PluginLogError, "用量记录缺少请求时间，保留用量事件并跳过额度扣除")
 	}
 	if price.Source == PriceSourceReference {
 		s.AddPluginLog(PluginLogDebug,
@@ -129,23 +134,4 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 			billingModel, cost.TotalUSD, cost.AppliedInputPer1M, cost.AppliedOutputPer1M,
 			cost.AppliedCacheReadPer1M, cost.AppliedCacheWritePer1M)
 	}
-}
-
-// Usage never starts a window or charges a replacement window with older usage.
-func chargeCycles(key *KeyState, event UsageEvent, costUSD float64) {
-	if key.PlanID == "" || event.RequestedAt.IsZero() {
-		return
-	}
-	for id, cycle := range key.Cycles {
-		if cycle.PlanID != key.PlanID || event.RequestedAt.Before(cycle.StartAt) || !event.RequestedAt.Before(cycle.EndAt) {
-			continue
-		}
-		cycle.SpentUSD += costUSD
-		key.Cycles[id] = cycle
-	}
-}
-
-func usageBreakdownPresent(value TokenBreakdown) bool {
-	return value.TotalTokens != 0 || value.Input.TotalTokens != 0 || value.Output.TotalTokens != 0 ||
-		value.UnclassifiedTokens != 0 || value.Quality != ""
 }

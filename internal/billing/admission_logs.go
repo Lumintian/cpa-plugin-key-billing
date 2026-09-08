@@ -30,8 +30,11 @@ func (s *Store) ReportQuotaBlock(scope, endpoint string, decision Decision) {
 		message.WriteString(endpoint)
 	}
 	for _, window := range decision.Windows {
-		if window.Blocked {
-			fmt.Fprintf(&message, "，%s 已用 $%.4f / $%.4f（%s 重置）", window.Name, window.SpentUSD, window.AmountUSD, window.EndAt.UTC().Format(time.RFC3339))
+		for _, balance := range window.Dimensions {
+			if balance.Blocked {
+				fmt.Fprintf(&message, "，%s 已用 %s（%s 重置）", window.Name,
+					balance.Description(), window.EndAt.UTC().Format(time.RFC3339))
+			}
 		}
 	}
 	if plan := planName(decision); plan != "" {
@@ -58,6 +61,11 @@ func (d Decision) blockSignature() string {
 	for _, window := range d.Windows {
 		if window.Blocked {
 			fmt.Fprintf(&value, "|%q:%s", window.ID, window.StartAt.UTC().Format(time.RFC3339Nano))
+			for _, balance := range window.Dimensions {
+				if balance.Blocked {
+					fmt.Fprintf(&value, ":%s", balance.Metric)
+				}
+			}
 		}
 	}
 	return value.String()

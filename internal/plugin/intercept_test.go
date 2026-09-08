@@ -203,3 +203,47 @@ func TestCompletionDuringReferencePriceRefresh(t *testing.T) {
 		})
 	}
 }
+
+func TestInterceptEnforcesQuotaDimensionsAfterRestart(t *testing.T) {
+	app, path := newAppWithPriceAndState(t, true)
+	if _, err := app.store.SyncKeys([]string{testAPIKey}, false); err != nil {
+		t.Fatal(err)
+	}
+	_, err := app.store.CreatePlanWithBindings(billing.Plan{ID: "p", Windows: []billing.QuotaWindow{
+		{Name: "请求", RequestLimit: 1, PeriodSeconds: 3600},
+		{Name: "Token", TokenLimit: 1000, PeriodSeconds: 7200},
+	}}, []string{flowScope()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admit(t, app, "openai", "/v1/chat/completions")
+	record := UsageRecord{APIKey: testAPIKey, Model: flowModel, Provider: "openai",
+		RequestedAt: app.store.Now(), Failed: true, Failure: UsageFailure{StatusCode: 502}}
+	publishUsageRecord(t, app, record)
+	if response := callIntercept(t, app, "openai"); response.Terminate {
+		t.Fatal("failed record consumed request quota")
+	}
+	record.Failed = false
+	publishUsageRecord(t, app, record)
+	response := callIntercept(t, app, "openai")
+	if response.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(response.ResponseBody), "requests 1 / 1") {
+		t.Fatalf("successful record did not exhaust request quota: %+v", response)
+	}
+	// This usage belongs to an already admitted concurrent execution.
+	record.Provider = "unknown"
+	record.Detail = UsageDetail{TotalTokens: 1200}
+	publishUsageRecord(t, app, record)
+	app.Shutdown()
+	reopened := newTestApp(t)
+	defer reopened.Shutdown()
+	if _, err := reopened.HandleMethod(MethodPluginRegister, mustMarshal(t, LifecycleRequest{
+		ConfigYAML: []byte("enabled: true\nstate_file: " + path + "\n"),
+	})); err != nil {
+		t.Fatal(err)
+	}
+	response = callIntercept(t, reopened, "openai")
+	if response.StatusCode != 429 || !strings.Contains(string(response.ResponseBody), "tokens 1200 / 1000") ||
+		!strings.Contains(string(response.ResponseBody), "requests 2 / 1") {
+		t.Fatalf("restart did not preserve exhaustion: %+v", response)
+	}
+}
