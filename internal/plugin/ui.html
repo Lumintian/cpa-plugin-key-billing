@@ -6715,7 +6715,7 @@
                   onclick: () =>
                     openActionDialog(
                       "重置订阅额度？",
-                      "所有额度周期将结束，下一次放行会开启新周期。请求事件及其统计不受影响。",
+                      "所有额度周期将结束，下一次放行会开启新周期。",
                       undefined,
                       async () => {
                         await mutateAdmin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
@@ -9472,7 +9472,7 @@
               "更新额度周期？",
               "以下窗口的当前周期和消费将清零：" +
                 affected.map((quotaWindow) => quotaWindow.name).join("、") +
-                "。所有绑定 Key 均受影响，包括已删除 Key；请求事件及其统计不受影响。",
+                "。所有绑定 Key 均受影响，包括已删除 Key。",
             ))
           )
             return false;
@@ -9659,7 +9659,7 @@
       $("keys-reset-all").onclick = () =>
         openActionDialog(
           "重置全员订阅额度？",
-          "所有未删除且绑定计划的 API Key 将结束全部额度周期，下一次放行开启新周期。请求事件及其统计不受影响。",
+          "所有未删除且绑定计划的 API Key 将结束全部额度周期，下一次放行开启新周期。",
           undefined,
           async () => {
             const result = await mutateAdmin("POST", "/keys/reset", { mode: "global" });
