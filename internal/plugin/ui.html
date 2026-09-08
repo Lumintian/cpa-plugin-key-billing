@@ -2943,6 +2943,7 @@
       const CREDENTIAL_DB = "cpa-key-billing-credentials";
       const CREDENTIAL_STORE = "vault";
       const CREDENTIAL_KEY = "wrapping-key";
+      const SESSION_CREDENTIAL_PREFIX = "cpa-key-billing.session.v1.";
       const VIEW_PREFERENCE_PREFIX = "cpa-key-billing.view.v1.";
 
       function panelDeobfuscate(raw) {
@@ -3061,13 +3062,6 @@
       let credentialScope = { admin: "", account: "" };
       let accountTab = initialRoute.role === "account" ? initialRoute.tab : "subscription";
 
-      function credentialRequest(request) {
-        return new Promise((resolve, reject) => {
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error || new Error("浏览器凭据存储失败"));
-        });
-      }
-
       function openCredentialDB() {
         return new Promise((resolve, reject) => {
           if (!window.indexedDB || !window.crypto?.subtle) {
@@ -3081,24 +3075,15 @@
         });
       }
 
-      async function credentialValue(name) {
+      async function credentialTransaction(mode, operation) {
         const db = await openCredentialDB();
         try {
-          return await credentialRequest(db.transaction(CREDENTIAL_STORE).objectStore(CREDENTIAL_STORE).get(name));
-        } finally {
-          db.close();
-        }
-      }
-
-      async function putCredentialValue(name, value) {
-        const db = await openCredentialDB();
-        try {
-          const transaction = db.transaction(CREDENTIAL_STORE, "readwrite");
-          transaction.objectStore(CREDENTIAL_STORE).put(value, name);
-          await new Promise((resolve, reject) => {
-            transaction.oncomplete = resolve;
-            transaction.onerror = () => reject(transaction.error || new Error("浏览器凭据存储失败"));
-            transaction.onabort = () => reject(transaction.error || new Error("浏览器凭据存储失败"));
+          return await new Promise((resolve, reject) => {
+            const transaction = db.transaction(CREDENTIAL_STORE, mode);
+            const request = operation(transaction.objectStore(CREDENTIAL_STORE));
+            transaction.oncomplete = () => resolve(request?.result);
+            transaction.onerror = transaction.onabort = () =>
+              reject(transaction.error || new Error("浏览器凭据存储失败"));
           });
         } finally {
           db.close();
@@ -3107,40 +3092,46 @@
 
       async function deleteCredential(role) {
         try {
-          const db = await openCredentialDB();
-          try {
-            const transaction = db.transaction(CREDENTIAL_STORE, "readwrite");
-            transaction.objectStore(CREDENTIAL_STORE).delete(role);
-            await new Promise((resolve, reject) => {
-              transaction.oncomplete = resolve;
-              transaction.onerror = () => reject(transaction.error || new Error("浏览器凭据存储失败"));
-            });
-          } finally {
-            db.close();
-          }
+          await credentialTransaction("readwrite", (store) => store.delete(role));
         } catch (_) {}
       }
 
       async function wrappingKey() {
-        let key = await credentialValue(CREDENTIAL_KEY);
+        const key = await credentialTransaction("readonly", (store) => store.get(CREDENTIAL_KEY));
         if (key) return key;
-        key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-        await putCredentialValue(CREDENTIAL_KEY, key);
-        return key;
+        const created = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+        const existing = await credentialTransaction("readwrite", (store) => {
+          // Another tab may have created the shared key while generation was pending.
+          const request = store.get(CREDENTIAL_KEY);
+          request.onsuccess = () => {
+            if (!request.result) store.put(created, CREDENTIAL_KEY);
+          };
+          return request;
+        });
+        return existing || created;
       }
 
-      async function rememberCredential(role, credential) {
+      async function saveCredential(role, credential, remember) {
+        const generation = sessionGeneration;
         const key = await wrappingKey();
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(credential));
-        await putCredentialValue(role, { iv: Array.from(iv), data: Array.from(new Uint8Array(data)) });
+        const saved = { iv: Array.from(iv), data: Array.from(new Uint8Array(data)) };
+        await credentialTransaction("readwrite", (store) => {
+          if (generation !== sessionGeneration) return;
+          return remember ? store.put(saved, role) : store.delete(role);
+        });
+        if (generation !== sessionGeneration) return;
+        sessionStorage.setItem(SESSION_CREDENTIAL_PREFIX + role, JSON.stringify(saved));
       }
 
-      async function recalledCredential(role) {
+      async function recalledCredential(role, includeSession = false) {
         try {
-          const saved = await credentialValue(role);
+          const session = includeSession ? sessionStorage.getItem(SESSION_CREDENTIAL_PREFIX + role) : null;
+          const saved = session !== null ? JSON.parse(session) :
+            await credentialTransaction("readonly", (store) => store.get(role));
           if (!saved?.iv || !saved?.data) return "";
-          const key = await wrappingKey();
+          const key = await credentialTransaction("readonly", (store) => store.get(CREDENTIAL_KEY));
           const data = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: new Uint8Array(saved.iv) },
             key,
@@ -3148,7 +3139,6 @@
           );
           return new TextDecoder().decode(data).trim();
         } catch (_) {
-          await deleteCredential(role);
           return "";
         }
       }
@@ -4064,6 +4054,9 @@
       function showGate(mode, error) {
         stopAutoRefresh();
         sessionGeneration++;
+        try {
+          sessionStorage.removeItem(SESSION_CREDENTIAL_PREFIX + mode);
+        } catch (_) {}
         for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
         for (const controller of activeRequests) controller.abort();
         pageRefreshPromise = null;
@@ -9141,15 +9134,12 @@
           if (role === "account") await startAccount(key);
           else await startAdmin(key);
           if (generation !== sessionGeneration) return;
-          if ($("gate-remember").checked) {
-            try {
-              await rememberCredential(role, key);
-            } catch (err) {
-              const message = "已登录，密钥未保存：" + (err.message || err);
-              notify(message, "err");
-            }
-          } else {
-            await deleteCredential(role);
+          try {
+            await saveCredential(role, key, $("gate-remember").checked);
+          } catch (err) {
+            if (generation !== sessionGeneration) return;
+            const message = "已登录，登录状态未保存：" + (err.message || err);
+            notify(message, "err");
           }
           $("gate-key").value = "";
         } catch (err) {
@@ -9752,12 +9742,11 @@
             await startAdmin(panelKey);
             return;
           }
-          const saved = await recalledCredential(loginMode);
+          const saved = await recalledCredential(loginMode, true);
           if (!saved) {
             showGate(loginMode, "");
             return;
           }
-          $("gate-remember").checked = true;
           if (loginMode === "account") await startAccount(saved);
           else await startAdmin(saved);
         } catch (err) {
