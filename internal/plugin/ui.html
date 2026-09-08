@@ -3965,11 +3965,11 @@
           saving: false,
         };
         editors.set(dialog, editor);
-        dialog.showModal();
         const prepare = async () => {
           editorBusy(editor, true);
           editor.notice.className = "editor-state notice show";
           editor.notice.textContent = "正在加载编辑数据…";
+          dialog.showModal();
           try {
             await load?.();
             if (!editorCurrent(editor)) return;
@@ -3977,7 +3977,7 @@
             editor.ready = true;
             editor.notice.className = "editor-state notice hidden";
             editorBusy(editor, false);
-            dialog.querySelector("input:not([type=hidden])")?.focus();
+            dialog.querySelector("input:not([type=hidden]):not(.hidden):enabled")?.focus();
           } catch (error) {
             if (!editorCurrent(editor)) return;
             if (error instanceof StaleRequestError) return prepare();
