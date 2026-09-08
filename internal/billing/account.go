@@ -34,11 +34,22 @@ func (s *Store) RecordUsageError(event UsageEvent, failure RequestError) {
 
 func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 	scope := strings.TrimSpace(event.Scope)
+	provider := strings.TrimSpace(event.Provider)
+	authType := strings.ToLower(strings.TrimSpace(event.AuthType))
+	account := ""
+	switch authType {
+	case "apikey":
+		account = PreviewKey(event.Account)
+	case "oauth":
+		// The host may fall back to the downstream API key when no account is available.
+		if CallerScope(event.Account) != normalizeScope(scope) {
+			account = strings.TrimSpace(event.Account)
+		}
+	}
 	at := event.At
 	if at.IsZero() {
 		at = s.Now()
 	}
-	event.At = at
 	price, billingModel, priceErr := s.ResolveModelPrice(event.UpstreamModel, event.RouteModel, false)
 	if priceErr != nil {
 		s.AddPluginLog(PluginLogError, "模型价格读取失败，保留用量事件并按零计费")
@@ -54,8 +65,7 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 	updateResult(s, func(state *State) (struct{}, Changes) {
 		// ServiceTier is the client-requested tier, not the upstream response tier.
 		if s.cfg.CodexFastModeBilling && price.Source != PriceSourceNone && event.Breakdown.Billable() &&
-			strings.EqualFold(strings.TrimSpace(event.Provider), "codex") &&
-			strings.EqualFold(strings.TrimSpace(event.AuthType), "oauth") &&
+			strings.EqualFold(provider, "codex") && authType == "oauth" &&
 			strings.EqualFold(strings.TrimSpace(event.ServiceTier), "priority") {
 			cost.Multiplier = CodexFastModeMultiplier
 			cost.UncachedInputUSD *= CodexFastModeMultiplier
@@ -81,7 +91,8 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 			At:                entryAt,
 			Scope:             scope,
 			AuthIndex:         event.AuthIndex,
-			Provider:          strings.TrimSpace(event.Provider),
+			Provider:          provider,
+			Account:           account,
 			ExecutorType:      event.ExecutorType,
 			ReasoningEffort:   event.ReasoningEffort,
 			ServiceTier:       event.ServiceTier,
@@ -115,7 +126,6 @@ func (s *Store) recordUsage(event UsageEvent, failure *RequestError) {
 		}
 		changes := Changes{
 			Keys:               changedKeys,
-			Credentials:        learnCredential(state, scope, event.AuthIndex, event.Provider, event.AuthType, event.Account),
 			RequestEventCutoff: at.Add(-RequestEventRetention),
 		}
 		if failure == nil {

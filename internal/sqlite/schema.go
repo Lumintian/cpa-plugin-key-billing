@@ -66,19 +66,13 @@ CREATE TABLE reference_prices (
 
 CREATE INDEX reference_prices_match_key ON reference_prices(match_key);
 
-CREATE TABLE credentials (
-	auth_index TEXT PRIMARY KEY,
-	provider   TEXT NOT NULL DEFAULT '',
-	account    TEXT NOT NULL DEFAULT '',
-	name       TEXT NOT NULL DEFAULT ''
-);
-
 CREATE TABLE request_events (
 	id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 	at                          INTEGER NOT NULL,
 	scope                       TEXT    NOT NULL,
 	auth_index                  TEXT    NOT NULL DEFAULT '',
 	provider                    TEXT    NOT NULL DEFAULT '',
+	account                     TEXT    NOT NULL DEFAULT '',
 	executor_type               TEXT    NOT NULL DEFAULT '',
 	reasoning_effort            TEXT    NOT NULL DEFAULT '',
 	service_tier                TEXT    NOT NULL DEFAULT '',

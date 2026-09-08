@@ -128,9 +128,7 @@ func (r *memoryRepository) RequestEvents(query RequestEventQuery, since time.Tim
 		if entry.At.Before(since) || (query.Scope != "" && entry.Scope != query.Scope) {
 			continue
 		}
-		credential := r.state.Credentials[entry.AuthIndex]
-		entry.Provider = credential.Provider
-		row := RequestEventRow{RequestEvent: entry, Source: credential.Name()}
+		row := RequestEventRow{RequestEvent: entry}
 		if key := r.state.Keys[entry.Scope]; key != nil {
 			row.Preview, row.Label = key.Preview, key.Label
 		}
@@ -154,7 +152,6 @@ func (r *memoryRepository) RequestErrors(query RequestErrorQuery, since time.Tim
 		if key := r.state.Keys[write.Event.Scope]; key != nil {
 			row.Preview, row.Label = key.Preview, key.Label
 		}
-		row.Source = r.state.Credentials[write.Event.AuthIndex].Name()
 		view.Entries = append(view.Entries, row)
 	}
 	view.Total = len(view.Entries)
@@ -186,7 +183,7 @@ func newStoreWithRepository(t *testing.T) (*Store, *memoryRepository) {
 func (s *Store) ReplaceAll(fn func(*State)) {
 	updateResult(s, func(state *State) (struct{}, Changes) {
 		fn(state)
-		return struct{}{}, Changes{AllKeys: true, Plans: true, Routes: true, Credentials: true}
+		return struct{}{}, Changes{AllKeys: true, Plans: true, Routes: true}
 	})
 }
 

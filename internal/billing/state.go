@@ -11,17 +11,12 @@ type State struct {
 	Plans  []Plan
 	Keys   map[string]*KeyState
 	Routes []Route
-	// Credentials names the upstream credentials seen so far, keyed by the
-	// host's runtime auth index. Request events store that index and read the name
-	// from here, so a credential renamed upstream renames its history too.
-	Credentials map[string]Credential
 }
 
 func NewState() *State {
 	return &State{
-		Prices:      make(map[string]CustomPrice),
-		Keys:        make(map[string]*KeyState),
-		Credentials: make(map[string]Credential),
+		Prices: make(map[string]CustomPrice),
+		Keys:   make(map[string]*KeyState),
 	}
 }
 

@@ -30,7 +30,8 @@ func TestV12PriceMigrationPreservesModelIDsAndHistory(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := legacy.Exec("INSERT INTO request_events(at,scope,failed) VALUES(1,'old-key',1),(2,'old-key',0)"); err != nil {
+			if _, err := legacy.Exec(`INSERT INTO credentials VALUES('auth','codex','user@example.com','old format');
+				INSERT INTO request_events(at,scope,auth_index,failed) VALUES(1,'old-key','auth',1),(2,'old-key','auth',0)`); err != nil {
 				t.Fatal(err)
 			}
 			if err := legacy.Close(); err != nil {
@@ -53,7 +54,7 @@ func TestV12PriceMigrationPreservesModelIDsAndHistory(t *testing.T) {
 				}
 			}
 			var events int
-			if err := database.db.QueryRow("SELECT count(*) FROM request_events").Scan(&events); err != nil || events != 2 {
+			if err := database.db.QueryRow("SELECT count(*) FROM request_events WHERE provider='codex' AND account='user@example.com'").Scan(&events); err != nil || events != 2 {
 				t.Fatalf("usage history changed: events=%d err=%v", events, err)
 			}
 		})
@@ -62,8 +63,8 @@ func TestV12PriceMigrationPreservesModelIDsAndHistory(t *testing.T) {
 
 func TestV10V11PricingMigrationIsAtomicAndPreservesLegacyJSON(t *testing.T) {
 	for _, version := range []int{10, 11} {
-		for _, conflict := range []bool{false, true} {
-			t.Run(fmt.Sprintf("v%d/conflict=%t", version, conflict), func(t *testing.T) {
+		for _, conflict := range []string{"", "reference-prices", "credentials"} {
+			t.Run(fmt.Sprintf("v%d/conflict=%s", version, conflict), func(t *testing.T) {
 				path := filepath.Join(t.TempDir(), "legacy.db")
 				raw, err := sql.Open("sqlite3", path)
 				if err != nil {
@@ -74,7 +75,8 @@ func TestV10V11PricingMigrationIsAtomicAndPreservesLegacyJSON(t *testing.T) {
 				old += `ALTER TABLE plans ADD COLUMN period_kind TEXT NOT NULL DEFAULT 'monthly';
 INSERT INTO plans(position,id,name,amount_usd) VALUES(0,'plan','legacy plan',100);
 INSERT INTO prices(position,pattern) VALUES(0,'model-a');
-INSERT INTO request_events(id,at,scope,failed) VALUES(1,1,'legacy-scope',1),(2,2,'legacy-scope',0);
+INSERT INTO credentials VALUES('auth','codex','user@example.com','old format');
+INSERT INTO request_events(id,at,scope,auth_index,failed) VALUES(1,1,'legacy-scope','auth',1),(2,2,'legacy-scope','auth',0);
 INSERT INTO request_errors(request_event_id,status_code,reason) VALUES(1,502,'preserved failure');`
 				if version == 10 {
 					old += `DROP TABLE routes;
@@ -100,20 +102,23 @@ VALUES('legacy-scope','plan',4.5,'[{"kind":"model","value":"model-a"}]');`
 					old += `UPDATE api_keys SET route_bindings_json='[]' WHERE scope IN ('zero-active','zero-idle');`
 				}
 
-				if conflict {
+				if conflict == "reference-prices" {
 					// Fail after the earlier migration steps have transformed legacy
 					// bindings and periods, proving the entire chain rolls back.
 					old += `CREATE TABLE reference_prices_metadata(marker TEXT); INSERT INTO reference_prices_metadata VALUES('keep');`
+				}
+				if conflict == "credentials" {
+					old += `ALTER TABLE credentials ADD COLUMN unknown_field TEXT;`
 				}
 				old += fmt.Sprintf("PRAGMA user_version=%d;", version)
 				if _, err := raw.Exec(old); err != nil {
 					t.Fatal(err)
 				}
 				d, err := Open(path)
-				if conflict {
+				if conflict != "" {
 					if err == nil {
 						d.Close()
-						t.Fatal("incompatible reference price schema accepted")
+						t.Fatal("incompatible legacy schema accepted")
 					}
 					var preservedVersion int
 					if err := raw.QueryRow("PRAGMA user_version").Scan(&preservedVersion); err != nil || preservedVersion != version {
@@ -140,6 +145,10 @@ VALUES('legacy-scope','plan',4.5,'[{"kind":"model","value":"model-a"}]');`
 				}
 				defer d.Close()
 				assertMigratedReferencePriceSchema(t, d)
+				var accounts int
+				if err := raw.QueryRow("SELECT count(*) FROM request_events WHERE provider='codex' AND account='user@example.com'").Scan(&accounts); err != nil || accounts != 2 {
+					t.Fatal("event accounts were not migrated", accounts, err)
+				}
 				snapshot, err := d.Load(time.Time{}, time.Time{})
 				if err != nil {
 					t.Fatal(err)
@@ -311,6 +320,101 @@ CREATE TABLE plugin_logs (
 
 CREATE INDEX plugin_logs_at ON plugin_logs(at);
 `
+
+func TestV13AccountMigrationAndRollback(t *testing.T) {
+	for _, scenario := range []struct{ name, sql string }{
+		{"migrate", ""},
+		{"incompatible-table", "ALTER TABLE credentials ADD COLUMN unknown_field TEXT"},
+		{"update-failure", "CREATE TRIGGER reject_update BEFORE UPDATE ON request_events BEGIN SELECT RAISE(ABORT, 'dummy failure'); END"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "v13.db")
+			raw, err := sql.Open("sqlite3", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer raw.Close()
+			if _, err := raw.Exec(legacyPricingSchemaSQL); err != nil {
+				t.Fatal(err)
+			}
+			fixture := &DB{db: raw}
+			if err := fixture.transact(func(tx *sql.Tx) error {
+				if err := migrateModelPricing(tx); err != nil {
+					return err
+				}
+				return migrateQuotaWindows(tx)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := raw.Exec(`PRAGMA user_version=13;
+				INSERT INTO credentials VALUES('auth','codex','user@example.com','old format');
+				INSERT INTO request_events(id,at,scope,auth_index,provider,failed,total_usd) VALUES
+					(1,1,'s','auth','',0,2.5),(2,2,'s','auth','historical-provider',1,0),(3,3,'s','','',0,0);
+				INSERT INTO request_errors(request_event_id,status_code,body) VALUES(2,502,'preserved failure');
+			` + scenario.sql); err != nil {
+				t.Fatal(err)
+			}
+			database, err := Open(path)
+			if scenario.sql != "" {
+				if err == nil {
+					database.Close()
+					t.Fatal("incompatible migration succeeded")
+				}
+				var version, columns, events int
+				var provider, account string
+				if err := raw.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 13 {
+					t.Fatal("schema version was not rolled back", version, err)
+				}
+				if err := raw.QueryRow("SELECT count(*) FROM pragma_table_info('request_events') WHERE name='account'").Scan(&columns); err != nil || columns != 0 {
+					t.Fatal("account column was not rolled back", columns, err)
+				}
+				if err := raw.QueryRow("SELECT provider FROM request_events WHERE id=1").Scan(&provider); err != nil || provider != "" {
+					t.Fatal("event provider was not rolled back", provider, err)
+				}
+				if err := raw.QueryRow("SELECT account FROM credentials WHERE auth_index='auth'").Scan(&account); err != nil || account != "user@example.com" {
+					t.Fatal("old credential was lost", account, err)
+				}
+				if err := raw.QueryRow("SELECT count(*) FROM request_events").Scan(&events); err != nil || events != 3 {
+					t.Fatal("history was lost", events, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := database.Close(); err != nil {
+				t.Fatal(err)
+			}
+			database = openDatabase(t, path)
+			var version, credentials int
+			if err := raw.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 14 {
+				t.Fatal("incorrect schema version", version, err)
+			}
+			if err := raw.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='credentials'").Scan(&credentials); err != nil || credentials != 0 {
+				t.Fatal("old credentials table remains", credentials, err)
+			}
+			view, err := database.RequestEvents(billing.RequestEventQuery{}, time.Time{})
+			if err != nil || len(view.Entries) != 3 || view.Total != 3 || view.Statuses.Failed != 1 {
+				t.Fatalf("migrated events = %+v, err = %v", view, err)
+			}
+			for i, want := range []struct{ provider, account string }{
+				{"", ""}, {"historical-provider", "user@example.com"}, {"codex", "user@example.com"},
+			} {
+				if row := view.Entries[i]; row.ID != int64(3-i) || row.Provider != want.provider || row.Account != want.account {
+					t.Fatalf("migrated event = %+v", row)
+				}
+			}
+			if view.Entries[2].Cost.TotalUSD != 2.5 || view.Entries[1].Cost.TotalUSD != 0 || view.Entries[0].Cost.TotalUSD != 0 {
+				t.Fatal("historical costs changed")
+			}
+			errors, err := database.RequestErrors(billing.RequestErrorQuery{}, time.Time{})
+			if err != nil || len(errors.Entries) != 1 || errors.Entries[0].ID != 2 ||
+				errors.Entries[0].StatusCode != 502 || errors.Entries[0].Body != "preserved failure" {
+				t.Fatalf("migrated errors = %+v, err = %v", errors, err)
+			}
+		})
+	}
+}
 
 func TestV12QuotaWindowsMigrationAndRollback(t *testing.T) {
 	for _, scenario := range []string{"", "zero period", "missing cycle time", "mixed format"} {

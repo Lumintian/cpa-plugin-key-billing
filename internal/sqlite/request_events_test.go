@@ -13,6 +13,7 @@ var eventStart = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 func requestEvent(scope string, at time.Time) billing.RequestEvent {
 	return billing.RequestEvent{
 		At: at, Scope: scope, AuthIndex: "auth-codex", ExecutorType: "CodexExecutor",
+		Provider: "codex", Account: "ops@example.com",
 		ReasoningEffort: "high", ServiceTier: "auto",
 		UpstreamModel: "gpt-5.5", BillingModel: "gpt-5.5",
 		LatencyMS: 1500, TTFTMS: 250,
@@ -32,7 +33,6 @@ func requestEventDatabase(t *testing.T) (*DB, *billing.State) {
 	state := billing.NewState()
 	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-tes…0001", Label: "Alice"}
 	state.Keys["scope-b"] = &billing.KeyState{Preview: "sk-tes…0002", Label: "Bob"}
-	state.Credentials["auth-codex"] = billing.Credential{Provider: "codex", Account: "ops@example.com"}
 
 	events := make([]billing.RequestEvent, 0, 4)
 	for i := range 4 {
@@ -42,7 +42,7 @@ func requestEventDatabase(t *testing.T) (*DB, *billing.State) {
 		{Event: requestEvent("scope-b", eventStart.Add(4*time.Minute))},
 		{Event: requestEvent("scope-b", eventStart.Add(5*time.Minute))},
 	}
-	mustSave(t, database, state, billing.Changes{AllKeys: true, Credentials: true, NormalRequestEvents: events, RequestErrorEvents: errors})
+	mustSave(t, database, state, billing.Changes{AllKeys: true, NormalRequestEvents: events, RequestErrorEvents: errors})
 	return database, state
 }
 
@@ -103,12 +103,13 @@ func TestRequestEventFailedFilterKeepsOverallCounts(t *testing.T) {
 
 func TestRequestEventFieldAndTimeFilters(t *testing.T) {
 	database, state := requestEventDatabase(t)
-	state.Credentials["auth-xai"] = billing.Credential{Provider: "xai", Account: "ops-xai@example.com"}
 	entry := requestEvent("scope-b", eventStart.Add(6*time.Minute))
 	entry.AuthIndex = "auth-xai"
+	entry.Provider = "xai"
+	entry.Account = "ops-xai@example.com"
 	entry.UpstreamModel = "gpt-5.6-sol"
 	entry.BillingModel = "team/gpt-5.6-sol"
-	mustSave(t, database, state, billing.Changes{Credentials: true, NormalRequestEvents: []billing.RequestEvent{entry}})
+	mustSave(t, database, state, billing.Changes{NormalRequestEvents: []billing.RequestEvent{entry}})
 
 	query := billing.RequestEventQuery{
 		KeyScope: "scope-b", Model: "team/gpt-5.6-sol", Source: "xai · ops-xai@example.com",
@@ -121,11 +122,72 @@ func TestRequestEventFieldAndTimeFilters(t *testing.T) {
 	if view.Filters == nil || len(view.Filters.Models) != 1 || len(view.Filters.Sources) != 1 {
 		t.Fatalf("filter options = %+v", view.Filters)
 	}
+	query.Source = "XAI · ops-xai@example.com"
+	if view := mustQueryRequestEvents(t, database, query); view.Total != 0 {
+		t.Fatal("source filter no longer uses exact matching")
+	}
 
 	if outside := mustQueryRequestEvents(t, database, billing.RequestEventQuery{
 		From: entry.At.Add(time.Nanosecond), To: entry.At.Add(time.Minute),
 	}); outside.Total != 0 {
 		t.Fatalf("outside range total = %d, want 0", outside.Total)
+	}
+}
+
+func TestRequestEventAccountChangesPreserveHistory(t *testing.T) {
+	database, state := requestEventDatabase(t)
+	original := mustQueryRequestEvents(t, database, billing.RequestEventQuery{})
+	entry := requestEvent("scope-a", eventStart.Add(10*time.Minute))
+	entry.Account = "new@example.com"
+	mustSave(t, database, state, billing.Changes{RequestErrorEvents: []billing.RequestErrorEvent{{Event: entry}}})
+	entry.Provider = "openai-compatible-dummy"
+	mustSave(t, database, state, billing.Changes{RequestErrorEvents: []billing.RequestErrorEvent{{Event: entry}}})
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	database = openDatabase(t, database.path)
+	if view := mustQueryRequestEvents(t, database, billing.RequestEventQuery{SnapshotID: &original.SnapshotID}); !reflect.DeepEqual(view.Entries, original.Entries) {
+		t.Fatal("later usage changed historical events")
+	}
+	wantSources := make(map[string]int64)
+	for _, test := range []struct {
+		source           string
+		requests, failed int
+	}{
+		{"codex · ops@example.com", 6, 2},
+		{"codex · new@example.com", 1, 1},
+		{"dummy · new@example.com", 1, 1},
+	} {
+		wantSources[test.source] = int64(test.requests)
+		query := billing.RequestEventQuery{Source: test.source,
+			IncludeFilters: true, From: eventStart, To: eventStart.Add(time.Hour)}
+		view := mustQueryRequestEvents(t, database, query)
+		if view.Total != test.requests || view.Statuses.Failed != test.failed || len(view.Filters.Sources) != 3 {
+			t.Fatalf("filtered events = %+v", view)
+		}
+		errors, err := database.RequestErrors(billing.RequestErrorQuery{Source: test.source}, eventStart)
+		if err != nil || errors.Total != test.failed || errors.Entries[0].Source != test.source {
+			t.Fatalf("filtered errors = %+v, err = %v", errors, err)
+		}
+		analysis, err := database.Analysis(query, eventStart)
+		if err != nil || analysis.Summary.Requests != int64(test.requests) ||
+			len(analysis.UsageDistribution.Sources) != 1 || analysis.UsageDistribution.Sources[0].Label != test.source {
+			t.Fatalf("filtered analysis = %+v, err = %v", analysis, err)
+		}
+	}
+	analysis, err := database.Analysis(billing.RequestEventQuery{From: eventStart, To: eventStart.Add(time.Hour)}, eventStart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := make(map[string]int64)
+	for _, source := range analysis.UsageDistribution.Sources {
+		sources[source.Label] = source.Requests
+		if source.TotalTokens != source.Requests*1000 || source.CostUSD != float64(source.Requests)*0.5 {
+			t.Fatalf("source usage = %+v", source)
+		}
+	}
+	if !reflect.DeepEqual(sources, wantSources) {
+		t.Fatalf("source distribution = %+v, want %+v", sources, wantSources)
 	}
 }
 

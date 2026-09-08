@@ -14,7 +14,6 @@ func requestErrorDatabase(t *testing.T) *DB {
 	state := billing.NewState()
 	state.Keys["scope-a"] = &billing.KeyState{Preview: "sk-aaa…0001", Label: "Alice"}
 	state.Keys["scope-b"] = &billing.KeyState{Preview: "sk-bbb…0002", Label: "Bob"}
-	state.Credentials["auth-codex"] = billing.Credential{Provider: "codex", Account: "ops@example.com"}
 	events := []billing.RequestEvent{requestEvent("scope-a", eventStart)}
 	errors := []billing.RequestErrorEvent{
 		{Event: requestEvent("scope-a", eventStart.Add(time.Minute)), Error: billing.RequestError{
@@ -24,7 +23,7 @@ func requestErrorDatabase(t *testing.T) *DB {
 			StatusCode: 502, ErrorType: "upstream_error", Reason: "HTTP 502", Body: `{"error":"bad gateway"}`,
 		}},
 	}
-	mustSave(t, database, state, billing.Changes{AllKeys: true, Credentials: true, NormalRequestEvents: events, RequestErrorEvents: errors})
+	mustSave(t, database, state, billing.Changes{AllKeys: true, NormalRequestEvents: events, RequestErrorEvents: errors})
 	return database
 }
 

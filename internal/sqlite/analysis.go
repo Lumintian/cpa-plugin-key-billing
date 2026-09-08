@@ -50,12 +50,10 @@ func (d *DB) Analysis(query billing.RequestEventQuery, since time.Time) (billing
 			target:  &view.UsageDistribution.APIKeys,
 		})
 	}
+	sourceName := "coalesce(NULLIF(" + requestEventSourceName + ", ''), '未知来源')"
 	dimensions = append(dimensions,
 		analysisDimension{name: "模型", key: analysisModelSQL, label: analysisModelSQL, target: &view.UsageDistribution.Models},
-		analysisDimension{
-			name: "来源", key: "coalesce(NULLIF(c.name, ''), '未知来源')",
-			label: "coalesce(NULLIF(c.name, ''), '未知来源')", target: &view.UsageDistribution.Sources,
-		},
+		analysisDimension{name: "来源", key: sourceName, label: sourceName, target: &view.UsageDistribution.Sources},
 	)
 	for _, dimension := range dimensions {
 		preview := dimension.preview

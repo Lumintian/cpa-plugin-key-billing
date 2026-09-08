@@ -3,11 +3,13 @@ package billing
 import "time"
 
 // RequestEvent is one persisted request record and never stores a plaintext API key.
+// Account contains only an OAuth identity or masked API key.
 type RequestEvent struct {
 	At              time.Time `json:"at"`
 	Scope           string    `json:"scope"`
 	AuthIndex       string    `json:"auth_index,omitempty"`
 	Provider        string    `json:"provider,omitempty"`
+	Account         string    `json:"account,omitempty"`
 	ExecutorType    string    `json:"executor_type,omitempty"`
 	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
 	ServiceTier     string    `json:"service_tier,omitempty"`
@@ -28,8 +30,7 @@ type RequestEvent struct {
 
 const RequestEventRetention = 365 * 24 * time.Hour
 
-// Display identity is joined rather than copied into every entry, so Key and
-// credential renames update historical rows without rewriting request events.
+// Source uses the event's account snapshot; key labels use their current values.
 type RequestEventRow struct {
 	RequestEvent
 	// Encode the database identity as a string to preserve all 64 bits in browsers.

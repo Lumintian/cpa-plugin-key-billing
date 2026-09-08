@@ -26,19 +26,14 @@ type Snapshot struct {
 	RequestEventCount int
 }
 
-// Changes names the rows one mutation touched, so a save writes those and no
-// others. Plans, routes, and credentials are replaced whole because
-// an operator changes them a few rows at a time and there are never many; keys
-// are named individually because usage accounting runs on every proxied request
-// and must touch a single row.
+// Usage accounting writes only the affected keys; plans and routes are replaced whole.
 type Changes struct {
 	// Keys lists the scopes to upsert. AllKeys upserts every key in State.
 	Keys    []string
 	AllKeys bool
 
-	Plans       bool
-	Routes      bool
-	Credentials bool
+	Plans  bool
+	Routes bool
 
 	NormalRequestEvents []RequestEvent
 	RequestErrorEvents  []RequestErrorEvent
@@ -48,7 +43,7 @@ type Changes struct {
 const maxPendingRequestRecords = 1000
 
 func (c Changes) empty() bool {
-	return len(c.Keys) == 0 && !c.AllKeys && !c.Plans && !c.Routes && !c.Credentials &&
+	return len(c.Keys) == 0 && !c.AllKeys && !c.Plans && !c.Routes &&
 		len(c.NormalRequestEvents) == 0 && len(c.RequestErrorEvents) == 0 && c.RequestEventCutoff.IsZero()
 }
 
@@ -63,7 +58,6 @@ func (c Changes) merge(next Changes) Changes {
 		AllKeys:             c.AllKeys || next.AllKeys,
 		Plans:               c.Plans || next.Plans,
 		Routes:              c.Routes || next.Routes,
-		Credentials:         c.Credentials || next.Credentials,
 		NormalRequestEvents: append(append([]RequestEvent(nil), c.NormalRequestEvents...), next.NormalRequestEvents...),
 		RequestErrorEvents:  append(append([]RequestErrorEvent(nil), c.RequestErrorEvents...), next.RequestErrorEvents...),
 		RequestEventCutoff:  next.RequestEventCutoff,

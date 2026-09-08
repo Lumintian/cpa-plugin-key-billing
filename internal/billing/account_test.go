@@ -67,6 +67,35 @@ func TestRecordUsageSeparatesNormalAndErrorEvents(t *testing.T) {
 	}
 }
 
+func TestRecordUsageStoresSafeAccount(t *testing.T) {
+	const downstreamKey = "sk-dummy-downstream-0001"
+	for _, test := range []struct{ authType, account, want string }{
+		{"oauth", "user@example.com", "user@example.com"},
+		{"apikey", "sk-dummy-upstream-0001", "sk-dum…0001"},
+		{"oauth", downstreamKey, ""},
+		{"", "dummy-unknown-secret", ""},
+	} {
+		t.Run(test.authType+"/"+test.account, func(t *testing.T) {
+			now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+			store := newAccountStore(t, now)
+			event := subsetEvent(CallerScope(downstreamKey), now)
+			event.AuthIndex = ""
+			event.Provider, event.AuthType, event.Account = "codex", test.authType, test.account
+			store.RecordUsage(event)
+			store.RecordUsageError(event, RequestError{StatusCode: 502})
+			view := mustRequestEvents(t, store, RequestEventQuery{})
+			if len(view.Entries) != 2 {
+				t.Fatalf("events = %+v", view)
+			}
+			for _, entry := range view.Entries {
+				if entry.Provider != "codex" || entry.Account != test.want {
+					t.Fatalf("event identity = %+v", entry)
+				}
+			}
+		})
+	}
+}
+
 func TestRecordUsageGroupsAndPricesByBillingModel(t *testing.T) {
 	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	store := newAccountStore(t, now)

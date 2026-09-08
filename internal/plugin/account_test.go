@@ -142,7 +142,7 @@ func TestAccountRequestEventsUseSharedShapeWithoutCrossingScopes(t *testing.T) {
 		t.Fatalf("view = %+v", view)
 	}
 	if view.Filters == nil || len(view.Filters.Models) != 1 || view.Filters.Models[0] != "gpt-5.5" ||
-		len(view.Filters.Sources) != 0 {
+		len(view.Filters.Sources) != 1 || view.Filters.Sources[0] != "openai" {
 		t.Fatalf("account request event filter options = %+v", view.Filters)
 	}
 	from := view.Entries[0].At.Format(time.RFC3339Nano)

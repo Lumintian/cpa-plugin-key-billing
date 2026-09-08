@@ -29,34 +29,22 @@ const requestErrorSource = `
 	FROM request_errors e
 	JOIN request_events r ON r.id = e.request_event_id
 	LEFT JOIN api_keys k ON k.scope = r.scope
-	LEFT JOIN credentials c ON c.auth_index = r.auth_index
 	WHERE r.at >= ?`
 
 func requestErrorFilter(query billing.RequestErrorQuery, since time.Time) (string, []any) {
 	where, args := eventPageFilter(requestErrorSource, query.From, query.To, since, query.SnapshotID)
-	if value := strings.TrimSpace(query.Scope); value != "" {
-		where += " AND r.scope = ?"
-		args = append(args, value)
-	}
-	if value := strings.TrimSpace(query.KeyScope); value != "" {
-		where += " AND r.scope = ?"
-		args = append(args, value)
-	}
-	if value := strings.TrimSpace(query.Model); value != "" {
-		where += " AND coalesce(NULLIF(r.billing_model, ''), r.upstream_model) = ?"
-		args = append(args, value)
-	}
-	if value := strings.TrimSpace(query.Source); value != "" {
-		where += " AND coalesce(c.name, '') = ?"
-		args = append(args, value)
-	}
-	if value := strings.TrimSpace(query.Executor); value != "" {
-		where += " AND r.executor_type = ?"
-		args = append(args, value)
-	}
-	if value := strings.TrimSpace(query.Provider); value != "" {
-		where += " AND coalesce(NULLIF(r.provider, ''), c.provider, '') = ?"
-		args = append(args, value)
+	for _, filter := range []struct{ expression, value string }{
+		{"r.scope", query.Scope},
+		{"r.scope", query.KeyScope},
+		{"coalesce(NULLIF(r.billing_model, ''), r.upstream_model)", query.Model},
+		{"(" + requestEventSourceName + ")", query.Source},
+		{"r.executor_type", query.Executor},
+		{"r.provider", query.Provider},
+	} {
+		if value := strings.TrimSpace(filter.value); value != "" {
+			where += " AND " + filter.expression + " = ?"
+			args = append(args, value)
+		}
 	}
 	if query.StatusCode > 0 {
 		where += " AND e.status_code = ?"
@@ -123,9 +111,9 @@ func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (bi
 	if limit <= 0 {
 		limit = -1
 	}
-	pageArgs := append(append([]any(nil), args...), limit, query.Offset)
+	pageArgs := append(args, limit, query.Offset)
 	rows, err := d.db.Query(`SELECT r.id, r.at, r.scope, coalesce(k.preview, ''), coalesce(k.label, ''),
-		r.auth_index, coalesce(c.name, ''), coalesce(NULLIF(r.provider, ''), c.provider, ''),
+		r.auth_index, `+requestEventSourceName+`, r.provider,
 		r.executor_type, r.upstream_model, r.billing_model, r.latency_ms, r.ttft_ms,
 		e.status_code, e.error_type, e.reason, e.body`+where+` ORDER BY r.at DESC, r.id DESC LIMIT ? OFFSET ?`, pageArgs...)
 	if err != nil {
@@ -156,8 +144,8 @@ func (d *DB) requestErrorFilterValues(query billing.RequestErrorQuery, since tim
 		args = append(args, scope)
 	}
 	rows, err := d.db.Query(`WITH filtered AS (
-		SELECT coalesce(NULLIF(r.billing_model, ''), r.upstream_model) model, coalesce(c.name, '') source,
-		r.executor_type executor, coalesce(NULLIF(r.provider, ''), c.provider, '') provider,
+		SELECT coalesce(NULLIF(r.billing_model, ''), r.upstream_model) model, `+requestEventSourceName+` source,
+		r.executor_type executor, r.provider,
 		e.status_code, e.error_type`+where+`)
 		SELECT kind, value FROM (
 		SELECT 'model' kind, model value FROM filtered WHERE model != '' GROUP BY model

@@ -57,7 +57,6 @@ func TestRepositoryRoundTrip(t *testing.T) {
 			CredentialProviders: []billing.CredentialProviderSelector{},
 		},
 		Cycles: map[string]billing.QuotaCycle{"default": {PlanID: "weekly", StartAt: start, EndAt: start.Add(7 * 24 * time.Hour), SpentUSD: 1.5}, "long": {PlanID: "weekly", StartAt: start, EndAt: start.Add(14 * 24 * time.Hour), SpentUSD: 9}}}
-	state.Credentials["auth-1"] = billing.Credential{Provider: "codex", Account: "ops@example.com"}
 
 	database := openDatabase(t, path)
 	for _, price := range state.Prices {
@@ -65,8 +64,8 @@ func TestRepositoryRoundTrip(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true, Routes: true, Credentials: true,
-		RequestErrorEvents: []billing.RequestErrorEvent{{Event: billing.RequestEvent{At: start, Scope: "scope-a", AuthIndex: "auth-1", Provider: "codex", BillingModel: "gpt-5.5"},
+	mustSave(t, database, state, billing.Changes{AllKeys: true, Plans: true, Routes: true,
+		RequestErrorEvents: []billing.RequestErrorEvent{{Event: billing.RequestEvent{At: start, Scope: "scope-a", AuthIndex: "auth-1", Provider: "codex", Account: "ops@example.com", BillingModel: "gpt-5.5"},
 			Error: billing.RequestError{StatusCode: 429, ErrorType: "rate_limit", Body: "limited"}}}})
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
@@ -77,7 +76,7 @@ func TestRepositoryRoundTrip(t *testing.T) {
 		t.Fatalf("state = %+v, want %+v", loaded.State, state)
 	}
 	errors, err := reopened.RequestErrors(billing.RequestErrorQuery{Limit: 10}, time.Time{})
-	if err != nil || len(errors.Entries) != 1 || errors.Entries[0].StatusCode != 429 {
+	if err != nil || len(errors.Entries) != 1 || errors.Entries[0].StatusCode != 429 || errors.Entries[0].Source != "codex · ops@example.com" {
 		t.Fatalf("request errors = %+v, err = %v", errors.Entries, err)
 	}
 }
@@ -120,7 +119,7 @@ func TestFreshSchemaVersionAndTables(t *testing.T) {
 	}
 	want := map[string]bool{
 		"api_keys": true, "routes": true, "plans": true,
-		"prices": true, "credentials": true, "request_events": true,
+		"prices": true, "request_events": true,
 		"request_errors": true, "plugin_logs": true, "reference_prices_metadata": true, "reference_prices": true,
 	}
 	rows, err := database.db.Query(`SELECT name FROM sqlite_master

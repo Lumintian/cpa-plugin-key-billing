@@ -20,7 +20,7 @@ func appendRequestEvent(tx *sql.Tx, entry billing.RequestEvent) (int64, error) {
 	}
 	result, errInsert := tx.Exec(`
 		INSERT INTO request_events (
-			at, scope, auth_index, provider, executor_type, reasoning_effort, service_tier,
+			at, scope, auth_index, provider, account, executor_type, reasoning_effort, service_tier,
 			upstream_model, billing_model, failed, latency_ms, ttft_ms,
 			accounting_quality, price_source, reasoning_tokens,
 			total_usd, uncached_input_usd, cache_read_usd, cache_write_usd, output_usd,
@@ -28,8 +28,8 @@ func appendRequestEvent(tx *sql.Tx, entry billing.RequestEvent) (int64, error) {
 			tiered, long_context, threshold_input_tokens,
 			applied_input_per_1m, applied_output_per_1m,
 			applied_cache_read_per_1m, applied_cache_write_per_1m
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		nanos(entry.At), entry.Scope, entry.AuthIndex, entry.Provider, entry.ExecutorType, entry.ReasoningEffort, entry.ServiceTier,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		nanos(entry.At), entry.Scope, entry.AuthIndex, entry.Provider, entry.Account, entry.ExecutorType, entry.ReasoningEffort, entry.ServiceTier,
 		entry.UpstreamModel, entry.BillingModel, entry.Failed,
 		entry.LatencyMS, entry.TTFTMS,
 		string(entry.AccountingQuality), priceSource, entry.ReasoningTokens,
@@ -68,10 +68,18 @@ func pruneRequestEvents(exec execer, cutoff time.Time) error {
 	return nil
 }
 
+const requestEventProviderName = `CASE WHEN substr(r.provider, 1, 18) = 'openai-compatible-'
+	THEN substr(r.provider, 19) ELSE r.provider END`
+
+const requestEventSourceName = `CASE
+	WHEN (` + requestEventProviderName + `) = '' THEN r.account
+	WHEN r.account = '' OR lower(r.account) = lower(` + requestEventProviderName + `)
+		THEN (` + requestEventProviderName + `)
+	ELSE (` + requestEventProviderName + `) || ' · ' || r.account END`
+
 const requestEventSource = `
 	FROM request_events r
 	LEFT JOIN api_keys k ON k.scope = r.scope
-	LEFT JOIN credentials c ON c.auth_index = r.auth_index
 	WHERE r.at >= ?`
 
 func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (billing.RequestEventView, error) {
@@ -93,14 +101,13 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 
 	counts := d.db.QueryRow(`
 		SELECT count(*),
-			sum(CASE WHEN r.failed = 0 THEN 1 ELSE 0 END),
 			sum(CASE WHEN r.failed != 0 THEN 1 ELSE 0 END)`+where, args...)
-	var normal, failed sql.NullInt64
-	if errCount := counts.Scan(&view.Statuses.All, &normal, &failed); errCount != nil {
+	var failed sql.NullInt64
+	if errCount := counts.Scan(&view.Statuses.All, &failed); errCount != nil {
 		return billing.RequestEventView{}, fmt.Errorf("统计请求事件：%w", errCount)
 	}
-	view.Statuses.Normal = int(normal.Int64)
 	view.Statuses.Failed = int(failed.Int64)
+	view.Statuses.Normal = view.Statuses.All - view.Statuses.Failed
 	view.Total = view.Statuses.All
 
 	page := where
@@ -118,10 +125,10 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 		limit = -1
 	}
 	page += " ORDER BY r.at DESC, r.id DESC LIMIT ? OFFSET ?"
-	pageArgs := append(append([]any(nil), args...), limit, query.Offset)
+	pageArgs := append(args, limit, query.Offset)
 
 	rows, errQuery := d.db.Query(`
-		SELECT r.id, r.at, r.scope, r.auth_index, coalesce(NULLIF(r.provider, ''), c.provider, ''),
+		SELECT r.id, r.at, r.scope, r.auth_index, r.provider, r.account,
 			r.executor_type, r.reasoning_effort, r.service_tier,
 			r.upstream_model, r.billing_model, r.failed, r.latency_ms, r.ttft_ms,
 			r.accounting_quality, r.price_source, r.reasoning_tokens,
@@ -130,7 +137,7 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 			r.tiered, r.long_context, r.threshold_input_tokens,
 			r.applied_input_per_1m, r.applied_output_per_1m,
 			r.applied_cache_read_per_1m, r.applied_cache_write_per_1m,
-			coalesce(k.preview, ''), coalesce(k.label, ''), coalesce(c.name, '')`+page, pageArgs...)
+			coalesce(k.preview, ''), coalesce(k.label, ''), `+requestEventSourceName+page, pageArgs...)
 	if errQuery != nil {
 		return billing.RequestEventView{}, fmt.Errorf("读取请求事件：%w", errQuery)
 	}
@@ -150,29 +157,18 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 
 func requestEventFilter(query billing.RequestEventQuery, since time.Time) (string, []any) {
 	where, args := eventPageFilter(requestEventSource, query.From, query.To, since, query.SnapshotID)
-	if scope := strings.TrimSpace(query.Scope); scope != "" {
-		where += " AND r.scope = ?"
-		args = append(args, scope)
-	}
-	if scope := strings.TrimSpace(query.KeyScope); scope != "" {
-		where += " AND r.scope = ?"
-		args = append(args, scope)
-	}
-	if model := strings.TrimSpace(query.Model); model != "" {
-		where += " AND coalesce(NULLIF(r.billing_model, ''), r.upstream_model) = ?"
-		args = append(args, model)
-	}
-	if source := strings.TrimSpace(query.Source); source != "" {
-		where += " AND coalesce(c.name, '') = ?"
-		args = append(args, source)
-	}
-	if executor := strings.TrimSpace(query.Executor); executor != "" {
-		where += " AND r.executor_type = ?"
-		args = append(args, executor)
-	}
-	if provider := strings.TrimSpace(query.Provider); provider != "" {
-		where += " AND coalesce(NULLIF(r.provider, ''), c.provider, '') = ?"
-		args = append(args, provider)
+	for _, filter := range []struct{ expression, value string }{
+		{"r.scope", query.Scope},
+		{"r.scope", query.KeyScope},
+		{"coalesce(NULLIF(r.billing_model, ''), r.upstream_model)", query.Model},
+		{"(" + requestEventSourceName + ")", query.Source},
+		{"r.executor_type", query.Executor},
+		{"r.provider", query.Provider},
+	} {
+		if value := strings.TrimSpace(filter.value); value != "" {
+			where += " AND " + filter.expression + " = ?"
+			args = append(args, value)
+		}
 	}
 	return where, args
 }
@@ -221,8 +217,8 @@ func (d *DB) requestEventFilterValues(query billing.RequestEventQuery, since tim
 	rows, errQuery := d.db.Query(`
 		WITH filtered AS (
 			SELECT coalesce(NULLIF(r.billing_model, ''), r.upstream_model) AS model,
-				coalesce(c.name, '') AS source, r.executor_type AS executor,
-				coalesce(NULLIF(r.provider, ''), c.provider, '') AS provider`+where+`
+				`+requestEventSourceName+` AS source, r.executor_type AS executor,
+				r.provider AS provider`+where+`
 		)
 		SELECT kind, value FROM (
 			SELECT 'model' AS kind, model AS value FROM filtered WHERE model != '' GROUP BY model
@@ -265,7 +261,7 @@ func scanRequestEventRow(rows *sql.Rows) (billing.RequestEventRow, error) {
 		at, failed           int64
 		quality, priceSource string
 	)
-	if errScan := rows.Scan(&row.ID, &at, &row.Scope, &row.AuthIndex, &row.Provider,
+	if errScan := rows.Scan(&row.ID, &at, &row.Scope, &row.AuthIndex, &row.Provider, &row.Account,
 		&row.ExecutorType, &row.ReasoningEffort, &row.ServiceTier,
 		&row.UpstreamModel, &row.BillingModel, &failed,
 		&row.LatencyMS, &row.TTFTMS,

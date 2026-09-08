@@ -11,29 +11,63 @@ import (
 	"cpa-key-billing/internal/billing"
 )
 
-func (d *DB) migrateV10ToV13() error {
-	return d.migrateToV13(migrateModelGroups, migrateSubscriptionPeriods, migrateModelPricing, migrateQuotaWindows)
-}
-
-func (d *DB) migrateV11ToV13() error {
-	return d.migrateToV13(migrateLegacyRouteBindings, migrateSubscriptionPeriods, migrateModelPricing, migrateQuotaWindows)
-}
-
-func (d *DB) migrateV12ToV13() error {
-	return d.migrateToV13(migrateModelPricing, migrateQuotaWindows)
-}
-
-// Each supported version upgrades directly to v13 in one transaction.
-func (d *DB) migrateToV13(steps ...func(*sql.Tx) error) error {
+// Each supported version upgrades directly to v14 in one transaction.
+func (d *DB) migrateToV14(version int) error {
+	var steps []func(*sql.Tx) error
+	switch version {
+	case 10:
+		steps = append(steps, migrateModelGroups, migrateSubscriptionPeriods)
+	case 11:
+		steps = append(steps, migrateLegacyRouteBindings, migrateSubscriptionPeriods)
+	}
+	if version <= 12 {
+		steps = append(steps, migrateModelPricing, migrateQuotaWindows)
+	}
+	steps = append(steps, migrateRequestEventAccounts)
 	return d.transact(func(tx *sql.Tx) error {
 		for _, step := range steps {
 			if err := step(tx); err != nil {
 				return err
 			}
 		}
-		_, err := tx.Exec("PRAGMA user_version = 13")
+		_, err := tx.Exec("PRAGMA user_version = 14")
 		return err
 	})
+}
+
+func migrateRequestEventAccounts(tx *sql.Tx) error {
+	// Do not discard unknown fields or ambiguous identities when dropping the table.
+	var compatible, invalid bool
+	if err := tx.QueryRow(`SELECT
+		EXISTS(SELECT 1 FROM sqlite_master WHERE name = 'credentials' AND type = 'table')
+		AND count(*) = 4 AND sum(upper(type) = 'TEXT' AND hidden = 0 AND (
+			(name = 'auth_index' AND pk = 1) OR
+			(name IN ('provider', 'account', 'name') AND pk = 0)
+		)) = 4 FROM pragma_table_xinfo('credentials')`).Scan(&compatible); err != nil {
+		return fmt.Errorf("读取旧凭证表格式：%w", err)
+	}
+	if !compatible {
+		return fmt.Errorf("旧凭证表格式不兼容")
+	}
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM credentials
+		WHERE typeof(auth_index) != 'text' OR typeof(provider) != 'text'
+		OR typeof(account) != 'text' OR typeof(name) != 'text')`).Scan(&invalid); err != nil {
+		return fmt.Errorf("迁移请求事件账户：%w", err)
+	}
+	if invalid {
+		return fmt.Errorf("旧凭证表包含不兼容的数据")
+	}
+	_, err := tx.Exec(`
+		ALTER TABLE request_events ADD COLUMN account TEXT NOT NULL DEFAULT '';
+		UPDATE request_events AS r SET account = c.account,
+			provider = coalesce(NULLIF(r.provider, ''), c.provider)
+		FROM credentials c WHERE c.auth_index = r.auth_index;
+		DROP TABLE credentials;
+	`)
+	if err != nil {
+		return fmt.Errorf("迁移请求事件账户：%w", err)
+	}
+	return nil
 }
 
 func migrateModelPricing(tx *sql.Tx) error {
