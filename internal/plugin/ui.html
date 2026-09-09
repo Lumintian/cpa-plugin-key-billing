@@ -981,7 +981,12 @@
         align-items: start;
       }
       .plan-window input, .plan-dialog > .field input { width: 100%; min-width: 0; }
-      .plan-window-limits { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      .plan-window-limits {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
       .period-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
       .plan-window .window-delete {
         position: absolute;
@@ -1001,7 +1006,10 @@
         line-height: 1;
       }
       .plan-window .window-delete:hover:not(:disabled) { color: var(--error-color); background: var(--bg-hover); }
-      .plan-window button.window-delete:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--primary-color); }
+      .plan-window button.window-delete:focus-visible {
+        outline: none;
+        box-shadow: inset 0 0 0 1px var(--primary-color);
+      }
       .field-error { color: var(--error-color); }
       .field-error:empty { display: none; }
       .plan-window [aria-invalid="true"] { border-color: var(--error-color); }
@@ -1359,10 +1367,7 @@
       dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
       html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
       .selection-section { display: grid; gap: 8px; margin-top: 20px; }
-      .settings-dialog {
-        width: min(620px, calc(100vw - 32px));
-        padding: 22px;
-      }
+      .settings-dialog { width: min(620px, calc(100vw - 32px)); padding: 22px; }
       .price-dialog-model { margin: 0 0 16px; font-size: 14px; overflow-wrap: anywhere; }
       .price-reference { margin-bottom: 18px; }
       .price-reference input { width: 100%; }
@@ -1943,12 +1948,7 @@
       }
       .cost-tooltip.show { opacity: 1; visibility: visible; }
       .cost-tooltip-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-      .cost-tooltip-summary {
-        display: flex;
-        gap: 10px;
-        margin-bottom: 8px;
-        color: var(--text-secondary);
-      }
+      .cost-tooltip-summary { display: flex; gap: 10px; margin-bottom: 8px; color: var(--text-secondary); }
       .cost-tooltip-summary b { color: var(--text-primary); font-weight: 500; }
       .cost-tooltip-grid {
         display: grid;
@@ -2306,7 +2306,9 @@
           if (!raw) return null;
           const prefix = "enc::v1::";
           if (raw.startsWith(prefix)) {
-            const secret = new TextEncoder().encode("cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent);
+            const secret = new TextEncoder().encode(
+              "cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent,
+            );
             const binary = atob(raw.slice(prefix.length));
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) ^ secret[i % secret.length];
@@ -2429,7 +2431,8 @@
             type="text"
             name="access-role"
             autocomplete="username"
-            value="admin" />
+            value="admin"
+          />
           <div id="gate-error" class="notice err"></div>
           <label class="field">
             <span id="gate-key-label">管理密钥</span>
@@ -2464,7 +2467,9 @@
           <div class="page-tab-actions hidden">
             <div id="shared-time-filter" class="shared-time-filter hidden">
               <span class="native-select">
-                <select id="analysis-key" aria-label="按 API Key 筛选"> <option value="">全部 API Key</option> </select>
+                <select id="analysis-key" aria-label="按 API Key 筛选">
+                  <option value="">全部 API Key</option>
+                </select>
               </span>
               <div class="time-range-control">
                 <button
@@ -2472,12 +2477,18 @@
                   class="time-range-trigger"
                   type="button"
                   aria-haspopup="dialog"
-                  aria-expanded="false">
+                  aria-expanded="false"
+                >
                   <span class="time-range-icon" data-lucide-icon="clock" aria-hidden="true"></span>
                   <span id="shared-time-label">最近 30 天</span>
                   <span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
                 </button>
-                <div id="shared-time-popover" class="time-range-popover hidden" role="dialog" aria-label="选择时间范围"></div>
+                <div
+                  id="shared-time-popover"
+                  class="time-range-popover hidden"
+                  role="dialog"
+                  aria-label="选择时间范围"
+                ></div>
               </div>
             </div>
             <button id="events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -2556,7 +2567,9 @@
             <input id="route-id" type="hidden" />
             <div class="route-form-toolbar">
               <label class="field"> 规则名称 <input id="route-name" placeholder="Codex 认证文件" /> </label>
-              <label class="field"> 筛选 <input id="route-rule-search" type="search" placeholder="搜索模型或凭证" /> </label>
+              <label class="field">
+                筛选 <input id="route-rule-search" type="search" placeholder="搜索模型或凭证" />
+              </label>
               <div class="row">
                 <button id="route-rule-all" type="button" class="link">全选</button>
                 <button id="route-rule-none" type="button" class="link">清空</button>
@@ -2611,10 +2624,14 @@
               <h2>请求事件</h2>
               <div class="row section-actions event-card-actions">
                 <span class="native-select">
-                  <select id="request-event-model" aria-label="按模型筛选"> <option value="">全部模型</option> </select>
+                  <select id="request-event-model" aria-label="按模型筛选">
+                    <option value="">全部模型</option>
+                  </select>
                 </span>
                 <span class="native-select">
-                  <select id="request-event-source" aria-label="按来源筛选"> <option value="">全部来源</option> </select>
+                  <select id="request-event-source" aria-label="按来源筛选">
+                    <option value="">全部来源</option>
+                  </select>
                 </span>
                 <span class="native-select">
                   <select id="request-event-status" aria-label="按结果筛选">
@@ -2637,13 +2654,19 @@
               <h2>错误事件</h2>
               <div class="row section-actions event-card-actions">
                 <span class="native-select">
-                  <select id="error-model" aria-label="按模型筛选"> <option value="">全部模型</option> </select>
+                  <select id="error-model" aria-label="按模型筛选">
+                    <option value="">全部模型</option>
+                  </select>
                 </span>
                 <span class="native-select">
-                  <select id="error-source" aria-label="按来源筛选"> <option value="">全部来源</option> </select>
+                  <select id="error-source" aria-label="按来源筛选">
+                    <option value="">全部来源</option>
+                  </select>
                 </span>
                 <span class="native-select">
-                  <select id="error-type" aria-label="按错误类型筛选"> <option value="">全部错误类型</option> </select>
+                  <select id="error-type" aria-label="按错误类型筛选">
+                    <option value="">全部错误类型</option>
+                  </select>
                 </span>
                 <button id="errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
               </div>
@@ -2740,7 +2763,8 @@
                     class="time-range-trigger"
                     type="button"
                     aria-haspopup="dialog"
-                    aria-expanded="false">
+                    aria-expanded="false"
+                  >
                     <span class="time-range-icon" data-lucide-icon="clock" aria-hidden="true"></span>
                     <span id="account-shared-time-label">最近 30 天</span>
                     <span class="time-range-chevron" data-lucide-icon="chevron-down" aria-hidden="true"></span>
@@ -2749,7 +2773,8 @@
                     id="account-shared-time-popover"
                     class="time-range-popover hidden"
                     role="dialog"
-                    aria-label="选择时间范围"></div>
+                    aria-label="选择时间范围"
+                  ></div>
                 </div>
               </div>
               <button id="account-events-export" class="labeled-icon-button hidden" type="button">导出</button>
@@ -2817,13 +2842,19 @@
                 <h2>错误事件</h2>
                 <div class="row section-actions event-card-actions">
                   <span class="native-select">
-                    <select id="account-error-model"> <option value="">全部模型</option> </select>
+                    <select id="account-error-model">
+                      <option value="">全部模型</option>
+                    </select>
                   </span>
                   <span class="native-select">
-                    <select id="account-error-source"> <option value="">全部来源</option> </select>
+                    <select id="account-error-source">
+                      <option value="">全部来源</option>
+                    </select>
                   </span>
                   <span class="native-select">
-                    <select id="account-error-type" aria-label="按错误类型筛选"> <option value="">全部错误类型</option> </select>
+                    <select id="account-error-type" aria-label="按错误类型筛选">
+                      <option value="">全部错误类型</option>
+                    </select>
                   </span>
                   <button id="account-errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
                 </div>
@@ -2863,8 +2894,21 @@
       </main>
     </div>
     <footer class="page-footer">
-      <span>© 2026 <a href="https://github.com/haowang02/cpa-plugin-key-billing" target="_blank" rel="noopener noreferrer">CPA Key Billing</a></span>
-      <span>· <a href="https://github.com/haowang02/cpa-plugin-key-billing/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">License</a></span>
+      <span
+        >© 2026
+        <a href="https://github.com/haowang02/cpa-plugin-key-billing" target="_blank" rel="noopener noreferrer"
+          >CPA Key Billing</a
+        ></span
+      >
+      <span
+        >·
+        <a
+          href="https://github.com/haowang02/cpa-plugin-key-billing/blob/main/LICENSE"
+          target="_blank"
+          rel="noopener noreferrer"
+          >License</a
+        ></span
+      >
       <span>· Version: v1.3.8</span>
     </footer>
 
@@ -2885,8 +2929,12 @@
         <div id="price-reference-results" class="price-reference-results" aria-live="polite"></div>
       </div>
       <div class="price-fields">
-        <label class="field"> 输入 / 1M Token <input id="price-in" type="number" step="any" min="0" value="0" /> </label>
-        <label class="field"> 输出 / 1M Token <input id="price-out" type="number" step="any" min="0" value="0" /> </label>
+        <label class="field">
+          输入 / 1M Token <input id="price-in" type="number" step="any" min="0" value="0" />
+        </label>
+        <label class="field">
+          输出 / 1M Token <input id="price-out" type="number" step="any" min="0" value="0" />
+        </label>
         <label class="field"> 缓存读 / 1M Token <input id="price-cr" type="number" step="any" min="0" /> </label>
         <label class="field"> 缓存写 / 1M Token <input id="price-cw" type="number" step="any" min="0" /> </label>
       </div>
@@ -2905,8 +2953,12 @@
           长上下文输出 / 1M Token
           <input id="price-tier-out" type="number" step="any" min="0" value="0" />
         </label>
-        <label class="field"> 长上下文缓存读 / 1M Token <input id="price-tier-cr" type="number" step="any" min="0" /> </label>
-        <label class="field"> 长上下文缓存写 / 1M Token <input id="price-tier-cw" type="number" step="any" min="0" /> </label>
+        <label class="field">
+          长上下文缓存读 / 1M Token <input id="price-tier-cr" type="number" step="any" min="0" />
+        </label>
+        <label class="field">
+          长上下文缓存写 / 1M Token <input id="price-tier-cw" type="number" step="any" min="0" />
+        </label>
       </div>
       <div class="row dialog-actions">
         <button id="price-cancel">取消</button>
@@ -3051,7 +3103,10 @@
       async function wrappingKey() {
         const key = await credentialTransaction("readonly", (store) => store.get(CREDENTIAL_KEY));
         if (key) return key;
-        const created = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+        const created = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
+          "encrypt",
+          "decrypt",
+        ]);
         const existing = await credentialTransaction("readwrite", (store) => {
           // Another tab may have created the shared key while generation was pending.
           const request = store.get(CREDENTIAL_KEY);
@@ -3080,8 +3135,10 @@
       async function recalledCredential(role, includeSession = false) {
         try {
           const session = includeSession ? sessionStorage.getItem(SESSION_CREDENTIAL_PREFIX + role) : null;
-          const saved = session !== null ? JSON.parse(session) :
-            await credentialTransaction("readonly", (store) => store.get(role));
+          const saved =
+            session !== null
+              ? JSON.parse(session)
+              : await credentialTransaction("readonly", (store) => store.get(role));
           if (!saved?.iv || !saved?.data) return "";
           const key = await credentialTransaction("readonly", (store) => store.get(CREDENTIAL_KEY));
           const data = await crypto.subtle.decrypt(
@@ -3099,8 +3156,24 @@
       const CUSTOM_CONCURRENCY = "__custom__";
       const QUOTA_DIMENSIONS = [
         { key: "amount_usd", metric: "amount_usd", label: "金额", unit: "USD", planUnit: "", format: usd, exact: usd },
-        { key: "token_limit", metric: "tokens", label: "Token", unit: "", planUnit: "Token", format: quotaTokens, exact: exactTokens },
-        { key: "request_limit", metric: "requests", label: "请求", unit: "次", planUnit: "次请求", format: int, exact: int },
+        {
+          key: "token_limit",
+          metric: "tokens",
+          label: "Token",
+          unit: "",
+          planUnit: "Token",
+          format: quotaTokens,
+          exact: exactTokens,
+        },
+        {
+          key: "request_limit",
+          metric: "requests",
+          label: "请求",
+          unit: "次",
+          planUnit: "次请求",
+          format: int,
+          exact: int,
+        },
       ];
       const PERIOD_UNITS = [
         [86400, "天"],
@@ -3166,18 +3239,29 @@
       // Data groups publish independently; saves replace their returned entries.
       // Each entry retains its last successful value when a read fails.
       function dataEntries(labels) {
-        return Object.fromEntries(Object.entries(labels).map(([name, label]) =>
-          [name, { label, value: null, error: "" }]));
+        return Object.fromEntries(
+          Object.entries(labels).map(([name, label]) => [name, { label, value: null, error: "" }]),
+        );
       }
 
       const resources = {
         admin: dataEntries({
-          keys: "API Key", plans: "订阅计划", routes: "路由规则", credentials: "凭证目录",
-          models: "模型目录", catalog: "模型价格", priceStatus: "参考价状态", authFiles: "认证文件",
+          keys: "API Key",
+          plans: "订阅计划",
+          routes: "路由规则",
+          credentials: "凭证目录",
+          models: "模型目录",
+          catalog: "模型价格",
+          priceStatus: "参考价状态",
+          authFiles: "认证文件",
         }),
         account: dataEntries({
-          profile: "账户资料", subscription: "订阅", routing: "访问权限",
-          models: "模型目录", catalog: "模型价格", authFiles: "认证文件",
+          profile: "账户资料",
+          subscription: "订阅",
+          routing: "访问权限",
+          models: "模型目录",
+          catalog: "模型价格",
+          authFiles: "认证文件",
         }),
       };
       // Key metadata is shared by configuration, event queries, and analysis.
@@ -3186,7 +3270,9 @@
         value: new Map(),
         revisions: new Map(),
         revision: 0,
-        beginRead() { return ++keyDirectory.revision; },
+        beginRead() {
+          return ++keyDirectory.revision;
+        },
         clear() {
           keyDirectory.value = new Map();
           keyDirectory.revisions.clear();
@@ -3240,7 +3326,12 @@
       // a new session discards the result; elapsed time never invalidates it.
       function createQuery(label) {
         const query = {
-          label, value: null, error: "", key: "", task: null, request: null,
+          label,
+          value: null,
+          error: "",
+          key: "",
+          task: null,
+          request: null,
           clear() {
             Object.assign(query, { value: null, error: "", key: "", task: null, request: null });
           },
@@ -3252,23 +3343,27 @@
             query.key = key;
             query.request = request;
             query.error = "";
-            const task = Promise.resolve().then(() => {
-              if (query.request !== request) throw new StaleRequestError();
-              return fetch();
-            }).then((value) => {
-              if (query.request !== request) throw new StaleRequestError();
-              query.value = value;
-              return value;
-            }).catch((error) => {
-              if (query.request !== request) throw new StaleRequestError();
-              query.error = error.message || String(error);
-              throw error;
-            }).finally(() => {
-              if (query.request === request) {
-                query.task = null;
-                renderPage();
-              }
-            });
+            const task = Promise.resolve()
+              .then(() => {
+                if (query.request !== request) throw new StaleRequestError();
+                return fetch();
+              })
+              .then((value) => {
+                if (query.request !== request) throw new StaleRequestError();
+                query.value = value;
+                return value;
+              })
+              .catch((error) => {
+                if (query.request !== request) throw new StaleRequestError();
+                query.error = error.message || String(error);
+                throw error;
+              })
+              .finally(() => {
+                if (query.request === request) {
+                  query.task = null;
+                  renderPage();
+                }
+              });
             query.task = task;
             return task;
           },
@@ -3276,8 +3371,7 @@
         return query;
       }
 
-      const analysisQueries = Object.fromEntries(["admin", "account"].map((role) =>
-        [role, createQuery("分析")]));
+      const analysisQueries = Object.fromEntries(["admin", "account"].map((role) => [role, createQuery("分析")]));
       const eventKeysQuery = createQuery("事件 Key 筛选");
 
       function nextEventPage(page, entries) {
@@ -3329,8 +3423,12 @@
           query,
           append: false,
           rendered: null,
-          get data() { return query.value?.page || null; },
-          get scroller() { return $(view.scrollers[account ? 1 : 0]); },
+          get data() {
+            return query.value?.page || null;
+          },
+          get scroller() {
+            return $(view.scrollers[account ? 1 : 0]);
+          },
           active() {
             return currentRole === (account ? "account" : "admin") && activeTab(account) === view.tab;
           },
@@ -3342,7 +3440,10 @@
           },
           replace(page) {
             Object.assign(query, {
-              key: list.selection(), error: "", task: null, request: null,
+              key: list.selection(),
+              error: "",
+              task: null,
+              request: null,
               value: { page, range: null, cursor: view.next(page, page.entries) },
             });
             list.append = false;
@@ -3361,8 +3462,12 @@
             const columns = JSON.stringify(options.headers || null);
             // Appended pages retain the same entry objects. Rebuild when the
             // identity metadata or table shape changes, or rows are no longer a prefix.
-            const append = previous?.rows?.isConnected && previous.columns === columns && previous.identities === identities &&
-              previous.items.length <= items.length && previous.items.every((item, index) => item === items[index]);
+            const append =
+              previous?.rows?.isConnected &&
+              previous.columns === columns &&
+              previous.identities === identities &&
+              previous.items.length <= items.length &&
+              previous.items.every((item, index) => item === items[index]);
             const rows = append ? previous.rows : renderCollection(list.scroller, items, options);
             if (append) rows.append(...items.slice(previous.items.length).map(options.render));
             list.rendered = { items, columns, rows, identities };
@@ -3393,16 +3498,24 @@
             if (!append && range) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
             const path = view.path(account, range, append ? previous.cursor : null);
             const pending = query.task;
-            const task = query.read(selection, async () => {
-              const page = await fetchListPage(kind, account, path);
-              const incoming = page.entries;
-              const entries = append ? previous.page.entries.concat(incoming) : incoming;
-              return {
-                page: { ...page, entries, filter_options: page.filter_options || (append ? previous.page.filter_options : undefined) },
-                range,
-                cursor: incoming.length ? view.next(page, entries) : null,
-              };
-            }, reload);
+            const task = query.read(
+              selection,
+              async () => {
+                const page = await fetchListPage(kind, account, path);
+                const incoming = page.entries;
+                const entries = append ? previous.page.entries.concat(incoming) : incoming;
+                return {
+                  page: {
+                    ...page,
+                    entries,
+                    filter_options: page.filter_options || (append ? previous.page.filter_options : undefined),
+                  },
+                  range,
+                  cursor: incoming.length ? view.next(page, entries) : null,
+                };
+              },
+              reload,
+            );
             if (query.task && query.task !== pending) list.append = append;
             return task;
           },
@@ -3414,21 +3527,48 @@
             if (list.data) return false;
             list.rendered = null;
             const message = query.error ? view.label + "加载失败：" + query.error : "加载中…";
-            list.scroller.replaceChildren(el("div", { class: "empty" },
-              el("div", { text: message }),
-              query.error && !query.task ? el("button", { class: "retry-button", onclick: () => guard(() => list.reload()) }, "重试") : null));
+            list.scroller.replaceChildren(
+              el(
+                "div",
+                { class: "empty" },
+                el("div", { text: message }),
+                query.error && !query.task
+                  ? el("button", { class: "retry-button", onclick: () => guard(() => list.reload()) }, "重试")
+                  : null,
+              ),
+            );
             return true;
           },
           renderStatus() {
             const scroller = list.scroller;
-            const top = scroller.scrollTop, left = scroller.scrollLeft;
+            const top = scroller.scrollTop,
+              left = scroller.scrollLeft;
             const notices = [];
             if (query.task) notices.push(el("div", { text: list.append ? "正在加载更多…" : "正在加载…" }));
-            if (query.error) notices.push(el("div", {}, el("span", { text: query.error }),
-              el("button", { onclick: () => guard(() => list.append ? list.loadMore() : list.reload()) }, "重试加载")));
-            else if (query.value?.cursor) notices.push(el("button", {
-              disabled: !!query.task, onclick: () => guard(() => list.loadMore()),
-            }, "加载更多"));
+            if (query.error)
+              notices.push(
+                el(
+                  "div",
+                  {},
+                  el("span", { text: query.error }),
+                  el(
+                    "button",
+                    { onclick: () => guard(() => (list.append ? list.loadMore() : list.reload())) },
+                    "重试加载",
+                  ),
+                ),
+              );
+            else if (query.value?.cursor)
+              notices.push(
+                el(
+                  "button",
+                  {
+                    disabled: !!query.task,
+                    onclick: () => guard(() => list.loadMore()),
+                  },
+                  "加载更多",
+                ),
+              );
             const status = notices.length ? el("div", { class: "event-load-state", role: "status" }, notices) : null;
             const previous = scroller.querySelector(":scope > .event-load-state");
             if (status && previous) previous.replaceWith(status);
@@ -3502,8 +3642,11 @@
 
       function storedTimeRange(role) {
         const range = viewPreference(role, "time-range", { mode: "30d" });
-        if (!range || typeof range.mode !== "string" ||
-            !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode)))
+        if (
+          !range ||
+          typeof range.mode !== "string" ||
+          !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode))
+        )
           return { mode: "30d" };
         if (range.mode !== "custom") return { mode: range.mode };
         if (!["day", "hour"].includes(range.unit) || typeof range.from !== "string" || typeof range.to !== "string")
@@ -3705,8 +3848,12 @@
         return String(n);
       }
       function quotaTokens(n) {
-        const [scale, suffix] = [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]
-          .find(([scale]) => n >= scale) || [1e3, "K"];
+        const [scale, suffix] = [
+          [1e12, "T"],
+          [1e9, "B"],
+          [1e6, "M"],
+          [1e3, "K"],
+        ].find(([scale]) => n >= scale) || [1e3, "K"];
         return Number((n / scale).toFixed(n < 1000 ? 3 : 2)) + suffix;
       }
       function exactTokens(value) {
@@ -3742,7 +3889,10 @@
       }
       const dateFormatter = new Intl.DateTimeFormat("zh-CN");
       const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
-        hour: "numeric", minute: "numeric", second: "numeric", hour12: false,
+        hour: "numeric",
+        minute: "numeric",
+        second: "numeric",
+        hour12: false,
       });
       function dateTimeParts(value) {
         if (!value) return null;
@@ -3778,16 +3928,32 @@
       // Replace a display collection while retaining its scroll position.
       // Paged lists also use the returned row container to append new entries.
       function renderCollection(target, items, { render, headers, attrs, empty = "暂无数据" }) {
-        const top = target.scrollTop, left = target.scrollLeft;
+        const top = target.scrollTop,
+          left = target.scrollLeft;
         const tableLeft = target.querySelector(":scope > .table-scroll")?.scrollLeft || 0;
         let content = el("div", { class: "empty", text: empty });
         let rows = null;
         if (items.length) {
           rows = el(headers ? "tbody" : "div", headers ? {} : attrs, items.map(render));
           content = headers
-            ? el("div", { class: "table-scroll" }, el("table", {},
-                el("thead", {}, el("tr", {}, headers.map((h) => el("th", { class: h.num ? "num" : "" }, h.label ?? h)))),
-                rows))
+            ? el(
+                "div",
+                { class: "table-scroll" },
+                el(
+                  "table",
+                  {},
+                  el(
+                    "thead",
+                    {},
+                    el(
+                      "tr",
+                      {},
+                      headers.map((h) => el("th", { class: h.num ? "num" : "" }, h.label ?? h)),
+                    ),
+                  ),
+                  rows,
+                ),
+              )
             : rows;
         }
         target.replaceChildren(content);
@@ -3994,7 +4160,8 @@
         const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason);
         // Let every independent read finish, but never swallow unexpected errors.
         // Authentication takes precedence over ordinary failures and cancellation.
-        const failure = failures.find((error) => error instanceof AuthError) ||
+        const failure =
+          failures.find((error) => error instanceof AuthError) ||
           failures.find((error) => !(error instanceof StaleRequestError));
         if (failure) throw failure;
       }
@@ -4147,17 +4314,15 @@
 
         for (const entry of compatibilityEntries) {
           const providerName = (entry.name || "").trim().toLowerCase() || "openai-compatibility";
-          const provider = providerName === "openai-compatibility" || providerName.startsWith("openai-compatible-")
-            ? providerName : "openai-compatible-" + providerName;
+          const provider =
+            providerName === "openai-compatibility" || providerName.startsWith("openai-compatible-")
+              ? providerName
+              : "openai-compatible-" + providerName;
           const apiKeys = entry["api-key-entries"] || [];
           const parentEnabled = entry.disabled !== true;
           if (!apiKeys.length) {
             credentials.push({
-              ref: await configuredCredentialRef(
-                "openai-compatibility:" + providerName,
-                [entry["base-url"]],
-                counters,
-              ),
+              ref: await configuredCredentialRef("openai-compatibility:" + providerName, [entry["base-url"]], counters),
               provider,
               display_name: "未配置 API Key",
               disabled: !parentEnabled,
@@ -4207,10 +4372,12 @@
         const current = () => {
           if (generation !== sessionGeneration || currentRole !== "admin") throw new StaleRequestError();
         };
-        const task = adminDataQueues[group].catch(() => {}).then(async () => {
-          current();
-          return operation(current);
-        });
+        const task = adminDataQueues[group]
+          .catch(() => {})
+          .then(async () => {
+            current();
+            return operation(current);
+          });
         adminDataQueues[group] = task;
         return task;
       }
@@ -4229,14 +4396,19 @@
           }
         };
         await settleLoads([
-          sync("API Key", async () => plugin("POST", "/keys/sync",
-            { keys: await configuredKeys, allow_empty: true }, { command: true })),
-          sync("凭证", async () => plugin("POST", "/credentials/sync",
-            { credentials: await readConfiguredCredentials() }, { command: true })),
-          read("models", async () => fetchModels(false, (await configuredKeys).find((key) => key.trim())?.trim() || "")),
+          sync("API Key", async () =>
+            plugin("POST", "/keys/sync", { keys: await configuredKeys, allow_empty: true }, { command: true }),
+          ),
+          sync("凭证", async () =>
+            plugin("POST", "/credentials/sync", { credentials: await readConfiguredCredentials() }, { command: true }),
+          ),
+          read("models", async () =>
+            fetchModels(false, (await configuredKeys).find((key) => key.trim())?.trim() || ""),
+          ),
         ]);
-        await settleLoads(["keys", "plans", "routes", "credentials"].map((name) =>
-          read(name, () => fetchAdminCollection(name))));
+        await settleLoads(
+          ["keys", "plans", "routes", "credentials"].map((name) => read(name, () => fetchAdminCollection(name))),
+        );
         return errors;
       }
 
@@ -4247,8 +4419,10 @@
           const body = { data: payload };
           const models = resources.admin.models.value;
           if (path.startsWith("/prices")) body.models = models || [];
-          const result = await plugin(method, path + (path.includes("?") ? "&" : "?") + "view=1", body,
-            { ...options, command: true });
+          const result = await plugin(method, path + (path.includes("?") ? "&" : "?") + "view=1", body, {
+            ...options,
+            command: true,
+          });
           current();
           // Display errors must not turn a committed write into a failed save.
           try {
@@ -4340,14 +4514,18 @@
         // The model list is the catalog's input. Preserve its identity when
         // discovery returns the same IDs, even if their server order changed.
         return previous?.length === models.length && previous.every((model, index) => model === models[index])
-          ? previous : models;
+          ? previous
+          : models;
       }
 
       async function fetchCatalog(account) {
         const models = resources[account ? "account" : "admin"].models.value;
         if (account && models === null) throw new Error("尚未取得模型目录");
         const prices = await fetchModelPrices(models || [], account);
-        return { models, prices: prices.map((price) => ({ ...price, in_models: models === null ? undefined : price.in_models })) };
+        return {
+          models,
+          prices: prices.map((price) => ({ ...price, in_models: models === null ? undefined : price.in_models })),
+        };
       }
 
       function renderReferencePriceStatus() {
@@ -4356,7 +4534,11 @@
         $("price-status").textContent = [
           metadata?.usable && metadata?.fetched_at
             ? "参考价更新时间：" + new Date(metadata.fetched_at).toLocaleString()
-            : load.value ? "暂无参考价" : load.error ? "" : "正在加载参考价状态…",
+            : load.value
+              ? "暂无参考价"
+              : load.error
+                ? ""
+                : "正在加载参考价状态…",
           metadata?.last_error,
         ]
           .filter(Boolean)
@@ -4427,20 +4609,31 @@
         params.set("timezone", timezone);
         if (key) params.set("api_key", key);
         const selection = JSON.stringify([sharedTimeRanges[role], key, timezone]);
-        return analysisQueries[role].read(selection, async () => {
-          const revision = keyDirectory.beginRead();
-          const value = requireObject(await (account ? accountAPI("/analysis?" + params) : plugin("GET", "/analysis?" + params)), "分析");
-          requireObject(value.summary, "分析摘要");
-          requireObject(value.trends, "分析趋势");
-          requireObject(value.summary.cost, "分析成本");
-          for (const name of ["requests", "total_tokens", "total_cost", "cache_rate"])
-            requireArray(value.trends[name], "分析趋势");
-          if (!account) {
-            const distribution = requireObject(value.usage_distribution, "用量分布");
-            distribution.api_keys = keyDirectory.receive(requireArray(distribution.api_keys, "Key 用量分布"), revision, { field: "key", fallback: true });
-          }
-          return value;
-        }, reload);
+        return analysisQueries[role].read(
+          selection,
+          async () => {
+            const revision = keyDirectory.beginRead();
+            const value = requireObject(
+              await (account ? accountAPI("/analysis?" + params) : plugin("GET", "/analysis?" + params)),
+              "分析",
+            );
+            requireObject(value.summary, "分析摘要");
+            requireObject(value.trends, "分析趋势");
+            requireObject(value.summary.cost, "分析成本");
+            for (const name of ["requests", "total_tokens", "total_cost", "cache_rate"])
+              requireArray(value.trends[name], "分析趋势");
+            if (!account) {
+              const distribution = requireObject(value.usage_distribution, "用量分布");
+              distribution.api_keys = keyDirectory.receive(
+                requireArray(distribution.api_keys, "Key 用量分布"),
+                revision,
+                { field: "key", fallback: true },
+              );
+            }
+            return value;
+          },
+          reload,
+        );
       }
 
       function errorEventPath(account, range, cursor) {
@@ -4486,9 +4679,11 @@
           if (hasControls && (tabBar.scrollWidth > tabBar.clientWidth + 1 || actionsOverflow)) {
             row.classList.remove("controls-inline");
           }
-          const card = Array.from(row.parentElement.querySelectorAll(".event-list-card"))
-            .find((card) => card.getClientRects().length);
-          if (card) row.parentElement.style.setProperty("--event-list-top", card.getBoundingClientRect().top + scrollY + "px");
+          const card = Array.from(row.parentElement.querySelectorAll(".event-list-card")).find(
+            (card) => card.getClientRects().length,
+          );
+          if (card)
+            row.parentElement.style.setProperty("--event-list-top", card.getBoundingClientRect().top + scrollY + "px");
           positionSharedTimePopover(!!row.closest("#account-app"));
           updateTabScrollHint(tabBar);
         }
@@ -4535,8 +4730,10 @@
 
       function dataGroupCached(account, group) {
         const data = resources[account ? "account" : "admin"];
-        return group.names.every((name) => data[name].value !== null || data[name].error) &&
-          (!group.names.includes("catalog") || !data.catalog.value || data.catalog.value.models === data.models.value);
+        return (
+          group.names.every((name) => data[name].value !== null || data[name].error) &&
+          (!group.names.includes("catalog") || !data.catalog.value || data.catalog.value.models === data.models.value)
+        );
       }
 
       // Groups own complete loading flows, including their upstream inputs.
@@ -4558,7 +4755,8 @@
           for (const key of group.names) resources[role][key].error = "";
           renderPage();
           const identityRevision = keyDirectory.beginRead();
-          const values = {}, failures = [];
+          const values = {},
+            failures = [];
           const read = async (key, fetch) => {
             try {
               values[key] = await fetch();
@@ -4568,15 +4766,23 @@
             }
           };
           if (account) {
-            await read(name, () => name === "authFiles" ? fetchAuthFiles(true) :
-              name === "models" ? fetchModels(true, authKey) :
-              name === "catalog" ? fetchCatalog(true) : fetchAccountData(name));
+            await read(name, () =>
+              name === "authFiles"
+                ? fetchAuthFiles(true)
+                : name === "models"
+                  ? fetchModels(true, authKey)
+                  : name === "catalog"
+                    ? fetchCatalog(true)
+                    : fetchAccountData(name),
+            );
           } else if (name === "configuration") {
             group.syncErrors = await readAdminConfiguration(read);
           } else if (name === "pricing") {
             await settleLoads([
               read("catalog", () => fetchCatalog(false)),
-              read("priceStatus", async () => requireObject(await plugin("GET", "/prices/reference/status"), "参考价状态")),
+              read("priceStatus", async () =>
+                requireObject(await plugin("GET", "/prices/reference/status"), "参考价状态"),
+              ),
             ]);
           } else {
             await read("authFiles", () => fetchAuthFiles(false));
@@ -4598,8 +4804,10 @@
           }
           if (failures.length) throw failures[0].error;
         };
-        const task = !account && ["configuration", "pricing"].includes(name)
-          ? queueAdminData(name, load) : Promise.resolve().then(load);
+        const task =
+          !account && ["configuration", "pricing"].includes(name)
+            ? queueAdminData(name, load)
+            : Promise.resolve().then(load);
         group.task = task.finally(() => {
           if (generation === sessionGeneration) {
             group.task = null;
@@ -4650,41 +4858,58 @@
       function createPages(role) {
         const account = role === "account";
         const data = {
-          ...resources[role], analysis: analysisQueries[role], eventKeys: eventKeysQuery, keyDirectory,
+          ...resources[role],
+          analysis: analysisQueries[role],
+          eventKeys: eventKeysQuery,
+          keyDirectory,
           ...Object.fromEntries(Object.entries(pagedLists[role]).map(([name, list]) => [name, list.query])),
         };
         const section = (names, render) => ({ sources: names.map((name) => data[name]), render, displayed: null });
         const keyedSection = (names, render) => section(account ? names : [...names, "keyDirectory"], render);
         const result = {
           analysis: { query: "analysis", sections: [] },
-          "request-events": { query: "events", sections: [keyedSection(["events"], () => renderRequestEvents(account))] },
+          "request-events": {
+            query: "events",
+            sections: [keyedSection(["events"], () => renderRequestEvents(account))],
+          },
           errors: { query: "errors", sections: [keyedSection(["errors"], () => renderErrors(account))] },
           "auth-files": { sections: [section(["authFiles"], () => renderAuthFiles(account))] },
         };
         if (account) {
-          result.subscription = { sections: [
-            section(["subscription"], renderAccountSubscription),
-            section(["models", "catalog", "routing"], renderAccountModels),
-            section(["routing"], renderAccountRouting),
-          ] };
+          result.subscription = {
+            sections: [
+              section(["subscription"], renderAccountSubscription),
+              section(["models", "catalog", "routing"], renderAccountModels),
+              section(["routing"], renderAccountRouting),
+            ],
+          };
         } else {
           const keyFilter = keyedSection(["eventKeys"], renderEventKeys);
           for (const tab of ["analysis", "request-events", "errors"]) result[tab].sections.unshift(keyFilter);
-          result.keys = { editors: ["route"], sections: [keyedSection(["keys", "plans", "routes", "credentials"], renderKeys)] };
-          result.settings = { editors: ["plan", "route"], query: "logs", sections: [
-            keyedSection(["plans", "keys"], renderPlans),
-            keyedSection(["routes", "keys", "credentials"], renderRoutes),
-            section(["catalog"], renderPriceTable),
-            section(["priceStatus", "catalog"], renderReferencePriceStatus),
-            section(["logs"], renderPluginLogs),
-          ] };
+          result.keys = {
+            editors: ["route"],
+            sections: [keyedSection(["keys", "plans", "routes", "credentials"], renderKeys)],
+          };
+          result.settings = {
+            editors: ["plan", "route"],
+            query: "logs",
+            sections: [
+              keyedSection(["plans", "keys"], renderPlans),
+              keyedSection(["routes", "keys", "credentials"], renderRoutes),
+              section(["catalog"], renderPriceTable),
+              section(["priceStatus", "catalog"], renderReferencePriceStatus),
+              section(["logs"], renderPluginLogs),
+            ],
+          };
         }
         for (const page of Object.values(result)) {
           page.sources = [...new Set(page.sections.flatMap((section) => section.sources))];
           for (const editor of page.editors || []) {
-            for (const name of EDITOR_RESOURCES[editor]) if (!page.sources.includes(data[name])) page.sources.push(data[name]);
+            for (const name of EDITOR_RESOURCES[editor])
+              if (!page.sources.includes(data[name])) page.sources.push(data[name]);
           }
-          if (page.sources.includes(data.catalog) && !page.sources.includes(data.models)) page.sources.push(data.models);
+          if (page.sources.includes(data.catalog) && !page.sources.includes(data.models))
+            page.sources.push(data.models);
           if (page.query === "analysis") page.sources.push(data.analysis);
           page.groups = Object.entries(resourceGroups[role])
             .filter(([, group]) => group.names.some((name) => page.sources.includes(data[name])))
@@ -4710,8 +4935,7 @@
         renderDataNotice();
         if (account && !renderAccountProfile()) return;
         for (const section of page.sections) {
-          const values = section.sources.flatMap((source) =>
-            [source.value, source.value === null ? source.error : ""]);
+          const values = section.sources.flatMap((source) => [source.value, source.value === null ? source.error : ""]);
           if (section.displayed?.every((value, index) => value === values[index])) continue;
           if (section.render() !== false) section.displayed = values;
         }
@@ -4777,16 +5001,28 @@
         // Paged lists have their own loading/error footer and retry action.
         const listQuery = pagedLists[currentRole][page.query]?.query;
         const visible = page.sources.filter((source) => source !== listQuery);
-        const errors = visible.filter((source) => source.error).map((source) =>
-          source.label + "：" + source.error + (source.value !== null ? "（当前显示上次成功的数据）" : ""));
-        if (!account && page.groups.includes("configuration")) errors.push(...resourceGroups.admin.configuration.syncErrors);
+        const errors = visible
+          .filter((source) => source.error)
+          .map(
+            (source) =>
+              source.label + "：" + source.error + (source.value !== null ? "（当前显示上次成功的数据）" : ""),
+          );
+        if (!account && page.groups.includes("configuration"))
+          errors.push(...resourceGroups.admin.configuration.syncErrors);
         const target = $(account ? "account-data-status" : "admin-data-status");
         target.classList.toggle("show", !!errors.length);
-        target.replaceChildren(...(errors.length ? [
-          el("div", { text: errors.join("；") }),
-          el("button", { class: "retry-button", disabled: !!page.task, onclick: refreshPage },
-            page.task ? "正在重试…" : "重试"),
-        ] : []));
+        target.replaceChildren(
+          ...(errors.length
+            ? [
+                el("div", { text: errors.join("；") }),
+                el(
+                  "button",
+                  { class: "retry-button", disabled: !!page.task, onclick: refreshPage },
+                  page.task ? "正在重试…" : "重试",
+                ),
+              ]
+            : []),
+        );
       }
 
       async function startAdmin(key) {
@@ -4862,8 +5098,9 @@
         const data = resources.account.subscription;
         const subscription = data.value?.subscription || {};
         const concurrency = data.value?.concurrency || {};
-        $("account-concurrency").textContent = !data.value ? "—" :
-          int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
+        $("account-concurrency").textContent = !data.value
+          ? "—"
+          : int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
         $("account-plan-name").textContent = !data.value
           ? "订阅额度"
           : subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
@@ -4957,9 +5194,7 @@
               { class: "auth-file-card" },
               el("div", { class: "account-access-scope-label", text: "允许的凭证" }),
               chips(
-                access.credentials
-                  .map(accountCredentialLabel)
-                  .sort((a, b) => a.text.localeCompare(b.text, "zh-CN")),
+                access.credentials.map(accountCredentialLabel).sort((a, b) => a.text.localeCompare(b.text, "zh-CN")),
                 routingValid ? "全部凭证" : "无法确定",
               ),
             ),
@@ -4977,7 +5212,9 @@
       }
 
       function renderAccountModel(model) {
-        const candidate = resources.account.catalog.value.prices.find((price) => price.model_id.toLowerCase() === model.toLowerCase());
+        const candidate = resources.account.catalog.value.prices.find(
+          (price) => price.model_id.toLowerCase() === model.toLowerCase(),
+        );
         const price = candidate?.source === "none" ? null : candidate;
         const fields = [
           ["输入", "input_per_1m"],
@@ -5022,11 +5259,7 @@
           { class: "account-model-card" },
           el("b", { class: "mono account-model-name", title: model }, model),
           price
-            ? el(
-                "div",
-                { class: "account-model-price-list" },
-                priceRows.map(priceRow),
-              )
+            ? el("div", { class: "account-model-price-list" }, priceRows.map(priceRow))
             : el("span", { class: "muted small", text: "未定价，暂时无法使用" }),
         );
       }
@@ -5065,9 +5298,12 @@
       }
 
       function analysisChartPanel(className, id, label) {
-        return el("div", { class: className },
+        return el(
+          "div",
+          { class: className },
           el("canvas", { id, role: "img", "aria-label": label }),
-          el("div", { class: "empty hidden" }));
+          el("div", { class: "empty hidden" }),
+        );
       }
 
       // The canvas and Chart instance belong to the page, not to a response.
@@ -5127,56 +5363,63 @@
       function renderUsageDistributionChart(account, rows, dimension, dimensionLabel, metric, colors, animate) {
         const canvas = $(account ? "account-usage-chart" : "usage-chart");
         canvas.setAttribute("aria-label", dimensionLabel + DISTRIBUTION_METRICS[metric].option + "环形图");
-        const empty = rows.some((row) => row.percent > 0) ? "" :
-          "当前范围内：" + DISTRIBUTION_METRICS[metric].label + "为 0";
-        updateAnalysisChart(account, "distribution", canvas, {
-          type: "doughnut",
-          data: {
-            labels: rows.map((row) =>
-              dimension === "api_keys" && row.key !== "other"
-                ? apiKeyIdentity(row).text
-                : row.label || row.key || "未知",
-            ),
-            datasets: [
-              {
-                data: rows.map((row) => row.percent),
-                backgroundColor: rows.map((_, index) => colors[index % colors.length]),
-                borderColor: themeColor("--analysis-segment-border", "#f0eee8"),
-                borderWidth: 3,
-                borderRadius: 7,
-                spacing: 1,
-                hoverBorderWidth: 3,
-                hoverOffset: 8,
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: "62%",
-            layout: { padding: 12 },
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                backgroundColor: themeColor("--floating-surface", "#2a2723"),
-                borderColor: themeColor("--border-primary", "#4a453f"),
-                borderWidth: 1,
-                titleColor: themeColor("--text-primary", "#f6f4f1"),
-                bodyColor: themeColor("--text-secondary", "#c9c3bb"),
-                callbacks: {
-                  title: (items) => (items.length ? dimensionLabel + " · " + items[0].label : dimensionLabel),
-                  label: (context) => {
-                    const row = rows[context.dataIndex];
-                    return [
-                      DISTRIBUTION_METRICS[metric].option + " " + row.percent.toFixed(2) + "%",
-                      ...Object.values(DISTRIBUTION_METRICS).map((item) => item.label + " " + item.format(row)),
-                    ];
+        const empty = rows.some((row) => row.percent > 0)
+          ? ""
+          : "当前范围内：" + DISTRIBUTION_METRICS[metric].label + "为 0";
+        updateAnalysisChart(
+          account,
+          "distribution",
+          canvas,
+          {
+            type: "doughnut",
+            data: {
+              labels: rows.map((row) =>
+                dimension === "api_keys" && row.key !== "other"
+                  ? apiKeyIdentity(row).text
+                  : row.label || row.key || "未知",
+              ),
+              datasets: [
+                {
+                  data: rows.map((row) => row.percent),
+                  backgroundColor: rows.map((_, index) => colors[index % colors.length]),
+                  borderColor: themeColor("--analysis-segment-border", "#f0eee8"),
+                  borderWidth: 3,
+                  borderRadius: 7,
+                  spacing: 1,
+                  hoverBorderWidth: 3,
+                  hoverOffset: 8,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              cutout: "62%",
+              layout: { padding: 12 },
+              plugins: {
+                legend: { display: false },
+                tooltip: {
+                  backgroundColor: themeColor("--floating-surface", "#2a2723"),
+                  borderColor: themeColor("--border-primary", "#4a453f"),
+                  borderWidth: 1,
+                  titleColor: themeColor("--text-primary", "#f6f4f1"),
+                  bodyColor: themeColor("--text-secondary", "#c9c3bb"),
+                  callbacks: {
+                    title: (items) => (items.length ? dimensionLabel + " · " + items[0].label : dimensionLabel),
+                    label: (context) => {
+                      const row = rows[context.dataIndex];
+                      return [
+                        DISTRIBUTION_METRICS[metric].option + " " + row.percent.toFixed(2) + "%",
+                        ...Object.values(DISTRIBUTION_METRICS).map((item) => item.label + " " + item.format(row)),
+                      ];
+                    },
                   },
                 },
               },
             },
           },
-        }, { empty, animate });
+          { empty, animate },
+        );
       }
 
       function renderUsageTrendChart(account, trends, colors, daily) {
@@ -5538,15 +5781,17 @@
             ),
           ),
         );
-        target.querySelector(".usage-distribution-header").replaceChildren(
-          el("h2", {}, "用量分布"),
-          el(
-            "div",
-            { class: "row usage-distribution-controls" },
-            el("div", { class: "usage-distribution-tabs" }, tabs),
-            el("span", { class: "native-select" }, metricSelect),
-          ),
-        );
+        target
+          .querySelector(".usage-distribution-header")
+          .replaceChildren(
+            el("h2", {}, "用量分布"),
+            el(
+              "div",
+              { class: "row usage-distribution-controls" },
+              el("div", { class: "usage-distribution-tabs" }, tabs),
+              el("span", { class: "native-select" }, metricSelect),
+            ),
+          );
         target.querySelector(".usage-distribution-list").replaceChildren(...list);
         target.querySelector(".usage-distribution-layout").classList.toggle("hidden", !rows.length);
         target.querySelector(".usage-distribution-empty").classList.toggle("hidden", !!rows.length);
@@ -5560,18 +5805,30 @@
         let content = target.querySelector(".analysis-content");
         if (!content) {
           const prefix = account ? "account-" : "";
-          content = el("div", { class: "analysis-content" },
+          content = el(
+            "div",
+            { class: "analysis-content" },
             el("div", { class: "analysis-summary-grid" }),
-            el("section", { class: "card usage-trend-card" },
+            el(
+              "section",
+              { class: "card usage-trend-card" },
               el("h2", {}, "用量趋势"),
               el("div", { class: "usage-trend-legend" }),
-              analysisChartPanel("usage-trend-chart", prefix + "usage-trend-chart", "用量趋势组合图")),
-            el("section", { id: prefix + "usage-distribution", class: "card usage-distribution-card" },
+              analysisChartPanel("usage-trend-chart", prefix + "usage-trend-chart", "用量趋势组合图"),
+            ),
+            el(
+              "section",
+              { id: prefix + "usage-distribution", class: "card usage-distribution-card" },
               el("div", { class: "row spread usage-distribution-header" }),
-              el("div", { class: "usage-distribution-layout" },
+              el(
+                "div",
+                { class: "usage-distribution-layout" },
                 analysisChartPanel("usage-distribution-chart", prefix + "usage-chart", "用量分布环形图"),
-                el("div", { class: "usage-distribution-list" })),
-              el("div", { class: "empty usage-distribution-empty", text: "当前时间范围内暂无请求事件" })));
+                el("div", { class: "usage-distribution-list" }),
+              ),
+              el("div", { class: "empty usage-distribution-empty", text: "当前时间范围内暂无请求事件" }),
+            ),
+          );
           target.replaceChildren(el("div", { class: "card empty analysis-state" }), content);
         }
         const analysis = load.value;
@@ -5586,7 +5843,13 @@
         const library = typeof Chart === "function" ? "ready" : chartError || "loading";
         const rendered = charts.rendered;
         const identities = account ? null : keyDirectory.value;
-        if (rendered?.value === analysis && rendered.theme === theme && rendered.library === library && rendered.identities === identities) return;
+        if (
+          rendered?.value === analysis &&
+          rendered.theme === theme &&
+          rendered.library === library &&
+          rendered.identities === identities
+        )
+          return;
         const summary = analysis.summary;
         const trends = analysis.trends;
         const points = trends.total_tokens;
@@ -5797,7 +6060,9 @@
         const role = account ? "account" : "admin";
         const owner = account ? accountUIState : adminUIState;
         const byIndex = new Map(files.map((file) => [file.auth_index, file]));
-        const previous = new Map((resources[role].authFiles.value || []).map((file) => [file.auth_index, file.cache_revision || ""]));
+        const previous = new Map(
+          (resources[role].authFiles.value || []).map((file) => [file.auth_index, file.cache_revision || ""]),
+        );
         const changed = new Set(
           files
             .filter(
@@ -6074,13 +6339,15 @@
           const result = account ? await accountAPI(path, opts) : await plugin("GET", path, null, opts);
           requireObject(result, "上游限额");
           requireArray(result.quota, "上游限额");
-          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) owner.authQuotas.set(file.auth_index, result);
+          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index))
+            owner.authQuotas.set(file.auth_index, result);
         } catch (error) {
           if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
           if (authQuotaCacheCurrent(account, owner, generation, file.auth_index))
             owner.authQuotaErrors.set(file.auth_index, error.message || String(error));
         } finally {
-          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) owner.authQuotaLoading.delete(file.auth_index);
+          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index))
+            owner.authQuotaLoading.delete(file.auth_index);
         }
       }
 
@@ -6112,7 +6379,8 @@
         ui.bulk.removeAttribute("aria-label");
         ui.bulk.replaceChildren(actionIcon("refresh"), progress);
         renderAuthFiles(account);
-        let next = 0, completed = 0;
+        let next = 0,
+          completed = 0;
         try {
           const worker = async () => {
             while (next < files.length && generation === authQuotaGeneration[role]) {
@@ -6556,7 +6824,8 @@
       function positionAnchoredPopover(node, anchor, alignRight = false) {
         node.style.maxHeight = "";
         const trigger = anchor.getBoundingClientRect();
-        const margin = 12, gap = 6;
+        const margin = 12,
+          gap = 6;
         const below = Math.max(0, innerHeight - trigger.bottom - gap - margin);
         const above = Math.max(0, trigger.top - gap - margin);
         const openAbove = node.offsetHeight > below && above > below;
@@ -6843,10 +7112,16 @@
       }
 
       function settingsCard(title, fields, onEdit, onDelete) {
-        return el("article", { class: "auth-file-card", role: "listitem" },
-          el("div", { class: "event-entry-head settings-entry-header" },
+        return el(
+          "article",
+          { class: "auth-file-card", role: "listitem" },
+          el(
+            "div",
+            { class: "event-entry-head settings-entry-header" },
             el("div", { class: "settings-entry-title", text: title }),
-            el("div", { class: "row settings-entry-actions" },
+            el(
+              "div",
+              { class: "row settings-entry-actions" },
               el("button", { class: "link", text: "编辑", onclick: onEdit }),
               el("button", { class: "link danger", text: "删除", onclick: onDelete }),
             ),
@@ -6869,7 +7144,15 @@
       }
 
       function renderPlans() {
-        if (renderDataPending($("plans-body"), [resources.admin.plans, resources.admin.keys], "正在加载…", "empty section-loading")) return;
+        if (
+          renderDataPending(
+            $("plans-body"),
+            [resources.admin.plans, resources.admin.keys],
+            "正在加载…",
+            "empty section-loading",
+          )
+        )
+          return;
         const plans = resources.admin.plans.value.map((plan) => ({
           plan,
           boundKeys: resources.admin.keys.value.filter((key) => key.plan_id === plan.id),
@@ -6879,26 +7162,36 @@
           empty: "暂无订阅计划",
           render: ({ plan, boundKeys }) => {
             const name = plan.name || plan.id;
-            const windows = plan.windows.map((window) => settingsEntryField(
-              window.name + " · " + periodLabel(window.period_seconds),
-              settingsChipList(QUOTA_DIMENSIONS.filter((metric) => window[metric.key] > 0)
-                .map((metric) => ({ text: metric.format(window[metric.key]) + (metric.planUnit ? " " + metric.planUnit : ""),
-                  title: metric.label + "：" + metric.exact(window[metric.key]) }))),
-            ));
-            return settingsCard(name, [...windows, boundKeyField(boundKeys)],
-              () => editPlan(plan),
-              () => openActionDialog(
-                "删除订阅计划「" + name + "」？",
-                boundKeys.length
-                  ? "将解除 " + bindingSummary(boundKeys) + " 的套餐绑定。解除后不再限制套餐额度。" +
-                    (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
-                  : "",
-                undefined,
-                async () => {
-                  await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
-                  notify("订阅计划已删除");
-                },
+            const windows = plan.windows.map((window) =>
+              settingsEntryField(
+                window.name + " · " + periodLabel(window.period_seconds),
+                settingsChipList(
+                  QUOTA_DIMENSIONS.filter((metric) => window[metric.key] > 0).map((metric) => ({
+                    text: metric.format(window[metric.key]) + (metric.planUnit ? " " + metric.planUnit : ""),
+                    title: metric.label + "：" + metric.exact(window[metric.key]),
+                  })),
+                ),
               ),
+            );
+            return settingsCard(
+              name,
+              [...windows, boundKeyField(boundKeys)],
+              () => editPlan(plan),
+              () =>
+                openActionDialog(
+                  "删除订阅计划「" + name + "」？",
+                  boundKeys.length
+                    ? "将解除 " +
+                        bindingSummary(boundKeys) +
+                        " 的套餐绑定。解除后不再限制套餐额度。" +
+                        (boundKeys.some((key) => key.deleted_at) ? "已删除 Key 重新加入时同样生效。" : "")
+                    : "",
+                  undefined,
+                  async () => {
+                    await mutateAdmin("DELETE", "/plans?id=" + encodeURIComponent(plan.id));
+                    notify("订阅计划已删除");
+                  },
+                ),
             );
           },
         });
@@ -6908,15 +7201,25 @@
         const missing = sources.filter((source) => source.value === null);
         if (!missing.length) return false;
         // The page notice owns error details and retries for resource groups.
-        target.replaceChildren(el("div", {
-          class: className,
-          text: missing.some((source) => source.error) ? "数据加载失败" : message,
-        }));
+        target.replaceChildren(
+          el("div", {
+            class: className,
+            text: missing.some((source) => source.error) ? "数据加载失败" : message,
+          }),
+        );
         return true;
       }
 
       function renderRoutes() {
-        if (renderDataPending($("routes-body"), [resources.admin.routes, resources.admin.keys], "正在加载…", "empty section-loading")) return;
+        if (
+          renderDataPending(
+            $("routes-body"),
+            [resources.admin.routes, resources.admin.keys],
+            "正在加载…",
+            "empty section-loading",
+          )
+        )
+          return;
         const routes = resources.admin.routes.value.map((route) => ({
           route,
           boundKeys: resources.admin.keys.value.filter((key) => key.route_bindings.route_ids.includes(route.id)),
@@ -6935,25 +7238,36 @@
                 }),
               );
             const name = route.name || route.id;
-            return settingsCard(name, [
-              settingsEntryField("模型范围", settingsChipList(models.map((text) => ({ text })), "全部模型")),
-              settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
-              boundKeyField(boundKeys),
-            ],
+            return settingsCard(
+              name,
+              [
+                settingsEntryField(
+                  "模型范围",
+                  settingsChipList(
+                    models.map((text) => ({ text })),
+                    "全部模型",
+                  ),
+                ),
+                settingsEntryField("凭证范围", settingsChipList(credentials, "全部凭证")),
+                boundKeyField(boundKeys),
+              ],
               () => editRoute(route),
-              () => openActionDialog(
-                "删除路由规则「" + name + "」？",
-                boundKeys.length
-                  ? "将从 " + bindingSummary(boundKeys) + " 的绑定中解除此规则；其中 " +
-                    (route.fully_unrestricted_keys || 0) +
-                    " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
-                  : "此操作无法撤销。",
-                undefined,
-                async () => {
-                  await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
-                  notify("路由规则已删除");
-                },
-              ),
+              () =>
+                openActionDialog(
+                  "删除路由规则「" + name + "」？",
+                  boundKeys.length
+                    ? "将从 " +
+                        bindingSummary(boundKeys) +
+                        " 的绑定中解除此规则；其中 " +
+                        (route.fully_unrestricted_keys || 0) +
+                        " 个未删除 Key 将不再受模型和凭证限制。已删除 Key 重新加入后按剩余绑定执行。"
+                    : "此操作无法撤销。",
+                  undefined,
+                  async () => {
+                    await mutateAdmin("DELETE", "/routes?id=" + encodeURIComponent(route.id));
+                    notify("路由规则已删除");
+                  },
+                ),
             );
           },
         });
@@ -7299,7 +7613,12 @@
             : []),
           ...(cost.multiplier === 2.5
             ? [
-                el("div", { class: "cost-tooltip-summary" }, el("span", {}, "计费倍率"), el("b", {}, "2.5× · Codex Fast mode")),
+                el(
+                  "div",
+                  { class: "cost-tooltip-summary" },
+                  el("span", {}, "计费倍率"),
+                  el("b", {}, "2.5× · Codex Fast mode"),
+                ),
                 el("div", { class: "cost-tooltip-summary" }, "以下单价和金额已包含倍率"),
               ]
             : []),
@@ -7399,11 +7718,15 @@
 
       function readEventKeys(reload) {
         const range = selectedRange(false);
-        return eventKeysQuery.read(JSON.stringify(sharedTimeRanges.admin), async () => {
-          const revision = keyDirectory.beginRead();
-          const keys = requireArray(await plugin("GET", "/events/keys?" + new URLSearchParams(range)), "事件 Key");
-          return keyDirectory.receive(keys, revision);
-        }, reload);
+        return eventKeysQuery.read(
+          JSON.stringify(sharedTimeRanges.admin),
+          async () => {
+            const revision = keyDirectory.beginRead();
+            const keys = requireArray(await plugin("GET", "/events/keys?" + new URLSearchParams(range)), "事件 Key");
+            return keyDirectory.receive(keys, revision);
+          },
+          reload,
+        );
       }
 
       function renderEventKeys() {
@@ -7418,8 +7741,14 @@
             text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
           })),
           ...(selected && !keys.some((key) => key.scope === selected)
-            ? [{ value: selected, text: keyDirectory.value.has(selected)
-                ? apiKeyIdentity({ scope: selected }).text : select.selectedOptions[0]?.textContent || selected }]
+            ? [
+                {
+                  value: selected,
+                  text: keyDirectory.value.has(selected)
+                    ? apiKeyIdentity({ scope: selected }).text
+                    : select.selectedOptions[0]?.textContent || selected,
+                },
+              ]
             : []),
         ]);
       }
@@ -8022,7 +8351,9 @@
               : entry;
           lines.push(
             columns
-              .map((column) => csvCell(kind === "events" && column.endsWith("_tokens") && !measured ? null : row[column]))
+              .map((column) =>
+                csvCell(kind === "events" && column.endsWith("_tokens") && !measured ? null : row[column]),
+              )
               .join(","),
           );
         }
@@ -8094,7 +8425,10 @@
         note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
         const renderRow = (entry) => {
           const cost = entry.cost;
-          const costNote = [cost.tiered ? (cost.long_context ? "长上下文" : "标准") : "", cost.multiplier === 2.5 ? "x2.5" : ""]
+          const costNote = [
+            cost.tiered ? (cost.long_context ? "长上下文" : "标准") : "",
+            cost.multiplier === 2.5 ? "x2.5" : "",
+          ]
             .filter(Boolean)
             .join(" · ");
           const input = requestInputTokens(cost);
@@ -8355,33 +8689,67 @@
 
       function renderQuotaWindows(view, account = false) {
         if (view.unlimited) return el("span", { class: "muted", text: "不限制" });
-        return el("div", { class: "quota-windows" }, view.windows.map((window) => {
-          const dimensions = window.dimensions;
-          const single = dimensions.length === 1;
-          const reset = el("span", { class: "muted", text: quotaWindowResetLabel(window, account),
-            title: window.started ? when(window.end_at) + " 重置" : null });
-          return el("div", { class: "quota-window" + (single ? " quota-single" : "") },
-            single ? null : el("div", { class: "quota-title" }, el("b", { text: window.name }), reset),
-            dimensions.map((balance) => {
-              const metric = QUOTA_DIMENSIONS.find((item) => item.metric === balance.metric);
-              const quota = remainingQuota(balance.used_percent);
-              const label = single ? window.name + (account ? " · " + metric.label : "") : metric.label;
-              return el("div", { class: "quota-metric" },
-                el("div", { class: "quota-heading" },
-                  el(single ? "b" : "span", { class: single ? "" : "muted", text: label, title: single ? label : null }),
-                  el("span", { class: "mono" + (balance.blocked ? " blocked" : ""),
-                    text: metric.format(balance.remaining) + "/" + metric.format(balance.limit),
-                    title: metric.label + " · 剩余 " + metric.exact(balance.remaining) + " · 已用 " + metric.exact(balance.used) + "/" + metric.exact(balance.limit) }),
-                  single ? reset : null,
-                ),
-                el("div", { class: "bar", role: "progressbar",
-                  "aria-label": window.name + " · " + metric.label + "剩余额度",
-                  "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(quota.percent)) },
-                  el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" })),
-              );
-            }),
-          );
-        }));
+        return el(
+          "div",
+          { class: "quota-windows" },
+          view.windows.map((window) => {
+            const dimensions = window.dimensions;
+            const single = dimensions.length === 1;
+            const reset = el("span", {
+              class: "muted",
+              text: quotaWindowResetLabel(window, account),
+              title: window.started ? when(window.end_at) + " 重置" : null,
+            });
+            return el(
+              "div",
+              { class: "quota-window" + (single ? " quota-single" : "") },
+              single ? null : el("div", { class: "quota-title" }, el("b", { text: window.name }), reset),
+              dimensions.map((balance) => {
+                const metric = QUOTA_DIMENSIONS.find((item) => item.metric === balance.metric);
+                const quota = remainingQuota(balance.used_percent);
+                const label = single ? window.name + (account ? " · " + metric.label : "") : metric.label;
+                return el(
+                  "div",
+                  { class: "quota-metric" },
+                  el(
+                    "div",
+                    { class: "quota-heading" },
+                    el(single ? "b" : "span", {
+                      class: single ? "" : "muted",
+                      text: label,
+                      title: single ? label : null,
+                    }),
+                    el("span", {
+                      class: "mono" + (balance.blocked ? " blocked" : ""),
+                      text: metric.format(balance.remaining) + "/" + metric.format(balance.limit),
+                      title:
+                        metric.label +
+                        " · 剩余 " +
+                        metric.exact(balance.remaining) +
+                        " · 已用 " +
+                        metric.exact(balance.used) +
+                        "/" +
+                        metric.exact(balance.limit),
+                    }),
+                    single ? reset : null,
+                  ),
+                  el(
+                    "div",
+                    {
+                      class: "bar",
+                      role: "progressbar",
+                      "aria-label": window.name + " · " + metric.label + "剩余额度",
+                      "aria-valuemin": "0",
+                      "aria-valuemax": "100",
+                      "aria-valuenow": String(Math.round(quota.percent)),
+                    },
+                    el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" }),
+                  ),
+                );
+              }),
+            );
+          }),
+        );
       }
 
       function addPlanWindow(quotaWindow = {}) {
@@ -8417,23 +8785,39 @@
               ),
             ),
           ),
-          el("button", {
-            type: "button",
-            class: "icon-action window-delete",
-            "aria-label": "删除窗口",
-            title: "删除窗口",
-            onclick: () => {
-              row.remove();
-              updateWindowDeleteButtons();
+          el(
+            "button",
+            {
+              type: "button",
+              class: "icon-action window-delete",
+              "aria-label": "删除窗口",
+              title: "删除窗口",
+              onclick: () => {
+                row.remove();
+                updateWindowDeleteButtons();
+              },
             },
-          }, actionIcon("x")),
+            actionIcon("x"),
+          ),
         );
-        row.append(el("div", { class: "plan-window-limits" }, QUOTA_DIMENSIONS.map((metric) => {
-          const input = el("input", { name: metric.key, "aria-label": metric.label, type: "number", min: "0",
-            step: metric.key === "amount_usd" ? "any" : "1", value: quotaWindow[metric.key] || "",
-            placeholder: "不限制" });
-          return field(metric.label + (metric.unit ? "（" + metric.unit + "）" : ""), input);
-        })));
+        row.append(
+          el(
+            "div",
+            { class: "plan-window-limits" },
+            QUOTA_DIMENSIONS.map((metric) => {
+              const input = el("input", {
+                name: metric.key,
+                "aria-label": metric.label,
+                type: "number",
+                min: "0",
+                step: metric.key === "amount_usd" ? "any" : "1",
+                value: quotaWindow[metric.key] || "",
+                placeholder: "不限制",
+              });
+              return field(metric.label + (metric.unit ? "（" + metric.unit + "）" : ""), input);
+            }),
+          ),
+        );
         $("plan-windows").append(row);
         updateWindowDeleteButtons();
         return row;
@@ -8474,25 +8858,21 @@
 
       function editPlan(plan) {
         const id = plan?.id;
-        openEditor(
-          "plan-dialog",
-          "plan",
-          (data) => {
-            const current = id ? data.plans.find((entry) => entry.id === id) : null;
-            if (id && !current) throw new Error("订阅计划已不存在，请关闭后刷新列表");
-            $("plan-dialog-title").textContent = current ? "编辑订阅计划：" + (current.name || id) : "新建订阅计划";
-            $("plan-id").value = id || "";
-            $("plan-save").textContent = current ? "保存" : "创建";
-            $("plan-name").value = current?.name || "";
-            $("plan-windows").replaceChildren();
-            (current ? current.windows : [{}]).forEach(addPlanWindow);
-            renderPlanKeyList(id || "", data);
-            return {
-              plan: current ? { ...structuredClone(current), windows: planFromForm().windows } : null,
-              scopes: selectedKeyScopes("plan-key-list"),
-            };
-          },
-        );
+        openEditor("plan-dialog", "plan", (data) => {
+          const current = id ? data.plans.find((entry) => entry.id === id) : null;
+          if (id && !current) throw new Error("订阅计划已不存在，请关闭后刷新列表");
+          $("plan-dialog-title").textContent = current ? "编辑订阅计划：" + (current.name || id) : "新建订阅计划";
+          $("plan-id").value = id || "";
+          $("plan-save").textContent = current ? "保存" : "创建";
+          $("plan-name").value = current?.name || "";
+          $("plan-windows").replaceChildren();
+          (current ? current.windows : [{}]).forEach(addPlanWindow);
+          renderPlanKeyList(id || "", data);
+          return {
+            plan: current ? { ...structuredClone(current), windows: planFromForm().windows } : null,
+            scopes: selectedKeyScopes("plan-key-list"),
+          };
+        });
       }
 
       function sameScopes(left, right) {
@@ -8524,8 +8904,7 @@
             const input = row.querySelector('[name="' + metric.key + '"]');
             const value = input.value === "" && !input.validity.badInput ? 0 : input.valueAsNumber;
             if (!Number.isFinite(value) || value < 0) invalid(input, "请输入有效额度");
-            else if (metric.key !== "amount_usd" && !Number.isSafeInteger(value))
-              invalid(input, "请输入有效整数");
+            else if (metric.key !== "amount_usd" && !Number.isSafeInteger(value)) invalid(input, "请输入有效整数");
             limits[metric.key] = value;
           }
           if (Object.values(limits).every((value) => value === 0))
@@ -8722,7 +9101,9 @@
         }
         const skipped = result.items.length - imported - unchanged;
         notify(
-          "已导入 " + imported + " 条备注" +
+          "已导入 " +
+            imported +
+            " 条备注" +
             (unchanged ? "，" + unchanged + " 条备注未变化" : "") +
             (skipped ? "，跳过 " + skipped + " 条无法匹配的备注" : ""),
         );
@@ -8840,8 +9221,11 @@
 
       function updateRefreshButtons() {
         const page = currentPage();
-        const label = currentRole ? document.querySelector(currentRole === "account"
-          ? "[data-account-tab].active" : "[data-tab].active")?.textContent.trim() : "";
+        const label = currentRole
+          ? document
+              .querySelector(currentRole === "account" ? "[data-account-tab].active" : "[data-tab].active")
+              ?.textContent.trim()
+          : "";
         for (const button of document.querySelectorAll('[data-page-action="refresh"]')) {
           button.disabled = !!page?.task;
           button.title = button.ariaLabel = label ? "刷新" + label : "刷新";
