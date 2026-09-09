@@ -60,9 +60,9 @@
         --analysis-segment-border: var(--bg-primary);
         --notice-success-bg: color-mix(in srgb, var(--success-badge-text) 14%, var(--floating-surface));
         --notice-error-bg: color-mix(in srgb, var(--failure-badge-text) 14%, var(--floating-surface));
-        --primary-10: color-mix(in srgb, var(--primary-color) 10%, transparent);
         --shadow: 0 1px 2px 0 #00000014;
         --radius-md: 8px;
+        --page-gap: 16px;
         --event-entry-bg: transparent;
         --event-entry-border: var(--border-color);
         --event-code-bg: var(--bg-secondary);
@@ -134,7 +134,6 @@
         --color-success: #22c55e;
         --primary-solid: #2563eb;
         --primary-solid-hover: #3b82f6;
-        --primary-ring: rgb(59 130 246 / 0.22);
         --data-cyan-base: #06b6d4;
       }
       :root[data-cpamp-standalone="true"][data-theme="dark"] {
@@ -159,7 +158,6 @@
         --color-primary-dark-2: #3b82f6;
         --color-success: #4ade80;
         --primary-solid: #60a5fa;
-        --primary-ring: rgb(96 165 250 / 0.22);
         --data-blue-base: #60a5fa;
         --data-green-base: #4ade80;
         --data-amber-base: #fbbf24;
@@ -218,7 +216,6 @@
         --quota-high-color: var(--success-color, var(--color-success, #10b981));
         --quota-medium-color: var(--warning-color, var(--color-warning, #e0aa14));
         --quota-low-color: var(--danger-color, var(--color-danger, var(--error-color)));
-        --primary-10: var(--primary-ring, color-mix(in srgb, var(--primary-color) 10%, transparent));
         --table-header-bg: var(--app-surface-strong, var(--bg-primary));
         --table-header-bg: rgb(from var(--bg-primary) r g b / 1);
         --shadow: var(--glass-shadow, none);
@@ -262,7 +259,19 @@
           color 0.3s;
       }
       a { color: var(--primary-active); }
-      .wrap { max-width: 1360px; margin: 0 auto; padding: 18px 20px 60px; }
+      .wrap { display: flow-root; min-height: 100dvh; max-width: 1360px; margin: 0 auto; padding: 18px 20px 0; }
+      .page-footer {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px 6px;
+        padding: 24px 12px max(32px, env(safe-area-inset-bottom));
+        color: var(--text-tertiary);
+        font-size: 11px;
+      }
+      .page-footer span { white-space: nowrap; }
+      .page-footer a { color: inherit; text-decoration: none; }
+      .page-footer a:hover, .page-footer a:focus-visible { color: var(--text-secondary); }
       h1 { font-size: 18px; margin: 0; }
       h2 { font-size: 15px; margin: 0 0 12px; }
       .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -278,7 +287,7 @@
         border-radius: var(--radius-md);
         box-shadow: var(--shadow);
         padding: 16px;
-        margin-bottom: 16px;
+        margin-bottom: var(--page-gap);
       }
       button {
         appearance: none;
@@ -603,7 +612,7 @@
         background: var(--glass-bg, var(--bg-primary));
         box-shadow: var(--glass-shadow, none);
       }
-      :root[data-cpamp-plugin-host="true"] .key-picker,
+      :root[data-cpamp-plugin-host="true"] .selection-list,
       :root[data-cpamp-plugin-host="true"] .route-picker-list {
         background: var(--app-surface-strong, var(--bg-primary));
       }
@@ -807,8 +816,7 @@
         color: var(--success-badge-text);
         border-color: var(--success-badge-border);
       }
-      #notice,
-      #account-notice {
+      #notice {
         position: fixed;
         z-index: 2000;
         top: max(14px, env(safe-area-inset-top));
@@ -1334,6 +1342,7 @@
         font-size: 12px;
         overflow-wrap: anywhere;
       }
+      dialog, .route-picker, .time-range-popover { max-height: 80dvh; }
       dialog {
         border: 1px solid var(--border-color);
         border-radius: 12px;
@@ -1344,18 +1353,15 @@
         width: min(420px, calc(100vw - 32px));
         min-width: 0;
         max-width: 90vw;
+        overflow: auto;
         overscroll-behavior: contain;
       }
       dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
       html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
-      .settings-picker-section { display: grid; gap: 8px; margin-top: 20px; }
-      .settings-picker-list { max-height: 340px; overflow: auto; }
+      .selection-section { display: grid; gap: 8px; margin-top: 20px; }
       .settings-dialog {
         width: min(620px, calc(100vw - 32px));
-        min-width: 0;
-        max-height: calc(100dvh - 32px);
         padding: 22px;
-        overflow: auto;
       }
       .price-dialog-model { margin: 0 0 16px; font-size: 14px; overflow-wrap: anywhere; }
       .price-reference { margin-bottom: 18px; }
@@ -1433,7 +1439,7 @@
       .tier-fields { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color); }
       .price-footnote { margin: 12px 0 0; }
       .tier-price { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
-      .key-picker {
+      .selection-list {
         width: 100%;
         max-height: 210px;
         overflow: auto;
@@ -1443,7 +1449,7 @@
         padding: 6px;
         background: var(--bg-secondary);
       }
-      .key-picker label {
+      .selection-list label {
         display: flex;
         align-items: center;
         gap: 8px;
@@ -1452,23 +1458,23 @@
         border-radius: 6px;
         cursor: pointer;
       }
-      .key-picker label span,
+      .selection-list label span,
       .route-picker-option > span:not(.count) {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .key-picker label:hover, .route-picker-option:hover { background: var(--bg-hover); }
-      .key-picker input[type="checkbox"],
+      .selection-list label:hover, .route-picker-option:hover { background: var(--bg-hover); }
+      .selection-list input[type="checkbox"],
       .route-picker-option input[type="checkbox"] {
         flex: none;
         width: 14px;
         height: 14px;
         min-height: 0;
       }
-      .key-picker label.disabled { cursor: not-allowed; opacity: 0.55; }
-      .key-picker label.disabled:hover, .route-picker-option.disabled:hover { background: transparent; }
+      .selection-list label.disabled { cursor: not-allowed; opacity: 0.55; }
+      .selection-list label.disabled:hover, .route-picker-option.disabled:hover { background: transparent; }
       .settings-card-list { padding-bottom: 0; }
       .settings-entry-header { align-items: flex-start; margin-bottom: 10px; }
       .settings-entry-title { min-width: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
@@ -1476,7 +1482,7 @@
       .settings-entry-fields { display: grid; gap: 9px; }
       .settings-entry-field { align-items: flex-start; }
       .settings-entry-field > .error-event-field-label { max-width: 45%; overflow-wrap: anywhere; }
-      .key-picker label > .tag { flex: none; }
+      .selection-list label > .tag { flex: none; }
       .settings-entry-value { flex: 1; min-width: 0; color: var(--text-primary); }
       .settings-chip-list { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
       .settings-item-chip { flex: none; }
@@ -1542,6 +1548,7 @@
       }
       .route-picker input[type="search"] { width: 100%; }
       .route-picker-list {
+        min-height: 0;
         max-height: min(320px, 50vh);
         overflow: auto;
         overscroll-behavior: contain;
@@ -1615,7 +1622,7 @@
       }
       .route-picker-option > span[title] { flex: 0 1 auto; white-space: normal; overflow-wrap: anywhere; }
       .route-picker-option > .tag, .route-picker-option > .count { flex: none; }
-      .route-picker-option > .lucide-icon, .key-picker label > .lucide-icon { width: 14px; height: 14px; }
+      .route-picker-option > .lucide-icon, .selection-list label > .lucide-icon { width: 14px; height: 14px; }
       .route-picker-option.model > span {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         font-size: 12px;
@@ -1629,19 +1636,9 @@
       .route-picker-option.disabled { cursor: not-allowed; opacity: 0.5; }
       .route-picker-actions { justify-content: flex-end; }
       #route-picker-clear { margin-right: auto; }
-      .route-rule-list { height: 210px; max-height: 210px; }
+      .route-rule-list { height: 210px; }
       @media (max-width: 768px) {
-        /* Anchoring a popover to a cell inside a horizontally scrolling table stops
-     making sense once the table is wider than the screen, so it becomes a sheet. */
-        .route-picker {
-          left: 8px !important;
-          right: 8px;
-          top: auto !important;
-          bottom: 8px;
-          width: auto;
-          min-width: 0;
-          max-width: none;
-        }
+        .route-picker { width: calc(100vw - 24px); }
         .route-trigger { max-width: none; }
       }
       .wide-search { width: 360px; max-width: 100%; }
@@ -1653,16 +1650,19 @@
       #keys-import-labels { display: none; }
       :root[data-cpamp-plugin-host="true"] body.embedded #keys-import-labels { display: inline-flex; }
       .event-list-card {
-        height: calc(100dvh - var(--event-list-top) - 16px);
+        height: calc(100svh - var(--event-list-top, var(--page-gap)) - var(--page-gap));
         min-height: 0;
         border-radius: 12px;
         display: flex;
         flex-direction: column;
-        margin-bottom: 0;
       }
-      .event-list-card.plugin-log-card { height: auto; }
-      .plugin-log-card .plugin-log-region { flex: none; height: clamp(240px, calc(100dvh - 240px), 560px); }
-      .event-list-title-row { margin-bottom: 9px; }
+      .plugin-log-card { --event-list-top: var(--page-gap); }
+      @media (min-width: 769px) {
+        .plugin-log-card { max-height: 720px; }
+      }
+      @media (max-width: 768px), (max-height: 520px) {
+        .event-list-card { --event-list-top: var(--page-gap); }
+      }
       .time-range-control { position: relative; min-width: 0; }
       .time-range-trigger {
         display: inline-flex;
@@ -1691,7 +1691,6 @@
         top: calc(100% + 6px);
         right: 0;
         width: min(360px, calc(100vw - 24px));
-        max-height: calc(100dvh - 100px);
         overflow: auto;
         padding: 12px;
         border: 1px solid var(--floating-border, var(--border-color));
@@ -1891,7 +1890,7 @@
         white-space: pre-wrap;
         overflow-wrap: anywhere;
       }
-      .event-list-region { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+      .event-list-region { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-x: contain; }
       .event-list-footer {
         display: flex;
         flex: none;
@@ -1981,7 +1980,8 @@
       }
       .event-load-state button { padding: 5px 10px; }
       @media (max-width: 768px) {
-        .wrap { padding: 14px 12px 40px; }
+        :root { --page-gap: 12px; }
+        .wrap { padding: 14px 12px 0; }
         .account-subscription-stats { grid-template-columns: 1fr; }
         /* CPAMC overlays mobile controls; CPAMP keeps them outside the frame. */
         :root:not([data-cpamp-plugin-host="true"]) body.embedded .wrap { padding-top: 90px; }
@@ -2009,7 +2009,6 @@
         }
         .key-toolbar-buttons .toggle-filter { width: auto; }
         .auth-file-grid { grid-template-columns: 1fr; }
-        .event-list-card { height: calc(100dvh - var(--event-list-top) - 12px); }
         .section-actions.event-card-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .section-actions.event-card-actions .native-select,
         .section-actions.event-card-actions select {
@@ -2020,12 +2019,9 @@
         .shared-time-filter .time-range-popover {
           position: fixed;
           z-index: 1301;
-          inset: 50% auto auto 50%;
+          inset: auto;
           width: min(400px, calc(100vw - 24px));
-          transform: translate(-50%, -50%);
           animation: none;
-          max-height: calc(100dvh - 24px);
-          overflow: auto;
         }
         html:has(.time-range-popover:not(.hidden)), body:has(.time-range-popover:not(.hidden)) { overflow: hidden; }
         .time-range-backdrop:not(.hidden) {
@@ -2304,12 +2300,28 @@
     </style>
     <script>
       "use strict";
+      function panelStoredValue(name) {
+        try {
+          let raw = localStorage.getItem(name);
+          if (!raw) return null;
+          const prefix = "enc::v1::";
+          if (raw.startsWith(prefix)) {
+            const secret = new TextEncoder().encode("cli-proxy-api-webui::secure-storage|" + location.host + "|" + navigator.userAgent);
+            const binary = atob(raw.slice(prefix.length));
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) ^ secret[i % secret.length];
+            raw = new TextDecoder().decode(bytes);
+          }
+          return JSON.parse(raw);
+        } catch (_) {
+          return null;
+        }
+      }
+
       /* Apply the host or stored theme before painting the body. */
       (function () {
         const STORE_KEY = "cli-proxy-theme";
         const PLUGIN_STORE_KEY = "cpa-key-billing:theme";
-        const PREFIX = "enc::v1::";
-        const SALT = "cli-proxy-api-webui::secure-storage";
 
         function parentDocument() {
           if (window.parent === window) return null;
@@ -2321,26 +2333,8 @@
         }
 
         function storedTheme() {
-          let raw = null;
-          try {
-            raw = localStorage.getItem(STORE_KEY);
-          } catch (_) {
-            return "";
-          }
-          if (!raw) return "";
-          try {
-            if (raw.startsWith(PREFIX)) {
-              const secret = new TextEncoder().encode(SALT + "|" + location.host + "|" + navigator.userAgent);
-              const binary = atob(raw.slice(PREFIX.length));
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) ^ secret[i % secret.length];
-              raw = new TextDecoder().decode(bytes);
-            }
-            const theme = JSON.parse(raw)?.state?.theme;
-            return typeof theme === "string" ? theme : "";
-          } catch (_) {
-            return "";
-          }
+          const theme = panelStoredValue(STORE_KEY)?.state?.theme;
+          return typeof theme === "string" ? theme : "";
         }
 
         const systemDark = () => !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -2456,8 +2450,6 @@
           </div>
         </header>
 
-        <div id="notice" class="notice" popover="manual"></div>
-
         <div class="page-tabs-row">
           <div class="tabs-scroll">
             <div class="tabs">
@@ -2530,7 +2522,7 @@
             <div id="plans-body"></div>
           </div>
           <dialog id="plan-dialog" class="settings-dialog plan-dialog">
-            <h2 id="plan-form-title">新建订阅计划</h2>
+            <h2 id="plan-dialog-title">新建订阅计划</h2>
             <div class="editor-state notice hidden"></div>
             <input id="plan-id" type="hidden" />
             <label class="field"> 计划名称 <input id="plan-name" placeholder="团队额度" /> </label>
@@ -2539,9 +2531,9 @@
               <button id="plan-window-add" type="button" class="link small">添加窗口</button>
             </div>
             <div id="plan-windows"></div>
-            <div class="settings-picker-section">
+            <div class="selection-section">
               <div class="small muted">绑定 API Key</div>
-              <div id="plan-key-picker" class="key-picker settings-picker-list"></div>
+              <div id="plan-key-list" class="selection-list"></div>
             </div>
             <div class="row dialog-actions">
               <button id="plan-cancel" type="button">取消</button>
@@ -2559,7 +2551,7 @@
             <div id="routes-body"></div>
           </div>
           <dialog id="route-dialog" class="settings-dialog route-dialog">
-            <h2 id="route-form-title">新建路由规则</h2>
+            <h2 id="route-dialog-title">新建路由规则</h2>
             <div class="editor-state notice hidden"></div>
             <input id="route-id" type="hidden" />
             <div class="route-form-toolbar">
@@ -2573,7 +2565,7 @@
             <div class="route-editor-grid">
               <div class="route-editor-section">
                 <span class="small muted"> 模型（ <span id="route-model-count">全部</span> ） </span>
-                <div id="route-model-list" class="key-picker route-rule-list settings-picker-list"></div>
+                <div id="route-model-list" class="selection-list route-rule-list"></div>
               </div>
               <div class="route-editor-section">
                 <div class="route-editor-title">
@@ -2584,12 +2576,12 @@
                     <span>仅启用</span>
                   </label>
                 </div>
-                <div id="route-credential-list" class="key-picker route-rule-list settings-picker-list"></div>
+                <div id="route-credential-list" class="selection-list route-rule-list"></div>
               </div>
             </div>
-            <div class="settings-picker-section">
+            <div class="selection-section">
               <div class="small muted">绑定 API Key</div>
-              <div id="route-key-list" class="key-picker settings-picker-list"></div>
+              <div id="route-key-list" class="selection-list"></div>
             </div>
             <div class="row dialog-actions">
               <button id="route-cancel" type="button">取消</button>
@@ -2605,7 +2597,7 @@
               <div class="row section-actions">
                 <input id="price-filter" placeholder="搜索模型" />
                 <button id="price-reference-refresh">更新参考价</button>
-                <button id="price-add">新增定价</button>
+                <button id="price-new">新增定价</button>
               </div>
             </div>
             <div id="prices-body"></div>
@@ -2615,7 +2607,7 @@
 
         <section id="tab-request-events" class="hidden">
           <div class="card event-list-card">
-            <div class="row spread section-toolbar event-list-title-row">
+            <div class="row spread section-toolbar">
               <h2>请求事件</h2>
               <div class="row section-actions event-card-actions">
                 <span class="native-select">
@@ -2706,7 +2698,7 @@
                 <button id="plugin-logs-clear" class="danger">清空日志</button>
               </div>
             </div>
-            <div id="plugin-logs-body" class="event-list-region plugin-log-region"></div>
+            <div id="plugin-logs-body" class="event-list-region"></div>
             <div class="event-list-footer"><span id="plugin-log-note" class="muted small"></span></div>
           </div>
         </section>
@@ -2724,7 +2716,6 @@
             <button type="button" class="icon-action" data-page-action="logout" aria-label="退出登录"></button>
           </div>
         </header>
-        <div id="account-notice" class="notice" popover="manual"></div>
         <div id="account-data-status" class="notice err" role="status"></div>
         <section id="account-untracked" class="card account-empty hidden">
           <h2>尚无计费记录</h2>
@@ -2793,7 +2784,7 @@
           <section id="account-tab-analysis" class="hidden"><div id="account-analysis-body"></div></section>
           <section id="account-tab-request-events" class="hidden">
             <div class="card event-list-card">
-              <div class="row spread section-toolbar event-list-title-row">
+              <div class="row spread section-toolbar">
                 <h2>请求事件</h2>
                 <div class="row section-actions event-card-actions">
                   <span class="native-select">
@@ -2837,7 +2828,7 @@
                   <button id="account-errors-filter-clear" class="link" type="button" disabled>清除筛选</button>
                 </div>
               </div>
-              <div id="account-errors" class="event-list-region"></div>
+              <div id="account-errors-body" class="event-list-region"></div>
               <div class="event-list-footer"><span id="account-error-note" class="muted small"></span></div>
             </div>
           </section>
@@ -2871,8 +2862,15 @@
         </section>
       </main>
     </div>
+    <footer class="page-footer">
+      <span>© 2026 <a href="https://github.com/haowang02/cpa-plugin-key-billing" target="_blank" rel="noopener noreferrer">CPA Key Billing</a></span>
+      <span>· <a href="https://github.com/haowang02/cpa-plugin-key-billing/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">License</a></span>
+      <span>· Version: v1.3.8</span>
+    </footer>
 
-    <dialog id="price-dlg" class="settings-dialog">
+    <div id="notice" class="notice" popover="manual"></div>
+
+    <dialog id="price-dialog" class="settings-dialog">
       <h2 id="price-dialog-title">编辑模型定价</h2>
       <div class="editor-state notice hidden"></div>
       <label class="field">
@@ -2916,14 +2914,14 @@
       </div>
     </dialog>
 
-    <dialog id="dlg">
-      <h2 id="dlg-title"></h2>
+    <dialog id="action-dialog">
+      <h2 id="action-dialog-title"></h2>
       <div class="editor-state notice hidden"></div>
-      <p id="dlg-text" class="muted small"></p>
-      <input id="dlg-input" class="dialog-input" />
+      <p id="action-text" class="muted small"></p>
+      <input id="action-input" class="dialog-input" />
       <div class="row dialog-actions">
-        <button id="dlg-cancel">取消</button>
-        <button id="dlg-ok" class="primary">确定</button>
+        <button id="action-cancel">取消</button>
+        <button id="action-confirm" class="primary">确定</button>
       </div>
     </dialog>
 
@@ -2948,46 +2946,17 @@
 
       /* A same-origin iframe can borrow the panel's obfuscated management key. When
        * it is unavailable, the standalone login can use its own encrypted vault. */
-      const PANEL_STORE_KEY = "cli-proxy-auth";
-      const PANEL_KEY = "managementKey";
-      const PANEL_PREFIX = "enc::v1::";
-      const PANEL_SALT = "cli-proxy-api-webui::secure-storage";
       const CREDENTIAL_DB = "cpa-key-billing-credentials";
       const CREDENTIAL_STORE = "vault";
       const CREDENTIAL_KEY = "wrapping-key";
       const SESSION_CREDENTIAL_PREFIX = "cpa-key-billing.session.v1.";
       const VIEW_PREFERENCE_PREFIX = "cpa-key-billing.view.v1.";
 
-      function panelDeobfuscate(raw) {
-        if (typeof raw !== "string" || !raw.startsWith(PANEL_PREFIX)) return raw;
-        const secret = new TextEncoder().encode(PANEL_SALT + "|" + location.host + "|" + navigator.userAgent);
-        const binary = atob(raw.slice(PANEL_PREFIX.length));
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) ^ secret[i % secret.length];
-        return new TextDecoder().decode(bytes);
-      }
-
-      function panelStoredValue(name) {
-        let raw = null;
-        try {
-          raw = localStorage.getItem(name);
-        } catch (_) {
-          return null;
-        }
-        if (!raw) return null;
-        try {
-          return JSON.parse(panelDeobfuscate(raw));
-        } catch (_) {
-          return null;
-        }
-      }
-
       function readPanelKey() {
-        const session = panelStoredValue(PANEL_STORE_KEY);
-        const fromStore = session && session.state && session.state.managementKey;
+        const fromStore = panelStoredValue("cli-proxy-auth")?.state?.managementKey;
         if (typeof fromStore === "string" && fromStore.trim()) return fromStore.trim();
 
-        const direct = panelStoredValue(PANEL_KEY);
+        const direct = panelStoredValue("managementKey");
         if (typeof direct === "string" && direct.trim()) return direct.trim();
 
         return "";
@@ -3032,35 +3001,15 @@
       const activeRequests = new Set();
       let loginMode = initialRoute.role;
       let loginModeRequest = 0;
-      function emptyAdminState() {
+      function emptyAuthQuotaState() {
         return {
-          get keys() { return resources.admin.keys.value ?? []; },
-          keySubmissions: new Set(),
-          get plans() { return resources.admin.plans.value ?? []; },
-          get prices() { return resources.admin.catalog.value?.prices ?? null; },
-          get routes() { return resources.admin.routes.value ?? []; },
-          get credentials() { return resources.admin.credentials.value ?? []; },
-          get authFiles() { return resources.admin.authFiles.value; },
           authQuotas: new Map(),
           authQuotaLoading: new Set(),
           authQuotaErrors: new Map(),
         };
       }
-      function emptyAccountState() {
-        return {
-          get profile() { return resources.account.profile.value; },
-          get subscription() { return resources.account.subscription.value; },
-          get routing() { return resources.account.routing.value; },
-          get prices() { return resources.account.catalog.value?.prices ?? null; },
-          get models() { return resources.account.models.value || []; },
-          get authFiles() { return resources.account.authFiles.value; },
-          authQuotas: new Map(),
-          authQuotaLoading: new Set(),
-          authQuotaErrors: new Map(),
-        };
-      }
-      let state = emptyAdminState();
-      let accountState = emptyAccountState();
+      let adminUIState = { ...emptyAuthQuotaState(), keySubmissions: new Set() };
+      let accountUIState = emptyAuthQuotaState();
       const authQuotaGeneration = { admin: 0, account: 0 };
       const credentialScope = { admin: "", account: "" };
       let accountTab = initialRoute.role === "account" ? initialRoute.tab : "subscription";
@@ -3231,6 +3180,45 @@
           models: "模型目录", catalog: "模型价格", authFiles: "认证文件",
         }),
       };
+      // Key metadata is shared by configuration, event queries, and analysis.
+      // Their cached rows keep scope references; labels and previews live here once.
+      const keyDirectory = {
+        value: new Map(),
+        revisions: new Map(),
+        revision: 0,
+        beginRead() { return ++keyDirectory.revision; },
+        clear() {
+          keyDirectory.value = new Map();
+          keyDirectory.revisions.clear();
+          keyDirectory.revision++;
+        },
+        receive(rows, revision = ++keyDirectory.revision, { field = "scope", fallback = false } = {}) {
+          let identities = keyDirectory.value;
+          const references = rows.map((row) => {
+            const scope = row[field];
+            if (!scope) return row;
+            const { label = "", preview = "", ...reference } = row;
+            const previous = identities.get(scope);
+            if (fallback && previous) return reference;
+            if (revision >= (keyDirectory.revisions.get(scope) || 0)) {
+              // Analysis provides a display name; exact labels come from Key records.
+              const identity = { label: fallback && (label === preview || label === scope) ? "" : label, preview };
+              if (!fallback) keyDirectory.revisions.set(scope, revision);
+              if (!previous || previous.label !== identity.label || previous.preview !== preview) {
+                if (identities === keyDirectory.value) identities = new Map(identities);
+                identities.set(scope, identity);
+              }
+            }
+            return reference;
+          });
+          keyDirectory.value = identities;
+          return references;
+        },
+        resolve(reference) {
+          return { ...reference, ...keyDirectory.value.get(reference.scope || reference.key) };
+        },
+      };
+
       const resourceGroups = {
         admin: {
           configuration: { names: ["keys", "plans", "routes", "credentials", "models"], syncErrors: [] },
@@ -3302,6 +3290,7 @@
           label: "请求事件",
           scrollers: ["request-events-body", "account-request-events-body"],
           timed: true,
+          keyed: true,
           path: requestEventPath,
           next: nextEventPage,
           render: renderRequestEvents,
@@ -3309,8 +3298,9 @@
         errors: {
           tab: "errors",
           label: "错误事件",
-          scrollers: ["errors-body", "account-errors"],
+          scrollers: ["errors-body", "account-errors-body"],
           timed: true,
+          keyed: true,
           path: errorEventPath,
           next: nextEventPage,
           render: renderErrors,
@@ -3340,7 +3330,6 @@
           append: false,
           rendered: null,
           get data() { return query.value?.page || null; },
-          get loading() { return !!query.task; },
           get scroller() { return $(view.scrollers[account ? 1 : 0]); },
           active() {
             return currentRole === (account ? "account" : "admin") && activeTab(account) === view.tab;
@@ -3366,25 +3355,23 @@
             list.scroller.scrollTop = 0;
             list.scroller.scrollLeft = 0;
           },
-          render() {
-            if (list.active()) view.render(account);
-          },
           renderItems(items, options) {
             const previous = list.rendered;
+            const identities = view.keyed && !account ? keyDirectory.value : null;
             const columns = JSON.stringify(options.headers || null);
             // Appended pages retain the same entry objects. Rebuild when the
-            // table shape changes or the previous rows are no longer a prefix.
-            const append = previous?.rows?.isConnected && previous.columns === columns &&
+            // identity metadata or table shape changes, or rows are no longer a prefix.
+            const append = previous?.rows?.isConnected && previous.columns === columns && previous.identities === identities &&
               previous.items.length <= items.length && previous.items.every((item, index) => item === items[index]);
             const rows = append ? previous.rows : renderCollection(list.scroller, items, options);
             if (append) rows.append(...items.slice(previous.items.length).map(options.render));
-            list.rendered = { items, columns, rows };
+            list.rendered = { items, columns, rows, identities };
           },
           reload() {
             const task = list.read(false, true);
             if (list.active()) {
               if (list.data) list.renderStatus();
-              else list.render();
+              else view.render(account);
             }
             return task;
           },
@@ -3407,12 +3394,8 @@
             const path = view.path(account, range, append ? previous.cursor : null);
             const pending = query.task;
             const task = query.read(selection, async () => {
-              const page = requireObject(await (account ? accountAPI(path) : plugin("GET", path)), view.label);
-              const incoming = requireArray(page.entries, view.label);
-              if (incoming.some((entry) => !entry || typeof entry !== "object" || !entry.id))
-                throw new Error(view.label + "记录格式无效");
-              if (view.timed && (!Number.isInteger(page.total) || page.total < 0 || !/^\d+$/.test(String(page.snapshot_id))))
-                throw new Error(view.label + "分页信息无效");
+              const page = await fetchListPage(kind, account, path);
+              const incoming = page.entries;
               const entries = append ? previous.page.entries.concat(incoming) : incoming;
               return {
                 page: { ...page, entries, filter_options: page.filter_options || (append ? previous.page.filter_options : undefined) },
@@ -3587,13 +3570,14 @@
       function resetRoleData(role) {
         const account = role === "account";
         destroyAnalysisCharts(account);
-        if (role === "account") accountState = emptyAccountState();
+        if (role === "account") accountUIState = emptyAuthQuotaState();
         else {
           routePicker.saving = false;
           closeRoutePicker();
-          state = emptyAdminState();
+          adminUIState = { ...emptyAuthQuotaState(), keySubmissions: new Set() };
           expandedPluginLogIDs.clear();
           resourceGroups.admin.configuration.syncErrors = [];
+          keyDirectory.clear();
         }
         for (const entry of Object.values(resources[role])) Object.assign(entry, { value: null, error: "" });
         for (const group of Object.values(resourceGroups[role])) group.task = null;
@@ -3813,23 +3797,22 @@
         return rows;
       }
       let noticeTimer = 0;
+      function hideNotice() {
+        clearTimeout(noticeTimer);
+        const node = $("notice");
+        node.className = "notice";
+        if (node.hidePopover && node.matches(":popover-open")) node.hidePopover();
+      }
+
       function notify(message, kind) {
-        const node = $(currentRole === "account" ? "account-notice" : "notice");
+        const node = $("notice");
         node.textContent = message;
         node.className = "notice show " + (kind || "ok");
         if (node.showPopover && !node.matches(":popover-open")) {
           node.showPopover();
         }
         clearTimeout(noticeTimer);
-        noticeTimer = setTimeout(
-          () => {
-            node.className = "notice";
-            if (node.hidePopover && node.matches(":popover-open")) {
-              node.hidePopover();
-            }
-          },
-          kind === "err" ? 9000 : 4000,
-        );
+        noticeTimer = setTimeout(hideNotice, kind === "err" ? 9000 : 4000);
       }
       async function fail(err) {
         if (err instanceof StaleRequestError) return;
@@ -3853,15 +3836,16 @@
       function openActionDialog(title, text, value, save) {
         return new Promise((resolve) => {
           let accepted = false;
-          $("dlg").addEventListener("close", () => resolve(accepted), { once: true });
-          openEditor("dlg", null, () => {
-            $("dlg-title").textContent = title;
-            $("dlg-text").textContent = text || "";
-            $("dlg-input").value = value || "";
-            $("dlg-input").classList.toggle("hidden", value === undefined);
-            $("dlg-ok").onclick = () =>
-              submitEditor("dlg", async () => {
-                await save?.($("dlg-input").value);
+          $("action-dialog").addEventListener("close", () => resolve(accepted), { once: true });
+          openEditor("action-dialog", null, () => {
+            $("action-dialog-title").textContent = title;
+            $("action-text").textContent = text || "";
+            $("action-input").value = value || "";
+            $("action-input").classList.toggle("hidden", value === undefined);
+            $("action-confirm").textContent = "确定";
+            $("action-confirm").onclick = () =>
+              submitEditor("action-dialog", async () => {
+                await save?.($("action-input").value);
                 accepted = true;
               });
           });
@@ -3873,57 +3857,41 @@
         return editor.dialog.open && editors.get(editor.dialog) === editor;
       }
 
-      function editorBusy(editor, busy) {
-        editor.button.disabled = busy;
+      function updateEditorControls(editor) {
+        editor.button.disabled = editor.saving;
         editor.dialog.querySelector(".dialog-actions button:not(.primary)").disabled = editor.saving;
         for (const field of editor.dialog.children) {
-          if (!field.matches("h2, .editor-state, .dialog-actions")) field.inert = busy;
+          if (!field.matches("h2, .editor-state, .dialog-actions")) field.inert = editor.saving;
         }
       }
 
-      function openEditor(id, load, initialize) {
+      function openEditor(id, kind, initialize) {
         const dialog = $(id);
         const editor = {
           dialog,
           button: dialog.querySelector(".dialog-actions .primary"),
           notice: dialog.querySelector(".editor-state"),
-          ready: false,
           saving: false,
         };
         editors.set(dialog, editor);
-        const prepare = async () => {
-          editorBusy(editor, true);
-          editor.notice.className = "editor-state notice show";
-          editor.notice.textContent = "正在加载编辑数据…";
+        try {
+          editor.data = kind ? editorData(kind) : undefined;
+          editor.initial = initialize(editor.data);
+          editor.notice.className = "editor-state notice hidden";
+          updateEditorControls(editor);
           dialog.showModal();
-          try {
-            const data = await load?.();
-            if (!editorCurrent(editor)) return;
-            editor.data = data;
-            editor.initial = initialize(data);
-            editor.ready = true;
-            editor.notice.className = "editor-state notice hidden";
-            editorBusy(editor, false);
-            dialog.querySelector("input:not([type=hidden]):not(.hidden):enabled")?.focus();
-          } catch (error) {
-            if (!editorCurrent(editor)) return;
-            if (error instanceof AuthError || error instanceof StaleRequestError) return fail(error);
-            editor.notice.className = "editor-state notice err show";
-            editor.notice.replaceChildren(
-              el("span", { text: error.message || String(error) }),
-              el("button", { class: "retry-button", onclick: prepare }, "重试"),
-            );
-          }
-        };
-        prepare();
+          dialog.querySelector("input:not([type=hidden]):not(.hidden):enabled")?.focus();
+        } catch (error) {
+          fail(error);
+        }
       }
 
       async function submitEditor(id, save) {
         const editor = editors.get($(id));
-        if (!editor || !editorCurrent(editor) || !editor.ready || editor.saving) return;
+        if (!editor || !editorCurrent(editor) || editor.saving) return;
         editor.saving = true;
         const label = editor.button.textContent;
-        editorBusy(editor, true);
+        updateEditorControls(editor);
         editor.button.textContent = "正在保存…";
         editor.notice.className = "editor-state notice hidden";
         try {
@@ -3938,13 +3906,13 @@
         } finally {
           editor.saving = false;
           if (editors.get(editor.dialog) === editor) {
-            editorBusy(editor, false);
+            updateEditorControls(editor);
             editor.button.textContent = label;
           }
         }
       }
 
-      for (const id of ["plan-dialog", "route-dialog", "price-dlg", "dlg"]) {
+      for (const id of ["plan-dialog", "route-dialog", "price-dialog", "action-dialog"]) {
         const dialog = $(id);
         dialog.querySelector(".dialog-actions button:not(.primary)").onclick = () => dialog.close();
         dialog.addEventListener("cancel", (event) => {
@@ -3989,6 +3957,8 @@
 
       function showGate(mode, error) {
         sessionGeneration++;
+        hideNotice();
+        hideCostTooltip();
         try {
           sessionStorage.removeItem(SESSION_CREDENTIAL_PREFIX + mode);
         } catch (_) {}
@@ -4218,15 +4188,8 @@
         return requireArray(result?.[name], resources.admin[name].label);
       }
 
-      async function loadEditorData(kind) {
+      function editorData(kind) {
         const names = EDITOR_RESOURCES[kind];
-        const groups = Object.entries(resourceGroups.admin).filter(([, group]) =>
-          group.names.some((name) => names.includes(name) && resources.admin[name].value === null));
-        if (groups.length) {
-          await settleLoads(groups.map(([name]) => loadDataGroup(false, name, true))).catch((error) => {
-            if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
-          });
-        }
         for (const name of names) {
           const resource = resources.admin[name];
           if (resource.value === null) throw new Error(resource.error || resource.label + "尚未加载");
@@ -4255,7 +4218,7 @@
       async function readAdminConfiguration(read) {
         // This load owns the CPA inputs. Key synchronization and model discovery
         // consume the same read; plaintext keys never enter the resource cache.
-        const configuredKeys = loadConfiguredAPIKeys();
+        const configuredKeys = fetchConfiguredAPIKeys();
         const errors = [];
         const sync = async (label, operation) => {
           try {
@@ -4301,7 +4264,9 @@
         for (const name of ["keys", "plans", "routes"]) {
           if (!Object.hasOwn(view, name)) continue;
           const resource = resources.admin[name];
-          Object.assign(resource, { value: requireArray(view[name], resource.label), error: "" });
+          const rows = requireArray(view[name], resource.label);
+          // A committed view supersedes metadata from any read already in flight.
+          Object.assign(resource, { value: name === "keys" ? keyDirectory.receive(rows) : rows, error: "" });
         }
         const catalog = resources.admin.catalog;
         if (Object.hasOwn(view, "prices")) {
@@ -4356,7 +4321,7 @@
         return [...prices.values()];
       }
 
-      async function loadConfiguredAPIKeys() {
+      async function fetchConfiguredAPIKeys() {
         const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
         const keys = result?.["api-keys"];
         if (keys === null) return [];
@@ -4441,6 +4406,18 @@
         return recentTimeRange(range.mode);
       }
 
+      async function fetchListPage(kind, account, path) {
+        const view = PAGED_LIST_VIEWS[kind];
+        const revision = keyDirectory.beginRead();
+        const page = requireObject(await (account ? accountAPI(path) : plugin("GET", path)), view.label);
+        const entries = requireArray(page.entries, view.label);
+        if (entries.some((entry) => !entry || typeof entry !== "object" || !entry.id))
+          throw new Error(view.label + "记录格式无效");
+        if (view.timed && (!Number.isInteger(page.total) || page.total < 0 || !/^\d+$/.test(String(page.snapshot_id))))
+          throw new Error(view.label + "分页信息无效");
+        return { ...page, entries: view.keyed && !account ? keyDirectory.receive(entries, revision) : entries };
+      }
+
       function readAnalysis(account, reload) {
         const role = account ? "account" : "admin";
         const range = selectedRange(account);
@@ -4451,12 +4428,17 @@
         if (key) params.set("api_key", key);
         const selection = JSON.stringify([sharedTimeRanges[role], key, timezone]);
         return analysisQueries[role].read(selection, async () => {
+          const revision = keyDirectory.beginRead();
           const value = requireObject(await (account ? accountAPI("/analysis?" + params) : plugin("GET", "/analysis?" + params)), "分析");
           requireObject(value.summary, "分析摘要");
           requireObject(value.trends, "分析趋势");
           requireObject(value.summary.cost, "分析成本");
           for (const name of ["requests", "total_tokens", "total_cost", "cache_rate"])
             requireArray(value.trends[name], "分析趋势");
+          if (!account) {
+            const distribution = requireObject(value.usage_distribution, "用量分布");
+            distribution.api_keys = keyDirectory.receive(requireArray(distribution.api_keys, "Key 用量分布"), revision, { field: "key", fallback: true });
+          }
           return value;
         }, reload);
       }
@@ -4478,8 +4460,8 @@
         return "/errors?" + params;
       }
 
-      function activeAdminTab() {
-        return document.querySelector(".tabs button[data-tab].active")?.dataset.tab || "keys";
+      function activeTab(account) {
+        return account ? accountTab : document.querySelector(".tabs button[data-tab].active")?.dataset.tab || "keys";
       }
 
       const TAB_BARS = Array.from(document.querySelectorAll(".tabs-scroll > .tabs"));
@@ -4489,6 +4471,7 @@
       function updatePageTabLayouts() {
         tabLayoutFrame = 0;
         for (const row of PAGE_TAB_ROWS) {
+          if (!row.getClientRects().length) continue;
           const tabBar = row.querySelector(".tabs-scroll > .tabs");
           const actions = row.querySelector(".page-tab-actions");
           const hasControls = Array.from(actions.children).some((node) => !node.classList.contains("hidden"));
@@ -4503,9 +4486,10 @@
           if (hasControls && (tabBar.scrollWidth > tabBar.clientWidth + 1 || actionsOverflow)) {
             row.classList.remove("controls-inline");
           }
-          const contentTop =
-            row.getBoundingClientRect().bottom + scrollY + parseFloat(getComputedStyle(row).marginBottom);
-          row.parentElement.style.setProperty("--event-list-top", contentTop + "px");
+          const card = Array.from(row.parentElement.querySelectorAll(".event-list-card"))
+            .find((card) => card.getClientRects().length);
+          if (card) row.parentElement.style.setProperty("--event-list-top", card.getBoundingClientRect().top + scrollY + "px");
+          positionSharedTimePopover(!!row.closest("#account-app"));
           updateTabScrollHint(tabBar);
         }
       }
@@ -4515,7 +4499,11 @@
         tabLayoutFrame = requestAnimationFrame(updatePageTabLayouts);
       }
 
+      addEventListener("resize", schedulePageTabLayout);
       const pageTabResizeObserver = new ResizeObserver(schedulePageTabLayout);
+      for (const header of document.querySelectorAll(".head, #admin-data-status, #account-data-status")) {
+        pageTabResizeObserver.observe(header, { box: "border-box" });
+      }
       for (const row of PAGE_TAB_ROWS) {
         pageTabResizeObserver.observe(row, { box: "border-box" });
         for (const control of row.querySelectorAll("button, select")) {
@@ -4569,6 +4557,7 @@
           if (!reload && dataGroupCached(account, group)) return;
           for (const key of group.names) resources[role][key].error = "";
           renderPage();
+          const identityRevision = keyDirectory.beginRead();
           const values = {}, failures = [];
           const read = async (key, fetch) => {
             try {
@@ -4593,7 +4582,8 @@
             await read("authFiles", () => fetchAuthFiles(false));
           }
           if (generation !== sessionGeneration) throw new StaleRequestError();
-          if (account && name !== "profile" && !accountState.profile?.tracked) return;
+          if (account && name !== "profile" && !resources.account.profile.value?.tracked) return;
+          if (values.keys) values.keys = keyDirectory.receive(values.keys, identityRevision);
           if (values.authFiles) updateAuthFiles(account, values.authFiles);
           for (const [key, value] of Object.entries(values)) Object.assign(resources[role][key], { value, error: "" });
           for (const { key, error } of failures) resources[role][key].error = error.message || String(error);
@@ -4660,14 +4650,15 @@
       function createPages(role) {
         const account = role === "account";
         const data = {
-          ...resources[role], analysis: analysisQueries[role], eventKeys: eventKeysQuery,
+          ...resources[role], analysis: analysisQueries[role], eventKeys: eventKeysQuery, keyDirectory,
           ...Object.fromEntries(Object.entries(pagedLists[role]).map(([name, list]) => [name, list.query])),
         };
         const section = (names, render) => ({ sources: names.map((name) => data[name]), render, displayed: null });
+        const keyedSection = (names, render) => section(account ? names : [...names, "keyDirectory"], render);
         const result = {
           analysis: { query: "analysis", sections: [] },
-          "request-events": { query: "events", sections: [section(["events"], () => renderRequestEvents(account))] },
-          errors: { query: "errors", sections: [section(["errors"], () => renderErrors(account))] },
+          "request-events": { query: "events", sections: [keyedSection(["events"], () => renderRequestEvents(account))] },
+          errors: { query: "errors", sections: [keyedSection(["errors"], () => renderErrors(account))] },
           "auth-files": { sections: [section(["authFiles"], () => renderAuthFiles(account))] },
         };
         if (account) {
@@ -4677,12 +4668,12 @@
             section(["routing"], renderAccountRouting),
           ] };
         } else {
-          const keyFilter = section(["eventKeys"], renderEventKeys);
+          const keyFilter = keyedSection(["eventKeys"], renderEventKeys);
           for (const tab of ["analysis", "request-events", "errors"]) result[tab].sections.unshift(keyFilter);
-          result.keys = { editors: ["route"], sections: [section(["keys", "plans", "routes", "credentials"], renderKeys)] };
+          result.keys = { editors: ["route"], sections: [keyedSection(["keys", "plans", "routes", "credentials"], renderKeys)] };
           result.settings = { editors: ["plan", "route"], query: "logs", sections: [
-            section(["plans", "keys"], renderPlans),
-            section(["routes", "keys", "credentials"], renderRoutes),
+            keyedSection(["plans", "keys"], renderPlans),
+            keyedSection(["routes", "keys", "credentials"], renderRoutes),
             section(["catalog"], renderPriceTable),
             section(["priceStatus", "catalog"], renderReferencePriceStatus),
             section(["logs"], renderPluginLogs),
@@ -4750,7 +4741,7 @@
           }
           if (generation !== sessionGeneration || currentPage() !== page) return;
           const tasks = profile ? [profile] : [];
-          if (!account || accountState.profile?.tracked) {
+          if (!account || resources.account.profile.value?.tracked) {
             tasks.push(...page.groups.map((name) => loadDataGroup(account, name, reload)));
             if (page.sources.includes(eventKeysQuery)) tasks.push(readEventKeys(reload));
             if (page.query === "analysis") {
@@ -4789,7 +4780,13 @@
         const errors = visible.filter((source) => source.error).map((source) =>
           source.label + "：" + source.error + (source.value !== null ? "（当前显示上次成功的数据）" : ""));
         if (!account && page.groups.includes("configuration")) errors.push(...resourceGroups.admin.configuration.syncErrors);
-        renderLoadNotice(account ? "account-data-status" : "admin-data-status", errors.join("；"), !!page.task, refreshPage);
+        const target = $(account ? "account-data-status" : "admin-data-status");
+        target.classList.toggle("show", !!errors.length);
+        target.replaceChildren(...(errors.length ? [
+          el("div", { text: errors.join("；") }),
+          el("button", { class: "retry-button", disabled: !!page.task, onclick: refreshPage },
+            page.task ? "正在重试…" : "重试"),
+        ] : []));
       }
 
       async function startAdmin(key) {
@@ -4852,7 +4849,7 @@
       }
 
       function renderAccountProfile() {
-        const profile = accountState.profile;
+        const profile = resources.account.profile.value;
         const tracked = profile?.tracked === true;
         $("account-untracked").classList.toggle("hidden", !profile || tracked);
         $("account-content").classList.toggle("hidden", !tracked);
@@ -4862,57 +4859,57 @@
       }
 
       function renderAccountSubscription() {
-        const subscription = accountState.subscription?.subscription || {};
-        const concurrency = accountState.subscription?.concurrency || {};
-        $("account-concurrency").textContent = !accountState.subscription ? "—" :
+        const data = resources.account.subscription;
+        const subscription = data.value?.subscription || {};
+        const concurrency = data.value?.concurrency || {};
+        $("account-concurrency").textContent = !data.value ? "—" :
           int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
-        $("account-plan-name").textContent = !accountState.subscription
+        $("account-plan-name").textContent = !data.value
           ? "订阅额度"
           : subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
         $("account-plan-status").className = "tag " + (subscription.blocked ? "bad" : "plain");
-        $("account-plan-status").textContent = !accountState.subscription
+        $("account-plan-status").textContent = !data.value
           ? ""
           : subscription.unlimited
             ? "不限制"
             : subscription.blocked
               ? "额度用尽"
               : "正常";
-        $("account-windows").replaceChildren(
-          accountState.subscription
-            ? renderQuotaWindows(subscription, true)
-            : el("div", { class: "empty", text: resources.account.subscription.error || "正在加载订阅状态…" }),
-        );
+        const target = $("account-windows");
+        if (renderDataPending(target, [data], "正在加载订阅状态…")) return;
+        target.replaceChildren(renderQuotaWindows(subscription, true));
       }
 
       function renderAccountModels() {
-        const access = accountState.routing || {};
-        const routingValid = access.routing_valid !== false;
-        const modelScope = new Set((access.models || []).map((model) => model.toLowerCase()));
+        const data = resources.account;
+        const target = $("account-models");
+        if (renderDataPending(target, [data.models, data.catalog, data.routing], "正在加载模型价格…")) return;
+        const access = data.routing.value;
+        const directory = data.models.value;
+        const modelScope = new Set(access.models.map((model) => model.toLowerCase()));
         const models = (
-          !routingValid || !accountState.routing || !accountState.prices
+          access.routing_valid === false
             ? []
             : !modelScope.size
-              ? accountState.models
-              : accountState.models.length
-                ? accountState.models.filter((model) => modelScope.has(model.toLowerCase()))
-                : access.models || []
+              ? directory
+              : directory.length
+                ? directory.filter((model) => modelScope.has(model.toLowerCase()))
+                : access.models
         )
           .slice()
           .sort(compareModelId);
-        renderCollection($("account-models"), models, {
+        renderCollection(target, models, {
           attrs: { class: "display-contents" },
-          empty: resources.account.routing.error || resources.account.catalog.error ||
-            (!accountState.routing || !accountState.prices ? "正在加载模型价格…" : "暂无模型价格"),
+          empty: "暂无模型价格",
           render: renderAccountModel,
         });
       }
 
       function renderAccountRouting() {
-        $("account-access").replaceChildren(
-          accountState.routing
-            ? renderAccountAccess(accountState.routing)
-            : el("div", { class: "empty", text: resources.account.routing.error || "正在加载路由权限…" }),
-        );
+        const data = resources.account.routing;
+        const target = $("account-access");
+        if (renderDataPending(target, [data], "正在加载路由权限…")) return;
+        target.replaceChildren(renderAccountAccess(data.value));
       }
 
       function renderAccountAccess(access) {
@@ -4980,7 +4977,7 @@
       }
 
       function renderAccountModel(model) {
-        const candidate = accountState.prices.find((price) => price.model_id.toLowerCase() === model.toLowerCase());
+        const candidate = resources.account.catalog.value.prices.find((price) => price.model_id.toLowerCase() === model.toLowerCase());
         const price = candidate?.source === "none" ? null : candidate;
         const fields = [
           ["输入", "input_per_1m"],
@@ -5582,13 +5579,14 @@
         status.classList.toggle("hidden", !!analysis);
         content.classList.toggle("hidden", !analysis);
         if (!analysis) {
-          status.textContent = load.error ? "分析数据加载失败：" + load.error : "加载中…";
+          status.textContent = load.error ? "分析数据加载失败" : "加载中…";
           return;
         }
         const theme = window.billingTheme.current();
         const library = typeof Chart === "function" ? "ready" : chartError || "loading";
         const rendered = charts.rendered;
-        if (rendered?.value === analysis && rendered.theme === theme && rendered.library === library) return;
+        const identities = account ? null : keyDirectory.value;
+        if (rendered?.value === analysis && rendered.theme === theme && rendered.library === library && rendered.identities === identities) return;
         const summary = analysis.summary;
         const trends = analysis.trends;
         const points = trends.total_tokens;
@@ -5600,7 +5598,7 @@
         }
         renderUsageTrendChart(account, trends, colors, daily);
         renderAnalysisDistribution(account, { colors });
-        charts.rendered = { value: analysis, theme, library };
+        charts.rendered = { value: analysis, theme, library, identities };
       }
 
       function populateErrorFilters(view, account) {
@@ -5668,7 +5666,6 @@
             );
           },
         });
-        list.renderStatus();
         note.textContent = "已加载 " + int(view.entries.length) + " / " + int(view.total) + " 条";
       }
 
@@ -5708,7 +5705,8 @@
       function authUI(account) {
         const prefix = account ? "account-auth" : "auth";
         return {
-          owner: account ? accountState : state,
+          owner: account ? accountUIState : adminUIState,
+          files: resources[account ? "account" : "admin"].authFiles,
           body: $(prefix + "-files-body"),
           enabledOnly: $(prefix + "-enabled-only"),
           provider: $(prefix + "-provider"),
@@ -5721,7 +5719,7 @@
 
       function resetAuthQuotaMemory(account) {
         const role = account ? "account" : "admin";
-        const owner = account ? accountState : state;
+        const owner = account ? accountUIState : adminUIState;
         authQuotaGeneration[role]++;
         owner.authQuotas.clear();
         owner.authQuotaLoading.clear();
@@ -5744,7 +5742,7 @@
         const role = account ? "account" : "admin";
         const key = authQuotaStorageKey(role);
         if (!key) return;
-        const owner = account ? accountState : state;
+        const owner = account ? accountUIState : adminUIState;
         try {
           sessionStorage.setItem(key, JSON.stringify({ entries: [...owner.authQuotas] }));
         } catch (_) {}
@@ -5782,7 +5780,7 @@
           return;
         }
         if (!Array.isArray(cached?.entries)) return;
-        const owner = account ? accountState : state;
+        const owner = account ? accountUIState : adminUIState;
         for (const entry of cached.entries) {
           if (Array.isArray(entry) && typeof entry[0] === "string" && Array.isArray(entry[1]?.quota)) {
             owner.authQuotas.set(entry[0], entry[1]);
@@ -5797,9 +5795,9 @@
 
       function updateAuthFiles(account, files) {
         const role = account ? "account" : "admin";
-        const owner = account ? accountState : state;
+        const owner = account ? accountUIState : adminUIState;
         const byIndex = new Map(files.map((file) => [file.auth_index, file]));
-        const previous = new Map((owner.authFiles || []).map((file) => [file.auth_index, file.cache_revision || ""]));
+        const previous = new Map((resources[role].authFiles.value || []).map((file) => [file.auth_index, file.cache_revision || ""]));
         const changed = new Set(
           files
             .filter(
@@ -5827,11 +5825,11 @@
 
       function authQuotaCacheCurrent(account, owner, generation, index) {
         const role = account ? "account" : "admin";
-        const currentOwner = account ? accountState : state;
+        const currentOwner = account ? accountUIState : adminUIState;
         return (
           owner === currentOwner &&
           generation === authQuotaGeneration[role] &&
-          (owner.authFiles || []).some((file) => file.auth_index === index)
+          (resources[role].authFiles.value || []).some((file) => file.auth_index === index)
         );
       }
 
@@ -5857,7 +5855,7 @@
         const ui = authUI(account);
         const provider = ui.provider.value;
         const search = ui.search.value.trim().toLocaleLowerCase();
-        return (ui.owner.authFiles || []).filter((file) => {
+        return (ui.files.value || []).filter((file) => {
           if (ui.enabledOnly.checked && file.disabled) return false;
           if (provider && file.category !== provider) return false;
           if (!search) return true;
@@ -5952,7 +5950,7 @@
       }
 
       function renderAuthFileQuota(file, account) {
-        const owner = account ? accountState : state;
+        const owner = account ? accountUIState : adminUIState;
         const index = file.auth_index;
         if (owner.authQuotaLoading.has(index)) {
           return el("div", { class: "auth-file-quota" }, el("div", { class: "muted small", text: "正在更新限额…" }));
@@ -5981,20 +5979,8 @@
 
       function renderAuthFiles(account) {
         const ui = authUI(account);
-        if (!ui.owner.authFiles) {
-          const load = account ? resources.account.authFiles : resources.admin.authFiles;
-          if (load.error) {
-            ui.body.replaceChildren(
-              el(
-                "div",
-                { class: "empty" },
-                el("div", { text: "认证文件加载失败" }),
-                el("button", { class: "retry-button", onclick: refreshPage }, "重试"),
-              ),
-            );
-          } else {
-            ui.body.replaceChildren(el("div", { class: "empty", text: "加载中…" }));
-          }
+        if (renderDataPending(ui.body, [ui.files])) {
+          ui.bulk.disabled = true;
           return;
         }
         const files = filteredAuthFiles(account);
@@ -6076,7 +6062,7 @@
       // Fetching quota updates memory only. Single and batch actions own their
       // display and persistence, so a batch never redraws the list per response.
       async function loadAuthQuota(file, account) {
-        const owner = account ? accountState : state;
+        const owner = account ? accountUIState : adminUIState;
         const role = account ? "account" : "admin";
         const generation = authQuotaGeneration[role];
         if (owner.authQuotaLoading.has(file.auth_index)) return;
@@ -6149,6 +6135,7 @@
       }
 
       function apiKeyIdentity(view) {
+        if (currentRole === "admin") view = keyDirectory.resolve(view);
         const scope = String(view.scope || view.key || "");
         const preview = String(view.preview || "");
         const candidate = String(view.label || "");
@@ -6203,7 +6190,7 @@
       async function copyAPIKey(button, view) {
         button.disabled = true;
         try {
-          const keys = await loadConfiguredAPIKeys();
+          const keys = await fetchConfiguredAPIKeys();
           let key = "";
           for (const value of keys) {
             const candidate = value.trim();
@@ -6241,7 +6228,7 @@
       }
 
       async function submitKeyChange(scope, save) {
-        const owner = state;
+        const owner = adminUIState;
         if (owner.keySubmissions.has(scope)) return;
         owner.keySubmissions.add(scope);
         renderKeys();
@@ -6249,17 +6236,17 @@
           await save();
         } finally {
           owner.keySubmissions.delete(scope);
-          if (owner === state) renderKeys();
+          if (owner === adminUIState) renderKeys();
         }
       }
 
       function renderKeys() {
         // Keep the anchor row in place while its route picker is open.
-        if (currentRole !== "admin" || activeAdminTab() !== "keys" || routePicker.scope) return false;
-        if (renderConfigurationPending("keys", ["keys"])) return;
-        const plansReady = resources.admin.plans.value !== null;
+        if (currentRole !== "admin" || activeTab(false) !== "keys" || routePicker.scope) return false;
+        if (renderDataPending($("keys-body"), [resources.admin.keys], "正在加载…", "empty section-loading")) return;
+        const plans = resources.admin.plans.value;
         const filter = $("key-filter").value.trim().toLowerCase();
-        const keys = state.keys
+        const keys = resources.admin.keys.value
           .filter((key) => !key.deleted_at || $("keys-include-deleted").checked)
           .filter(
             (view) =>
@@ -6274,14 +6261,14 @@
           headers: ["API Key", "订阅计划", "路由规则", "并发限制", "订阅额度", "状态", "操作"],
           render: (view) => {
             const deleted = !!view.deleted_at;
-            const saving = state.keySubmissions.has(view.scope);
+            const saving = adminUIState.keySubmissions.has(view.scope);
             const name = apiKeyIdentity(view).primary;
             const select = el(
               "select",
               {
                 name: "plan_id",
-                disabled: deleted || saving || !plansReady,
-                title: !plansReady ? resources.admin.plans.error || "正在加载订阅计划…" : null,
+                disabled: deleted || saving || !plans,
+                title: !plans ? resources.admin.plans.error || "正在加载订阅计划…" : null,
                 "aria-label": name + " 的订阅计划",
                 onchange: (event) =>
                   guard(async () => {
@@ -6295,10 +6282,10 @@
                   }),
               },
               el("option", { value: "", text: "不限制" }),
-              view.plan_id && !state.plans.some((plan) => plan.id === view.plan_id)
+              view.plan_id && !(plans || []).some((plan) => plan.id === view.plan_id)
                 ? el("option", { value: view.plan_id, selected: true, text: view.plan_name || view.plan_id })
                 : null,
-              state.plans.map((plan) =>
+              (plans || []).map((plan) =>
                 el("option", { value: plan.id, selected: plan.id === view.plan_id }, plan.name || plan.id),
               ),
             );
@@ -6414,7 +6401,7 @@
                   class: "link",
                   text: "备注",
                   onclick: () =>
-                    openActionDialog("备注", name, view.label || "", async (label) => {
+                    openActionDialog("备注", name, keyDirectory.resolve(view).label || "", async (label) => {
                       await mutateAdmin("POST", "/keys/label", { scope: view.scope, label });
                       notify("已保存备注");
                     }),
@@ -6431,7 +6418,7 @@
       }
 
       function boundCredentialLabel(ref, labels) {
-        const credential = state.credentials.find((item) => item.ref === ref);
+        const credential = (resources.admin.credentials.value || []).find((item) => item.ref === ref);
         return (credential && credentialLabel(credential)) || labels?.[ref] || "指定上游凭证 · " + ref.slice(-8);
       }
 
@@ -6510,7 +6497,7 @@
             disabled: !!view.deleted_at,
             title: names.map((entry) => entry.text + (entry.tag ? " · " + entry.tag : "")).join("、"),
             "aria-label": apiKeyIdentity(view).primary + " 的路由规则",
-            onclick: (event) => openRoutePicker(view, event.currentTarget),
+            onclick: (event) => guard(() => openRoutePicker(view, event.currentTarget)),
           },
           parts,
         );
@@ -6519,7 +6506,7 @@
       // Keep retired selections so a temporary provider outage cannot rewrite access.
       function retiredModels(selected, models) {
         const known = new Set(models.map((model) => model.toLowerCase()));
-        return [...selected].filter((model) => !known.has(model.toLowerCase())).sort(compareModelId);
+        return [...selected].filter((model) => !known.has(model.toLowerCase()));
       }
 
       function matchesTerm(text, term) {
@@ -6530,77 +6517,54 @@
 
       function openRoutePicker(view, anchor) {
         if (routePicker.saving) return;
+        const data = editorData("route");
+        const key = data.keys.find((entry) => entry.scope === view.scope);
+        if (!key || key.deleted_at) throw new Error("API Key 已不存在，请刷新列表");
+        const bindings = key.route_bindings;
         routePicker = {
           scope: view.scope,
-          routeIDs: new Set(),
-          models: new Set(),
-          credentialIDs: new Set(),
-          credentialProviders: [],
+          data,
+          routeIDs: new Set(bindings.route_ids),
+          models: new Set(bindings.models),
+          credentialIDs: new Set(bindings.credential_ids),
+          credentialProviders: structuredClone(bindings.credential_providers),
           expanded: { routes: true, credentials: true, models: true },
           enabledOnly: viewPreference("admin", "route-picker-enabled-only", true),
-          searching: false,
           beforeSearch: null,
           anchor,
-          loading: true,
-          error: "",
         };
         $("route-picker-search").value = "";
-        $("route-picker-save").textContent = "保存";
         $("route-picker").classList.remove("hidden");
-        guard(loadRoutePicker);
-        $("route-picker-search").focus();
-      }
-
-      async function loadRoutePicker() {
-        const picker = routePicker;
-        picker.loading = true;
-        picker.error = "";
         renderRoutePicker();
-        try {
-          const data = await loadEditorData("route");
-          if (picker !== routePicker || !picker.scope) return;
-          picker.data = data;
-          const key = data.keys.find((entry) => entry.scope === picker.scope);
-          if (!key || key.deleted_at) throw new Error("API Key 已不存在，请关闭后刷新列表");
-          const bindings = key.route_bindings;
-          picker.routeIDs = new Set(bindings.route_ids);
-          picker.models = new Set(bindings.models);
-          picker.credentialIDs = new Set(bindings.credential_ids);
-          picker.credentialProviders = structuredClone(bindings.credential_providers);
-        } catch (error) {
-          if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
-          picker.error = error.message || String(error);
-        } finally {
-          if (picker === routePicker && picker.scope) {
-            picker.loading = false;
-            renderRoutePicker();
-          }
-        }
+        $("route-picker-search").focus();
       }
 
       function closeRoutePicker() {
         if (routePicker.saving || !routePicker.scope) return;
-        routePicker.scope = "";
-        routePicker.anchor = null;
+        routePicker = { scope: "" };
         $("route-picker").classList.add("hidden");
         renderPage();
       }
 
-      function positionRoutePicker() {
+      function positionRoutePicker(event) {
         const node = $("route-picker");
         if (!routePicker.anchor || node.classList.contains("hidden")) return;
-        const anchorRect = routePicker.anchor.getBoundingClientRect();
-        const rect = node.getBoundingClientRect();
-        const margin = 8;
-        let left = anchorRect.left;
-        if (left + rect.width > innerWidth - margin) left = innerWidth - rect.width - margin;
-        let top = anchorRect.bottom + 4;
-        if (top + rect.height > innerHeight - margin) {
-          const above = anchorRect.top - rect.height - 4;
-          top = above >= margin ? above : Math.max(margin, innerHeight - rect.height - margin);
-        }
-        node.style.left = Math.round(Math.max(margin, left)) + "px";
-        node.style.top = Math.round(top) + "px";
+        if (event?.target instanceof Node && node.contains(event.target)) return;
+        positionAnchoredPopover(node, routePicker.anchor);
+      }
+
+      function positionAnchoredPopover(node, anchor, alignRight = false) {
+        node.style.maxHeight = "";
+        const trigger = anchor.getBoundingClientRect();
+        const margin = 12, gap = 6;
+        const below = Math.max(0, innerHeight - trigger.bottom - gap - margin);
+        const above = Math.max(0, trigger.top - gap - margin);
+        const openAbove = node.offsetHeight > below && above > below;
+        node.style.maxHeight = "min(80dvh, " + (openAbove ? above : below) + "px)";
+        const top = openAbove ? trigger.top - gap - node.offsetHeight : trigger.bottom + gap;
+        const left = alignRight ? trigger.right - node.offsetWidth : trigger.left;
+        node.style.top = Math.max(margin, Math.min(top, innerHeight - node.offsetHeight - margin)) + "px";
+        node.style.left = Math.max(margin, Math.min(left, innerWidth - node.offsetWidth - margin)) + "px";
       }
 
       function pickerOption(checked, kind, label, note, onToggle, options = {}) {
@@ -6635,28 +6599,14 @@
         $("route-picker-list").inert = saving;
         $("route-picker-cancel").disabled = saving;
         $("route-picker-save").textContent = saving ? "正在保存…" : "保存";
-        $("route-picker-save").disabled = !!routePicker.loading || !!routePicker.error || !!routePicker.saving;
-        $("route-picker-clear").disabled = !!routePicker.loading || !!routePicker.error || !!routePicker.saving;
+        $("route-picker-save").disabled = saving;
+        $("route-picker-clear").disabled = saving;
       }
 
       function renderRoutePicker() {
         const term = $("route-picker-search").value.trim().toLowerCase();
         const list = $("route-picker-list");
         updateRoutePickerControls();
-        if (routePicker.loading || routePicker.error) {
-          list.replaceChildren(
-            el(
-              "div",
-              { class: "empty" },
-              routePicker.loading ? "正在加载路由选项…" : routePicker.error,
-              routePicker.error
-                ? el("button", { class: "retry-button", onclick: () => guard(loadRoutePicker) }, "重试")
-                : null,
-            ),
-          );
-          positionRoutePicker();
-          return;
-        }
         const { routes, credentials, models } = routePicker.data;
         const sections = [];
 
@@ -6757,8 +6707,8 @@
               renderRoutePicker();
             });
           });
-        for (const model of routePicker.models)
-          if (!models.some((item) => item.toLowerCase() === model.toLowerCase()) && matchesTerm(model, term))
+        for (const model of retiredModels(routePicker.models, models))
+          if (matchesTerm(model, term))
             modelOptions.push(
               pickerOption(true, "model", model, "不在 CPA 模型列表中", (checked) => {
                 if (!checked) routePicker.models.delete(model);
@@ -6840,7 +6790,7 @@
       async function saveRoutePicker() {
         const picker = routePicker;
         const scope = routePicker.scope;
-        if (!scope || picker.loading || picker.error || picker.saving) return;
+        if (!scope || picker.saving) return;
         picker.saving = true;
         const body = {
           scope,
@@ -6919,10 +6869,10 @@
       }
 
       function renderPlans() {
-        if (renderConfigurationPending("plans", ["plans", "keys"])) return;
-        const plans = state.plans.map((plan) => ({
+        if (renderDataPending($("plans-body"), [resources.admin.plans, resources.admin.keys], "正在加载…", "empty section-loading")) return;
+        const plans = resources.admin.plans.value.map((plan) => ({
           plan,
-          boundKeys: state.keys.filter((key) => key.plan_id === plan.id),
+          boundKeys: resources.admin.keys.value.filter((key) => key.plan_id === plan.id),
         }));
         renderCollection($("plans-body"), plans, {
           attrs: { class: "event-list settings-card-list", role: "list" },
@@ -6954,47 +6904,22 @@
         });
       }
 
-      function renderLoadNotice(id, message, loading, retry) {
-        const target = $(id);
-        target.classList.toggle("show", !!message);
-        target.replaceChildren(
-          ...(message
-            ? [
-                el("div", { text: message }),
-                el(
-                  "button",
-                  { class: "retry-button", disabled: loading, onclick: () => guard(retry) },
-                  loading ? "正在重试…" : "重试",
-                ),
-              ]
-            : []),
-        );
-      }
-
-
-      function renderConfigurationPending(name, dependencies) {
-        const missing = dependencies.filter((key) => resources.admin[key].value === null);
+      function renderDataPending(target, sources, message = "加载中…", className = "empty") {
+        const missing = sources.filter((source) => source.value === null);
         if (!missing.length) return false;
-        const error = missing
-          .map((key) => resources.admin[key].error)
-          .filter(Boolean)
-          .join("；");
-        $(name + "-body").replaceChildren(
-          el(
-            "div",
-            { class: "empty section-loading" },
-            el("div", { text: error || "正在加载…" }),
-            error ? el("button", { class: "retry-button", onclick: () => guard(() => refreshPage()) }, "重试") : null,
-          ),
-        );
+        // The page notice owns error details and retries for resource groups.
+        target.replaceChildren(el("div", {
+          class: className,
+          text: missing.some((source) => source.error) ? "数据加载失败" : message,
+        }));
         return true;
       }
 
       function renderRoutes() {
-        if (renderConfigurationPending("routes", ["routes", "keys"])) return;
-        const routes = state.routes.map((route) => ({
+        if (renderDataPending($("routes-body"), [resources.admin.routes, resources.admin.keys], "正在加载…", "empty section-loading")) return;
+        const routes = resources.admin.routes.value.map((route) => ({
           route,
-          boundKeys: state.keys.filter((key) => key.route_bindings.route_ids.includes(route.id)),
+          boundKeys: resources.admin.keys.value.filter((key) => key.route_bindings.route_ids.includes(route.id)),
         }));
         renderCollection($("routes-body"), routes, {
           attrs: { class: "event-list settings-card-list", role: "list" },
@@ -7161,7 +7086,7 @@
         const node = $("route-model-list");
         const term = routeRuleSearchTerm();
         const available = routeEditorData().models;
-        const retired = new Set(retiredModels(routeModels, available));
+        const retired = new Set(retiredModels(routeModels, available).sort(compareModelId));
         const models = available.concat([...retired]);
         $("route-model-count").textContent = routeModels.size ? String(routeModels.size) : "全部";
         const options = models
@@ -7219,19 +7144,19 @@
         );
       }
 
-      function selectedRouteScopes() {
+      function selectedKeyScopes(id) {
         return Array.from(
-          $("route-key-list").querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
+          $(id).querySelectorAll('input[type="checkbox"]:checked:not(:disabled)'),
           (input) => input.value,
         );
       }
 
       function editRoute(route) {
         const id = route?.id;
-        openEditor("route-dialog", () => loadEditorData("route"), (data) => {
+        openEditor("route-dialog", "route", (data) => {
           const current = id ? data.routes.find((entry) => entry.id === id) : null;
           if (id && !current) throw new Error("路由规则已不存在，请关闭后刷新列表");
-          $("route-form-title").textContent = current ? "编辑路由规则：" + (current.name || id) : "新建路由规则";
+          $("route-dialog-title").textContent = current ? "编辑路由规则：" + (current.name || id) : "新建路由规则";
           $("route-id").value = id || "";
           $("route-save").textContent = current ? "保存" : "创建";
           $("route-name").value = current?.name || "";
@@ -7243,7 +7168,7 @@
           renderRouteModelList();
           renderRouteCredentialList();
           renderRouteKeyList(id || "");
-          return { route: structuredClone(current), scopes: selectedRouteScopes() };
+          return { route: structuredClone(current), scopes: selectedKeyScopes("route-key-list") };
         });
       }
 
@@ -7298,14 +7223,9 @@
       }
 
       function renderPriceTable() {
-        if (!state.prices) {
-          $("prices-body").replaceChildren(
-            el("div", { class: "empty", text: resources.admin.catalog.error || "正在加载模型价格…" }),
-          );
-          return;
-        }
+        if (renderDataPending($("prices-body"), [resources.admin.catalog], "正在加载模型价格…")) return;
         const filter = $("price-filter").value.trim().toLowerCase();
-        const rows = state.prices
+        const rows = resources.admin.catalog.value.prices
           .filter((row) => !filter || row.model_id.toLowerCase().includes(filter))
           .sort((a, b) => compareModelId(a.model_id, b.model_id));
         const renderRow = (row) => {
@@ -7479,8 +7399,11 @@
 
       function readEventKeys(reload) {
         const range = selectedRange(false);
-        return eventKeysQuery.read(JSON.stringify(sharedTimeRanges.admin),
-          async () => requireArray(await plugin("GET", "/events/keys?" + new URLSearchParams(range)), "事件 Key"), reload);
+        return eventKeysQuery.read(JSON.stringify(sharedTimeRanges.admin), async () => {
+          const revision = keyDirectory.beginRead();
+          const keys = requireArray(await plugin("GET", "/events/keys?" + new URLSearchParams(range)), "事件 Key");
+          return keyDirectory.receive(keys, revision);
+        }, reload);
       }
 
       function renderEventKeys() {
@@ -7495,7 +7418,8 @@
             text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
           })),
           ...(selected && !keys.some((key) => key.scope === selected)
-            ? [{ value: selected, text: select.selectedOptions[0]?.textContent || selected }]
+            ? [{ value: selected, text: keyDirectory.value.has(selected)
+                ? apiKeyIdentity({ scope: selected }).text : select.selectedOptions[0]?.textContent || selected }]
             : []),
         ]);
       }
@@ -7564,6 +7488,16 @@
         sharedTimeDrafts[account ? "account" : "admin"] = null;
         updateSharedTimeControl(account);
         if (restoreFocus) $(sharedTimeID(account, "trigger")).focus();
+      }
+
+      function positionSharedTimePopover(account) {
+        const popover = $(sharedTimeID(account, "popover"));
+        if (popover.classList.contains("hidden")) return;
+        if (!matchMedia("(max-width: 768px)").matches) {
+          popover.style.cssText = "";
+          return;
+        }
+        positionAnchoredPopover(popover, $(sharedTimeID(account, "trigger")), true);
       }
 
       function localDay(date) {
@@ -7976,6 +7910,7 @@
             ),
           );
         }
+        positionSharedTimePopover(account);
       }
 
       function resetCustomTimeDraft(account, draft) {
@@ -8026,6 +7961,7 @@
         popover.classList.remove("hidden");
         $(sharedTimeID(account, "backdrop")).classList.remove("hidden");
         $(sharedTimeID(account, "trigger")).setAttribute("aria-expanded", "true");
+        positionSharedTimePopover(account);
         popover.querySelector(".time-range-modes .active").focus();
       }
 
@@ -8071,7 +8007,8 @@
       function eventCSV(entries, kind, account) {
         const columns = EVENT_CSV_COLUMNS[kind].filter((column) => !account || !["preview", "label"].includes(column));
         const lines = [columns.map(csvCell).join(",")];
-        for (const entry of entries) {
+        for (const record of entries) {
+          const entry = account ? record : keyDirectory.resolve(record);
           const measured = entry.accounting_quality === "complete";
           const row =
             kind === "events"
@@ -8118,11 +8055,11 @@
           while (entries.length < total) {
             params.set("offset", String(entries.length));
             const path = endpoint + "?" + params;
-            const page = account ? await accountAPI(path) : await plugin("GET", path);
+            const page = await fetchListPage(kind, account, path);
             params.set("snapshot_id", page.snapshot_id);
             total = page.total;
             entries.push(...page.entries);
-            if (!page.entries.length) break;
+            if (!page.entries.length && entries.length < total) throw new Error("分页数据不完整，请重新导出");
           }
           const stamp = new Date().toISOString().replaceAll(":", "-").slice(0, 19);
           const name = "cpa-key-billing-" + (account ? "account-" : "") + view.tab + "-";
@@ -8131,6 +8068,7 @@
         } finally {
           button.disabled = false;
           setLabeledActionIcon(button, "download", "导出");
+          renderPage();
         }
       }
 
@@ -8273,7 +8211,6 @@
             { label: "成本", num: true },
           ],
         });
-        list.renderStatus();
       }
 
       const pluginLogLevels = {
@@ -8344,7 +8281,6 @@
             );
           },
         });
-        list.renderStatus();
       }
 
       function renderPluginLogMessage(pluginLog) {
@@ -8508,14 +8444,14 @@
         buttons.forEach((button) => (button.disabled = buttons.length === 1));
       }
 
-      function renderPlanKeyPicker(planID, data) {
-        const picker = $("plan-key-picker");
+      function renderPlanKeyList(planID, data) {
+        const list = $("plan-key-list");
         const keys = data.keys.filter((key) => !key.deleted_at || (planID && key.plan_id === planID));
         if (!keys.length) {
-          picker.replaceChildren(el("div", { class: "empty", text: "暂无 API Key" }));
+          list.replaceChildren(el("div", { class: "empty", text: "暂无 API Key" }));
           return;
         }
-        picker.replaceChildren(
+        list.replaceChildren(
           ...keys.map((key) => {
             const ownedByOther = !!key.plan_id && key.plan_id !== planID;
             const owner = ownedByOther ? data.plans.find((plan) => plan.id === key.plan_id) : null;
@@ -8540,29 +8476,22 @@
         const id = plan?.id;
         openEditor(
           "plan-dialog",
-          () => loadEditorData("plan"),
+          "plan",
           (data) => {
             const current = id ? data.plans.find((entry) => entry.id === id) : null;
             if (id && !current) throw new Error("订阅计划已不存在，请关闭后刷新列表");
-            $("plan-form-title").textContent = current ? "编辑订阅计划：" + (current.name || id) : "新建订阅计划";
+            $("plan-dialog-title").textContent = current ? "编辑订阅计划：" + (current.name || id) : "新建订阅计划";
             $("plan-id").value = id || "";
             $("plan-save").textContent = current ? "保存" : "创建";
             $("plan-name").value = current?.name || "";
             $("plan-windows").replaceChildren();
             (current ? current.windows : [{}]).forEach(addPlanWindow);
-            renderPlanKeyPicker(id || "", data);
+            renderPlanKeyList(id || "", data);
             return {
               plan: current ? { ...structuredClone(current), windows: planFromForm().windows } : null,
-              scopes: selectedPlanScopes(),
+              scopes: selectedKeyScopes("plan-key-list"),
             };
           },
-        );
-      }
-
-      function selectedPlanScopes() {
-        return Array.from(
-          $("plan-key-picker").querySelectorAll("input:checked:not(:disabled)"),
-          (input) => input.value,
         );
       }
 
@@ -8620,7 +8549,7 @@
         return {
           name: $("plan-name").value.trim(),
           windows,
-          scopes: selectedPlanScopes(),
+          scopes: selectedKeyScopes("plan-key-list"),
         };
       }
 
@@ -8725,7 +8654,7 @@
         } catch (err) {
           if (request === priceReferenceRequest) {
             if (err instanceof AuthError) {
-              $("price-dlg").close();
+              $("price-dialog").close();
               fail(err);
               return;
             }
@@ -8738,9 +8667,7 @@
 
       function editPrice(row) {
         const modelID = row.model_id;
-        // Price fields use the clicked row (or a new blank row), not shared
-        // option lists. Reference search owns its separate request and result.
-        openEditor("price-dlg", null, () => {
+        openEditor("price-dialog", null, () => {
           $("price-dialog-title").textContent = modelID ? "编辑模型定价" : "新增模型定价";
           $("price-save").textContent = "保存";
           $("price-model").value = row.custom_price_model_id || modelID;
@@ -8750,9 +8677,6 @@
           searchPriceReferences();
         });
       }
-
-
-
       async function importCPAMPLabels() {
         const generation = sessionGeneration;
         const result = await api("GET", "/v0/management/api-key-aliases", null, { raw: true });
@@ -8767,7 +8691,7 @@
           )
         )
           throw new Error("CPAMP 备注列表格式无效");
-        const keys = await loadConfiguredAPIKeys();
+        const keys = await fetchConfiguredAPIKeys();
         const scopes = new Map();
         for (const key of keys) {
           const value = key.trim();
@@ -8782,8 +8706,8 @@
             const scope = scopes.get(item.apiKeyHash.toLowerCase());
             if (!scope) continue;
             const label = item.alias.trim();
-            const key = state.keys.find((key) => key.scope === scope);
-            if (key && (key.label || "") === label) {
+            const key = (resources.admin.keys.value || []).find((key) => key.scope === scope);
+            if (key && (keyDirectory.resolve(key).label || "") === label) {
               unchanged++;
               continue;
             }
@@ -8898,15 +8822,13 @@
         setActionIcon(button, "refresh", "刷新");
         button.onclick = () => refreshPage();
       }
-      for (const button of document.querySelectorAll('[data-page-action="logout"]')) {
-        setActionIcon(button, "logout", "退出登录");
-      }
       document.querySelectorAll('[data-page-action="theme"]').forEach((button) => {
         button.onclick = () => {
           window.billingTheme?.toggle();
         };
       });
       document.querySelectorAll('[data-page-action="logout"]').forEach((button) => {
+        setActionIcon(button, "logout", "退出登录");
         button.onclick = () =>
           guard(async () => {
             const role = currentRole || loginMode;
@@ -8915,11 +8837,6 @@
           });
       });
       window.addEventListener("billing-theme-change", updateThemedVisuals);
-
-
-      function activeTab(account) {
-        return account ? accountTab : activeAdminTab();
-      }
 
       function updateRefreshButtons() {
         const page = currentPage();
@@ -9082,13 +8999,13 @@
 
       $("route-picker-search").addEventListener("input", () => {
         const searching = !!$("route-picker-search").value.trim();
-        if (searching && !routePicker.searching) {
-          routePicker.beforeSearch = { ...routePicker.expanded };
+        if (searching && !routePicker.beforeSearch) {
+          routePicker.beforeSearch = routePicker.expanded;
           routePicker.expanded = { routes: true, credentials: true, models: true };
-        }
-        if (!searching && routePicker.searching && routePicker.beforeSearch)
+        } else if (!searching && routePicker.beforeSearch) {
           routePicker.expanded = routePicker.beforeSearch;
-        routePicker.searching = searching;
+          routePicker.beforeSearch = null;
+        }
         renderRoutePicker();
       });
       $("route-picker-cancel").onclick = closeRoutePicker;
@@ -9155,7 +9072,7 @@
             credential_ids: [...routeCredentialIDs],
             credential_providers: routeProviders,
           };
-          const scopes = selectedRouteScopes();
+          const scopes = selectedKeyScopes("route-key-list");
           const data = { name, rule, scopes };
           if (id) {
             const route = editor.initial.route;
@@ -9180,7 +9097,11 @@
           notify(id ? "路由规则已保存" : "路由规则已创建");
         });
 
-      $("plugin-log-filter").addEventListener("input", renderPluginLogs);
+      $("plugin-log-filter").addEventListener("input", () => {
+        renderPluginLogs();
+        const list = pagedList("logs");
+        if (list.data) list.renderStatus();
+      });
       $("plugin-log-level").addEventListener("change", () => {
         saveChoice("admin", "plugin-log-level");
         guard(() => pagedList("logs").reload());
@@ -9270,7 +9191,7 @@
         }, 180);
       });
       $("price-tiered").addEventListener("change", syncPriceTierFields);
-      $("price-dlg").addEventListener("close", () => {
+      $("price-dialog").addEventListener("close", () => {
         clearTimeout(priceReferenceTimer);
         priceReferenceTimer = 0;
         priceReferenceRequest++;
@@ -9284,9 +9205,9 @@
         });
       }
 
-      $("price-add").onclick = () => editPrice({ model_id: "", input_per_1m: 0, output_per_1m: 0 });
+      $("price-new").onclick = () => editPrice({ model_id: "", input_per_1m: 0, output_per_1m: 0 });
       $("price-save").onclick = () =>
-        submitEditor("price-dlg", async () => {
+        submitEditor("price-dialog", async () => {
           const model = $("price-model").value.trim();
           if (!model) throw new Error("请输入模型 ID");
           const price = {
