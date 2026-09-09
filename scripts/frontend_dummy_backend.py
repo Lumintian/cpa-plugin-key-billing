@@ -1222,26 +1222,23 @@ def payload_for(path, query):
             {**price, "provider_id": "demo", "model_id": model, "is_canonical": True}
             for model, price in REFERENCE_PRICES.items() if term in model.lower()
         ]}
-    if path == "/v0/management/api-keys":
-        return {"api-keys": [f"sk-demo-{index:04d}" for index in range(1, len(LIVE_KEYS) + 1)]}
-    if path in {
-        "/v0/management/gemini-api-key",
-        "/v0/management/interactions-api-key",
-        "/v0/management/xai-api-key",
-        "/v0/management/vertex-api-key",
-    }:
-        field = path.rsplit("/", 1)[-1]
-        return {field: []}
-    if path == "/v0/management/codex-api-key":
-        return {"codex-api-key": [{"api-key": "sk-dummy-codex", "prefix": "codex"}]}
-    if path == "/v0/management/claude-api-key":
-        return {"claude-api-key": [{"api-key": "sk-dummy-claude", "prefix": "claude"}]}
-    if path == "/v0/management/openai-compatibility":
-        return {"openai-compatibility": [{
-            "name": "DeepSeek",
-            "disabled": False,
-            "api-key-entries": [{"api-key": "sk-dummy-deepseek"}],
-        }]}
+    if path in {"/v0/management/config", "/v0/management/api-keys"}:
+        config = {"api-keys": [f"sk-demo-{index:04d}" for index in range(1, len(LIVE_KEYS) + 1)]}
+        if path == "/v0/management/config":
+            config.update({
+                "gemini-api-key": [],
+                "interactions-api-key": [],
+                "xai-api-key": [],
+                "vertex-api-key": [],
+                "codex-api-key": [{"api-key": "sk-dummy-codex", "prefix": "codex"}],
+                "claude-api-key": [{"api-key": "sk-dummy-claude", "prefix": "claude"}],
+                "openai-compatibility": [{
+                    "name": "DeepSeek",
+                    "disabled": False,
+                    "api-key-entries": [{"api-key": "sk-dummy-deepseek"}],
+                }],
+            })
+        return config
     if path == "/v1/models":
         return {"data": [{"id": row["model_id"]} for row in PRICES if row.get("in_models")] + [
             {"id": "codex/deepseek-v4-flash-vision-exp"},

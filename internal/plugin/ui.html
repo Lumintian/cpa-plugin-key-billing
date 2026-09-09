@@ -4162,11 +4162,12 @@
         // Authentication takes precedence over ordinary failures and cancellation.
         const failure =
           failures.find((error) => error instanceof AuthError) ||
-          failures.find((error) => !(error instanceof StaleRequestError));
+          failures.find((error) => !(error instanceof StaleRequestError)) ||
+          failures[0];
         if (failure) throw failure;
       }
 
-      const CONFIGURED_CREDENTIAL_ENDPOINTS = [
+      const CONFIGURED_CREDENTIAL_FIELDS = [
         ["gemini-api-key", "gemini", "gemini:apikey", true],
         ["interactions-api-key", "gemini-interactions", "gemini-interactions:apikey", true],
         ["claude-api-key", "claude", "claude:apikey", true],
@@ -4259,10 +4260,16 @@
         return "sha256:" + (await sha256Hex("cpa-key-billing:credential:v1\0" + id));
       }
 
-      async function configuredCredentialEntries(field) {
-        const payload = await api("GET", "/v0/management/" + field, null, { raw: true, timeoutMS: 5000 });
-        requireObject(payload, field);
-        const entries = payload[field] === null ? [] : requireArray(payload[field], field);
+      function parseConfiguredAPIKeys(config) {
+        const keys = config?.["api-keys"];
+        if (keys === null) return [];
+        if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string"))
+          throw new Error("CPA API Key 列表格式无效");
+        return keys;
+      }
+
+      function configuredCredentialEntries(config, field) {
+        const entries = config[field] === null ? [] : requireArray(config[field], field);
         const validateEntry = (entry) => {
           requireObject(entry, field);
           for (const key of ["api-key", "base-url", "proxy-url", "prefix", "name"])
@@ -4285,19 +4292,13 @@
         return entries;
       }
 
-      async function readConfiguredCredentials() {
+      async function parseConfiguredCredentials(config) {
         const generation = sessionGeneration;
         const counters = new Map();
         const credentials = [];
-        const [configuredEntries, compatibilityEntries] = await Promise.all([
-          Promise.all(CONFIGURED_CREDENTIAL_ENDPOINTS.map(([field]) => configuredCredentialEntries(field))),
-          configuredCredentialEntries("openai-compatibility"),
-        ]);
 
-        for (let index = 0; index < CONFIGURED_CREDENTIAL_ENDPOINTS.length; index++) {
-          const [, provider, kind, usesHeaders] = CONFIGURED_CREDENTIAL_ENDPOINTS[index];
-          const entries = configuredEntries[index];
-          for (const entry of entries) {
+        for (const [field, provider, kind, usesHeaders] of CONFIGURED_CREDENTIAL_FIELDS) {
+          for (const entry of configuredCredentialEntries(config, field)) {
             const apiKey = (entry["api-key"] || "").trim();
             const baseURL = (entry["base-url"] || "").trim();
             if (!apiKey && !baseURL) continue;
@@ -4312,7 +4313,7 @@
           }
         }
 
-        for (const entry of compatibilityEntries) {
+        for (const entry of configuredCredentialEntries(config, "openai-compatibility")) {
           const providerName = (entry.name || "").trim().toLowerCase() || "openai-compatibility";
           const provider =
             providerName === "openai-compatibility" || providerName.startsWith("openai-compatible-")
@@ -4383,9 +4384,11 @@
       }
 
       async function readAdminConfiguration(read) {
-        // This load owns the CPA inputs. Key synchronization and model discovery
-        // consume the same read; plaintext keys never enter the resource cache.
-        const configuredKeys = fetchConfiguredAPIKeys();
+        // Keep plaintext configuration out of the resource cache.
+        const config = api("GET", "/v0/management/config", null, { raw: true }).then((value) =>
+          requireObject(value, "CPA 配置"),
+        );
+        const configuredKeys = config.then(parseConfiguredAPIKeys);
         const errors = [];
         const sync = async (label, operation) => {
           try {
@@ -4395,20 +4398,28 @@
             errors.push(label + "同步失败：" + error.message);
           }
         };
-        await settleLoads([
+        const synced = settleLoads([
           sync("API Key", async () =>
             plugin("POST", "/keys/sync", { keys: await configuredKeys, allow_empty: true }, { command: true }),
           ),
           sync("凭证", async () =>
-            plugin("POST", "/credentials/sync", { credentials: await readConfiguredCredentials() }, { command: true }),
+            plugin(
+              "POST",
+              "/credentials/sync",
+              { credentials: await parseConfiguredCredentials(await config) },
+              { command: true },
+            ),
           ),
+        ]);
+        await settleLoads([
+          read("plans", () => fetchAdminCollection("plans")),
           read("models", async () =>
             fetchModels(false, (await configuredKeys).find((key) => key.trim())?.trim() || ""),
           ),
+          synced.then(() =>
+            settleLoads(["keys", "routes", "credentials"].map((name) => read(name, () => fetchAdminCollection(name)))),
+          ),
         ]);
-        await settleLoads(
-          ["keys", "plans", "routes", "credentials"].map((name) => read(name, () => fetchAdminCollection(name))),
-        );
         return errors;
       }
 
@@ -4497,11 +4508,7 @@
 
       async function fetchConfiguredAPIKeys() {
         const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
-        const keys = result?.["api-keys"];
-        if (keys === null) return [];
-        if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string"))
-          throw new Error("CPA API Key 列表格式无效");
-        return keys;
+        return parseConfiguredAPIKeys(result);
       }
 
       async function fetchModels(account, key) {
