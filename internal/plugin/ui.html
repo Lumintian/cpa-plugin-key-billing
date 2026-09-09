@@ -1975,10 +1975,10 @@
         justify-content: center;
         padding: 10px;
         border-top: 1px solid var(--border-color);
+        overflow-wrap: anywhere;
         color: var(--text-tertiary);
         font-size: 12px;
       }
-      .event-load-state button { padding: 5px 10px; }
       @media (max-width: 768px) {
         :root { --page-gap: 12px; }
         .wrap { padding: 14px 12px 0; }
@@ -3220,10 +3220,6 @@
           "body",
         ],
       };
-      const REQUEST_EVENT_FILTER_IDS = {
-        admin: ["request-event-model", "request-event-source", "request-event-status"],
-        account: ["account-request-event-model", "account-request-event-source", "account-request-event-status"],
-      };
       const SHARED_TIME_LABELS = {
         hour: "小时",
         day: "天",
@@ -3324,7 +3320,7 @@
 
       // A query caches one explicit selection. Changing that selection or starting
       // a new session discards the result; elapsed time never invalidates it.
-      function createQuery(label) {
+      function createQuery(label, receive = (value) => value) {
         const query = {
           label,
           value: null,
@@ -3350,13 +3346,15 @@
               })
               .then((value) => {
                 if (query.request !== request) throw new StaleRequestError();
-                query.value = value;
-                return value;
+                query.value = receive(value);
+                return query.value;
               })
               .catch((error) => {
                 if (query.request !== request) throw new StaleRequestError();
+                if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
+                // Ordinary read failures belong to the query's inline status.
                 query.error = error.message || String(error);
-                throw error;
+                return query.value;
               })
               .finally(() => {
                 if (query.request === request) {
@@ -3374,10 +3372,6 @@
       const analysisQueries = Object.fromEntries(["admin", "account"].map((role) => [role, createQuery("分析")]));
       const eventKeysQuery = createQuery("事件 Key 筛选");
 
-      function nextEventPage(page, entries) {
-        return entries.length < page.total ? { offset: entries.length, snapshot_id: page.snapshot_id } : null;
-      }
-
       const PAGED_LIST_VIEWS = {
         events: {
           tab: "request-events",
@@ -3385,8 +3379,8 @@
           scrollers: ["request-events-body", "account-request-events-body"],
           timed: true,
           keyed: true,
-          path: requestEventPath,
-          next: nextEventPage,
+          endpoint: "/events",
+          filters: requestEventFilters,
           render: renderRequestEvents,
         },
         errors: {
@@ -3395,30 +3389,120 @@
           scrollers: ["errors-body", "account-errors-body"],
           timed: true,
           keyed: true,
-          path: errorEventPath,
-          next: nextEventPage,
+          endpoint: "/errors",
+          filters: errorEventFilters,
           render: renderErrors,
         },
         logs: {
           tab: "settings",
           label: "插件日志",
           scrollers: ["plugin-logs-body"],
-          path: (_account, _range, cursor) => {
-            const params = new URLSearchParams({
-              level: $("plugin-log-level").value,
-              limit: String(LIST_PAGE_SIZE),
-            });
-            if (cursor) params.set("before_id", String(cursor));
-            return "/plugin-logs?" + params;
-          },
-          next: (page) => Number(page.next_before_id) || null,
+          endpoint: "/plugin-logs",
+          filters: () => ({ level: $("plugin-log-level").value }),
           render: renderPluginLogs,
         },
       };
 
+      function requestEventFilters(account) {
+        const prefix = account ? "account-request-event" : "request-event";
+        const filters = {};
+        const key = account ? "" : $("analysis-key").value;
+        if (key) filters.api_key = key;
+        for (const [field, control] of [["model", "model"], ["source", "source"], ["failed", "status"]]) {
+          const value = $(prefix + "-" + control).value;
+          if (value) filters[field] = value;
+        }
+        return filters;
+      }
+
+      function errorEventFilters(account) {
+        const prefix = account ? "account-" : "";
+        const filters = {};
+        if (!account && $("analysis-key").value) filters.api_key = $("analysis-key").value;
+        for (const field of ["model", "source"]) {
+          const value = $(prefix + "error-" + field).value;
+          if (value) filters[field] = value;
+        }
+        const typeChoice = $(prefix + "error-type").value;
+        if (typeChoice) {
+          const errorType = typeChoice.slice(5);
+          if (errorType) filters.error_type = errorType;
+          else filters.error_type_empty = "true";
+        }
+        return filters;
+      }
+
+      // A selection separates its cache identity from the concrete time window.
+      // Rolling ranges advance only when starting a fresh traversal.
+      function pagedListSelection(kind, account) {
+        const view = PAGED_LIST_VIEWS[kind];
+        const filters = view.filters(account);
+        const range = view.timed ? selectedRange(account) : {};
+        if (view.timed) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
+        return {
+          key: JSON.stringify([view.timed ? sharedTimeRanges[account ? "account" : "admin"] : null, filters]),
+          params: { ...filters, ...range, limit: LIST_PAGE_SIZE },
+        };
+      }
+
+      async function fetchListPage(kind, account, params, previous = null) {
+        const view = PAGED_LIST_VIEWS[kind];
+        const query = new URLSearchParams({ ...params, ...previous?.cursor });
+        const path = view.endpoint + "?" + query;
+        const revision = keyDirectory.beginRead();
+        const page = requireObject(await (account ? accountAPI(path) : plugin("GET", path)), view.label);
+        const entries = requireArray(page.entries, view.label);
+        const integer = (value) => Number.isSafeInteger(value) && value >= 0;
+        const id = (value) => (typeof value === "string" && /^-?\d+$/.test(value)) || Number.isSafeInteger(value);
+        const invalid = () => {
+          throw new Error(view.label + "分页响应无效");
+        };
+        if (entries.length > Number(params.limit) || entries.some((entry) => !entry || !id(entry.id))) invalid();
+        let cursor = null;
+        if (view.timed) {
+          if (!integer(page.total) || !id(page.snapshot_id) || Number(page.snapshot_id) < 0) invalid();
+          if (previous?.cursor && String(page.snapshot_id) !== previous.cursor.snapshot_id) invalid();
+          // Retention may change totals or leave short/empty pages. Offset uses
+          // the actual response length, independently of display deduplication.
+          const offset = (previous?.cursor?.offset || 0) + entries.length;
+          if (entries.length && offset < page.total) cursor = { offset, snapshot_id: String(page.snapshot_id) };
+        } else {
+          if (!Object.values(requireObject(page.level_counts, "日志级别统计")).every(integer)) invalid();
+          const next = page.next_before_id ?? 0;
+          if (!id(next) || Number(next) < 0) invalid();
+          if (BigInt(next)) {
+            if (!entries.length || (previous?.cursor && BigInt(next) >= BigInt(previous.cursor.before_id))) invalid();
+            cursor = { before_id: String(next) };
+          }
+        }
+        return { page, params, cursor, previous, revision };
+      }
+
+      // createQuery calls this only after accepting the response. Stale reads
+      // cannot publish Key metadata or append rows to a newer selection.
+      function mergeListPage(kind, account, { page, params, cursor, previous, revision }) {
+        const seen = new Set((previous?.page.entries || []).map((entry) => String(entry.id)));
+        const incoming = page.entries.filter((entry) => {
+          const id = String(entry.id);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        const rows = PAGED_LIST_VIEWS[kind].keyed && !account ? keyDirectory.receive(incoming, revision) : incoming;
+        return {
+          page: {
+            ...page,
+            entries: (previous?.page.entries || []).concat(rows),
+            filter_options: page.filter_options || previous?.page.filter_options,
+          },
+          params,
+          cursor,
+        };
+      }
+
       function createPagedList(kind, account) {
         const view = PAGED_LIST_VIEWS[kind];
-        const query = createQuery(view.label);
+        const query = createQuery(view.label, (result) => mergeListPage(kind, account, result));
         const list = {
           query,
           append: false,
@@ -3426,28 +3510,19 @@
           get data() {
             return query.value?.page || null;
           },
+          get complete() {
+            return !!query.value && !query.value.cursor;
+          },
           get scroller() {
             return $(view.scrollers[account ? 1 : 0]);
           },
           active() {
             return currentRole === (account ? "account" : "admin") && activeTab(account) === view.tab;
           },
-          selection() {
-            return JSON.stringify([
-              view.timed ? sharedTimeRanges[account ? "account" : "admin"] : null,
-              view.path(account, {}, null),
-            ]);
-          },
           replace(page) {
-            Object.assign(query, {
-              key: list.selection(),
-              error: "",
-              task: null,
-              request: null,
-              value: { page, range: null, cursor: view.next(page, page.entries) },
-            });
-            list.append = false;
-            list.scroller.scrollTop = 0;
+            list.reset();
+            query.key = pagedListSelection(kind, account).key;
+            query.value = { page, cursor: null };
           },
           reset() {
             query.clear();
@@ -3472,56 +3547,27 @@
             if (append) rows.append(...items.slice(previous.items.length).map(options.render));
             list.rendered = { items, columns, rows, identities };
           },
-          reload() {
-            const task = list.read(false, true);
+          load(reload = false) {
+            const selection = pagedListSelection(kind, account);
+            if (selection.key !== query.key) list.reset();
+            if (query.task && (!reload || !list.append)) return query.task;
+            if (!reload && (query.value || query.error)) return Promise.resolve(query.value);
+            list.append = false;
+            const task = query.read(selection.key, () => fetchListPage(kind, account, selection.params), true);
             if (list.active()) {
               if (list.data) list.renderStatus();
               else view.render(account);
             }
             return task;
           },
-          loadMore() {
-            if (query.task || !query.value?.cursor) return query.task || Promise.resolve();
-            const task = list.read(true, true);
-            if (list.active()) list.renderStatus();
-            return task;
-          },
-          read(append, reload) {
-            const selection = list.selection();
-            if (selection !== query.key) {
-              append = false;
-              list.scroller.scrollTop = 0;
-              list.scroller.scrollLeft = 0;
-            }
+          loadMore(retry = false) {
+            if (!list.active() || query.task || !query.value?.cursor || !isNearScrollEnd(list.scroller)) return;
+            if (query.error && !(retry && list.append)) return;
             const previous = query.value;
-            const range = append ? previous.range : view.timed ? selectedRange(account) : null;
-            if (!append && range) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
-            const path = view.path(account, range, append ? previous.cursor : null);
-            const pending = query.task;
-            const task = query.read(
-              selection,
-              async () => {
-                const page = await fetchListPage(kind, account, path);
-                const incoming = page.entries;
-                const entries = append ? previous.page.entries.concat(incoming) : incoming;
-                return {
-                  page: {
-                    ...page,
-                    entries,
-                    filter_options: page.filter_options || (append ? previous.page.filter_options : undefined),
-                  },
-                  range,
-                  cursor: incoming.length ? view.next(page, entries) : null,
-                };
-              },
-              reload,
-            );
-            if (query.task && query.task !== pending) list.append = append;
-            return task;
-          },
-          maybeLoadMore() {
-            if (list.active() && !query.task && !query.error && isNearScrollEnd(list.scroller))
-              guard(() => list.loadMore());
+            list.append = true;
+            const task = query.read(query.key, () => fetchListPage(kind, account, previous.params, previous), true);
+            list.renderStatus();
+            guard(() => task);
           },
           renderEmpty() {
             if (list.data) return false;
@@ -3533,7 +3579,7 @@
                 { class: "empty" },
                 el("div", { text: message }),
                 query.error && !query.task
-                  ? el("button", { class: "retry-button", onclick: () => guard(() => list.reload()) }, "重试")
+                  ? el("button", { class: "retry-button", onclick: () => guard(() => list.load(true)) }, "重试")
                   : null,
               ),
             );
@@ -3543,34 +3589,14 @@
             const scroller = list.scroller;
             const top = scroller.scrollTop,
               left = scroller.scrollLeft;
-            const notices = [];
-            if (query.task) notices.push(el("div", { text: list.append ? "正在加载更多…" : "正在加载…" }));
-            if (query.error)
-              notices.push(
-                el(
-                  "div",
-                  {},
-                  el("span", { text: query.error }),
-                  el(
-                    "button",
-                    { onclick: () => guard(() => (list.append ? list.loadMore() : list.reload())) },
-                    "重试加载",
-                  ),
-                ),
-              );
-            else if (query.value?.cursor)
-              notices.push(
-                el(
-                  "button",
-                  {
-                    disabled: !!query.task,
-                    onclick: () => guard(() => list.loadMore()),
-                  },
-                  "加载更多",
-                ),
-              );
-            const status = notices.length ? el("div", { class: "event-load-state", role: "status" }, notices) : null;
+            const error = query.task ? "" : query.error;
+            let message = error ? "加载失败：" + error : "";
+            if (query.task) message = list.append ? "正在加载更多…" : "正在加载…";
             const previous = scroller.querySelector(":scope > .event-load-state");
+            if ((previous?.textContent || "") === message) return;
+            const status = message
+              ? el("div", { class: "event-load-state", role: error ? "alert" : "status", text: message })
+              : null;
             if (status && previous) previous.replaceWith(status);
             else if (status) scroller.append(status);
             else previous?.remove();
@@ -3578,7 +3604,42 @@
             scroller.scrollLeft = left;
           },
         };
+        bindPagedListScroll(list);
         return list;
+      }
+
+      function bindPagedListScroll(list) {
+        const scroller = list.scroller;
+        const on = (type, handler) => scroller.addEventListener(type, handler, { passive: true });
+        // Failed pages retry on user input; layout scrolls cannot trigger retries.
+        on("wheel", (event) => {
+          if (event.deltaY > 0) list.loadMore(true);
+        });
+        let touchY = null;
+        on("touchstart", (event) => {
+          touchY = event.touches[0]?.clientY ?? null;
+        });
+        on("touchmove", (event) => {
+          const nextY = event.touches[0]?.clientY ?? null;
+          if (touchY !== null && nextY !== null && nextY < touchY) list.loadMore(true);
+          touchY = nextY;
+        });
+        on("keydown", (event) => {
+          if (event.target === scroller && ["ArrowDown", "PageDown", "End", " "].includes(event.key) && !event.shiftKey)
+            list.loadMore(true);
+        });
+        let dragTop = null;
+        on("pointerdown", (event) => {
+          dragTop = event.target === scroller ? scroller.scrollTop : null;
+        });
+        on("pointerup", (event) => {
+          if (event.target === scroller && dragTop !== null && scroller.scrollTop > dragTop) list.loadMore(true);
+          dragTop = null;
+        });
+        on("scroll", () => {
+          hideCostTooltip();
+          list.loadMore();
+        });
       }
 
       const pagedLists = {
@@ -3837,6 +3898,12 @@
         const percent = 100 - Math.max(0, Math.min(100, Number.isFinite(used) ? used : 0));
         return { percent, level: percent >= 70 ? "high" : percent >= 30 ? "medium" : "low" };
       }
+      function loadedCountText(loaded, total, complete) {
+        return loaded > total || (complete && loaded !== total)
+          ? "已加载 " + int(loaded) + " 条（当前匹配 " + int(total) + " 条）"
+          : "已加载 " + int(loaded) + " / " + int(total) + " 条";
+      }
+
       function int(value) {
         return Number(value || 0).toLocaleString("zh-CN");
       }
@@ -4595,18 +4662,6 @@
         return recentTimeRange(range.mode);
       }
 
-      async function fetchListPage(kind, account, path) {
-        const view = PAGED_LIST_VIEWS[kind];
-        const revision = keyDirectory.beginRead();
-        const page = requireObject(await (account ? accountAPI(path) : plugin("GET", path)), view.label);
-        const entries = requireArray(page.entries, view.label);
-        if (entries.some((entry) => !entry || typeof entry !== "object" || !entry.id))
-          throw new Error(view.label + "记录格式无效");
-        if (view.timed && (!Number.isInteger(page.total) || page.total < 0 || !/^\d+$/.test(String(page.snapshot_id))))
-          throw new Error(view.label + "分页信息无效");
-        return { ...page, entries: view.keyed && !account ? keyDirectory.receive(entries, revision) : entries };
-      }
-
       function readAnalysis(account, reload) {
         const role = account ? "account" : "admin";
         const range = selectedRange(account);
@@ -4641,23 +4696,6 @@
           },
           reload,
         );
-      }
-
-      function errorEventPath(account, range, cursor) {
-        const prefix = account ? "account-" : "";
-        const params = new URLSearchParams({ ...range, ...cursor, limit: String(LIST_PAGE_SIZE) });
-        if (!account && $("analysis-key").value) params.set("api_key", $("analysis-key").value);
-        for (const field of ["model", "source"]) {
-          const value = $(prefix + "error-" + field).value;
-          if (value) params.set(field, value);
-        }
-        const typeChoice = $(prefix + "error-type").value;
-        if (typeChoice) {
-          const errorType = typeChoice.slice(5);
-          if (errorType) params.set("error_type", errorType);
-          else params.set("error_type_empty", "true");
-        }
-        return "/errors?" + params;
       }
 
       function activeTab(account) {
@@ -4809,7 +4847,6 @@
             resetAuthQuotaMemory(true);
             persistAuthQuotaCache(true);
           }
-          if (failures.length) throw failures[0].error;
         };
         const task =
           !account && ["configuration", "pricing"].includes(name)
@@ -4960,18 +4997,9 @@
         const page = pages[role][activeTab(account)];
         const generation = sessionGeneration;
         const task = (async () => {
-          let profile;
-          if (account) {
-            profile = loadDataGroup(true, "profile", reload);
-            try {
-              await profile;
-            } catch (error) {
-              if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
-              // A temporary profile failure can still use the last known account.
-            }
-          }
+          if (account) await loadDataGroup(true, "profile", reload);
           if (generation !== sessionGeneration || currentPage() !== page) return;
-          const tasks = profile ? [profile] : [];
+          const tasks = [];
           if (!account || resources.account.profile.value?.tracked) {
             tasks.push(...page.groups.map((name) => loadDataGroup(account, name, reload)));
             if (page.sources.includes(eventKeysQuery)) tasks.push(readEventKeys(reload));
@@ -4980,7 +5008,7 @@
               if (typeof Chart !== "function" && (!chartError || reload)) tasks.push(loadCharts());
             } else if (page.query) {
               const list = pagedList(page.query, account);
-              tasks.push(reload ? list.reload() : list.read(false, false));
+              tasks.push(list.load(reload));
             }
           }
           renderPage();
@@ -5005,7 +5033,7 @@
         const page = currentPage();
         if (!page) return;
         const account = currentRole === "account";
-        // Paged lists have their own loading/error footer and retry action.
+        // Paged lists display their own loading and error states.
         const listQuery = pagedLists[currentRole][page.query]?.query;
         const visible = page.sources.filter((source) => source !== listQuery);
         const errors = visible
@@ -5936,7 +5964,7 @@
             );
           },
         });
-        note.textContent = "已加载 " + int(view.entries.length) + " / " + int(view.total) + " 条";
+        note.textContent = loadedCountText(view.entries.length, view.total, list.complete);
       }
 
       const AUTH_CATEGORY_LABELS = {
@@ -7760,25 +7788,6 @@
         ]);
       }
 
-      function requestEventPath(account, range, cursor) {
-        const params = new URLSearchParams({
-          ...cursor,
-          limit: String(LIST_PAGE_SIZE),
-        });
-        const prefix = account ? "account-request-event" : "request-event";
-        const key = account ? "" : $("analysis-key").value;
-        const model = $(prefix + "-model").value;
-        const source = $(prefix + "-source").value;
-        const failed = $(prefix + "-status").value;
-        if (key) params.set("api_key", key);
-        if (model) params.set("model", model);
-        if (source) params.set("source", source);
-        if (failed) params.set("failed", failed);
-        if (range.from) params.set("from", range.from);
-        if (range.to) params.set("to", range.to);
-        return "/events?" + params.toString();
-      }
-
       function updateFilterClearButton(button) {
         const selects = button.parentElement.querySelectorAll("select");
         button.disabled = !Array.from(selects).some((select) => select.value);
@@ -8381,24 +8390,18 @@
         if (button.disabled) return;
         button.disabled = true;
         setLabeledActionIcon(button, "download", "正在导出…");
-        const range = selectedRange(account);
-        range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
         const view = PAGED_LIST_VIEWS[kind];
-        const [endpoint, query] = view.path(account, range, null).split("?");
-        const params = new URLSearchParams(query);
-        params.set("limit", String(EVENT_EXPORT_BATCH_SIZE));
         try {
-          const entries = [];
-          let total = Infinity;
-          while (entries.length < total) {
-            params.set("offset", String(entries.length));
-            const path = endpoint + "?" + params;
-            const page = await fetchListPage(kind, account, path);
-            params.set("snapshot_id", page.snapshot_id);
-            total = page.total;
-            entries.push(...page.entries);
-            if (!page.entries.length && entries.length < total) throw new Error("分页数据不完整，请重新导出");
-          }
+          const selection = pagedListSelection(kind, account);
+          const params = { ...selection.params, limit: EVENT_EXPORT_BATCH_SIZE };
+          const generation = sessionGeneration;
+          let result = null;
+          do {
+            const response = await fetchListPage(kind, account, params, result);
+            if (generation !== sessionGeneration) throw new StaleRequestError();
+            result = mergeListPage(kind, account, response);
+          } while (result.cursor);
+          const entries = result.page.entries;
           const stamp = new Date().toISOString().replaceAll(":", "-").slice(0, 19);
           const name = "cpa-key-billing-" + (account ? "account-" : "") + view.tab + "-";
           downloadCSV(name + stamp + ".csv", eventCSV(entries, kind, account));
@@ -8429,7 +8432,7 @@
         updateFilterClearButton($(account ? "account-request-events-filter-clear" : "request-events-filter-clear"));
         const entries = view.entries;
         const hasCacheWrite = entries.some((entry) => entry.cost.cache_write_tokens !== 0);
-        note.textContent = "已加载 " + int(entries.length) + " / " + int(view.total) + " 条";
+        note.textContent = loadedCountText(entries.length, view.total, list.complete);
         const renderRow = (entry) => {
           const cost = entry.cost;
           const costNote = [
@@ -8603,7 +8606,7 @@
           if (option.textContent !== text) option.textContent = text;
         }
         const total = counts[levelSelect.value] || 0;
-        note.textContent = "已加载 " + int(pluginLogs.length) + " / " + int(total) + " 条";
+        note.textContent = loadedCountText(pluginLogs.length, total, list.complete);
         list.renderItems(searched, {
           attrs: { class: "event-list", role: "list", "aria-label": "插件日志列表" },
           empty: pluginLogs.length ? "已加载日志中没有匹配项" : "暂无插件日志",
@@ -8666,7 +8669,7 @@
               el(
                 "span",
                 { class: "row" },
-                el("span", { text: "API Key：" + String(row.key || "未知").replace(/\s*·\s*/g, " · ") }),
+                el("span", { text: "API Key：" + sourceLabel(row.key || "未知") }),
                 el("span", { text: "模型：" + (row.model || "未知") + "（" + model + "）" }),
                 el("span", { text: credential }),
                 el("span", { text: "请求结果：" + outcome }),
@@ -9261,7 +9264,7 @@
       function bindPagedListFilters(list, role, ids, clear) {
         const reload = () => {
           updateFilterClearButton(clear);
-          guard(() => list.reload());
+          guard(() => list.load(true));
         };
         for (const id of ids) {
           $(id).addEventListener("change", () => {
@@ -9291,18 +9294,6 @@
         });
         ui.search.addEventListener("input", () => renderAuthFiles(account));
         ui.bulk.onclick = () => guard(() => refreshFilteredAuthQuotas(account));
-      }
-      for (const lists of Object.values(pagedLists)) {
-        for (const list of Object.values(lists)) {
-          list.scroller.addEventListener(
-            "scroll",
-            () => {
-              hideCostTooltip();
-              list.maybeLoadMore();
-            },
-            { passive: true },
-          );
-        }
       }
 
       const TABS = Array.from(document.querySelectorAll(".tabs button[data-tab]"));
@@ -9495,7 +9486,7 @@
       });
       $("plugin-log-level").addEventListener("change", () => {
         saveChoice("admin", "plugin-log-level");
-        guard(() => pagedList("logs").reload());
+        guard(() => pagedList("logs").load(true));
       });
       $("plugin-logs-clear").onclick = () =>
         openActionDialog(
@@ -9513,7 +9504,7 @@
         bindPagedListFilters(
           pagedList("events", account),
           role,
-          REQUEST_EVENT_FILTER_IDS[role],
+          ["request-event-model", "request-event-source", "request-event-status"].map((id) => prefix + id),
           $(prefix + "request-events-filter-clear"),
         );
         bindPagedListFilters(

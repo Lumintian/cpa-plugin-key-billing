@@ -926,6 +926,33 @@ PLUGIN_LOGS = [
 ]
 
 
+def seed_paginated_history():
+    """Provide multiple real pages of synthetic history in the default preview."""
+    event_samples = list(REQUEST_EVENTS)
+    error_samples = {entry["id"]: entry for entry in ERRORS}
+    log_samples = list(PLUGIN_LOGS)
+    REQUEST_EVENTS.clear()
+    ERRORS.clear()
+    PLUGIN_LOGS.clear()
+    for batch in range(40):
+        for index, sample in enumerate(event_samples):
+            sequence = batch * len(event_samples) + index
+            identity = {
+                "id": str(sequence + 1),
+                "at": iso(NOW - timedelta(minutes=sequence)),
+            }
+            REQUEST_EVENTS.append({**sample, **identity})
+            if sample["id"] in error_samples:
+                ERRORS.append({**error_samples[sample["id"]], **identity})
+        for index, sample in enumerate(log_samples):
+            sequence = batch * len(log_samples) + index
+            PLUGIN_LOGS.append({
+                **sample,
+                "id": 40 * len(log_samples) - sequence,
+                "at": iso(NOW - timedelta(minutes=sequence)),
+            })
+
+
 def error_view(query, scope=""):
     snapshot = event_snapshot(query)
     rows = filter_event_time([entry for entry in ERRORS
@@ -1591,6 +1618,7 @@ def main():
         help="Initial host theme; the preview shell can switch themes after startup.",
     )
     args = parser.parse_args()
+    seed_paginated_history()
     Handler.host_mode = args.host
     Handler.initial_theme = args.theme
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
