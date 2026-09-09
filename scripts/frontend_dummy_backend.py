@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import random
 import time
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -1251,6 +1252,10 @@ def payload_for(path, query):
 class Handler(BaseHTTPRequestHandler):
     host_mode = "standalone"
     initial_theme = "auto"
+
+    def send_response(self, code, message=None):
+        time.sleep(random.uniform(0.4, 0.6))
+        super().send_response(code, message)
 
     def send_html(self, body):
         encoded = body.encode()
