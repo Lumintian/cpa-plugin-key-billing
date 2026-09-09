@@ -2351,14 +2351,19 @@
           return "";
         }
 
-        function currentTheme() {
-          const doc = parentDocument();
-          if (doc) return doc.documentElement.getAttribute("data-theme") || "";
+        function readPluginTheme() {
           try {
             const own = localStorage.getItem(PLUGIN_STORE_KEY);
             if (own === "dark" || own === "white") return own;
           } catch (_) {}
-          return resolve(storedTheme());
+          return "";
+        }
+
+        let selectedTheme = readPluginTheme();
+        function currentTheme() {
+          const doc = parentDocument();
+          if (doc) return doc.documentElement.getAttribute("data-theme") || "";
+          return selectedTheme || resolve(storedTheme());
         }
 
         let appliedTheme = null;
@@ -2368,10 +2373,11 @@
           if (next) root.setAttribute("data-theme", next);
           else root.removeAttribute("data-theme");
           root.style.colorScheme = next === "dark" ? "dark" : "light";
-          if (appliedTheme !== null && appliedTheme !== next) {
+          const changed = appliedTheme !== null && appliedTheme !== next;
+          appliedTheme = next;
+          if (changed) {
             window.dispatchEvent(new CustomEvent("billing-theme-change", { detail: next }));
           }
-          appliedTheme = next;
         }
 
         const sync = () => apply(currentTheme());
@@ -2385,16 +2391,20 @@
           });
         } else {
           window.addEventListener("storage", (event) => {
-            if (!event.key || event.key === STORE_KEY || event.key === PLUGIN_STORE_KEY) sync();
+            if (!event.key || event.key === STORE_KEY || event.key === PLUGIN_STORE_KEY) {
+              selectedTheme = readPluginTheme();
+              sync();
+            }
           });
         }
         if (window.matchMedia) {
           window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", sync);
         }
         window.billingTheme = {
-          current: currentTheme,
+          current: () => appliedTheme,
           toggle() {
-            const next = currentTheme() === "dark" ? "white" : "dark";
+            const next = appliedTheme === "dark" ? "white" : "dark";
+            selectedTheme = next;
             try {
               localStorage.setItem(PLUGIN_STORE_KEY, next);
             } catch (_) {}
@@ -2484,6 +2494,7 @@
         </div>
         <div id="shared-time-backdrop" class="time-range-backdrop hidden"></div>
 
+        <div id="admin-data-status" class="notice err" role="status"></div>
         <section id="tab-keys">
           <div class="card">
             <div class="row spread section-toolbar">
@@ -2691,7 +2702,7 @@
                     <option value="error">错误</option>
                   </select>
                 </span>
-                <input id="plugin-log-filter" placeholder="搜索日志内容" class="wide-search" />
+                <input id="plugin-log-filter" placeholder="搜索已加载日志" class="wide-search" />
                 <button id="plugin-logs-clear" class="danger">清空日志</button>
               </div>
             </div>
@@ -2714,6 +2725,7 @@
           </div>
         </header>
         <div id="account-notice" class="notice" popover="manual"></div>
+        <div id="account-data-status" class="notice err" role="status"></div>
         <section id="account-untracked" class="card account-empty hidden">
           <h2>尚无计费记录</h2>
           <p class="muted">该 API Key 已通过验证，但插件尚未收到可归属的用量。</p>
@@ -3022,19 +3034,13 @@
       let loginModeRequest = 0;
       function emptyAdminState() {
         return {
-          keys: [],
+          get keys() { return resources.admin.keys.value ?? []; },
           keySubmissions: new Set(),
-          plans: [],
-          prices: null,
-          priceModelError: "",
-          models: [],
-          routes: [],
-          credentials: [],
-          requestEvents: null,
-          errors: null,
-          analysis: null,
-          pluginLogs: null,
-          authFiles: null,
+          get plans() { return resources.admin.plans.value ?? []; },
+          get prices() { return resources.admin.catalog.value?.prices ?? null; },
+          get routes() { return resources.admin.routes.value ?? []; },
+          get credentials() { return resources.admin.credentials.value ?? []; },
+          get authFiles() { return resources.admin.authFiles.value; },
           authQuotas: new Map(),
           authQuotaLoading: new Set(),
           authQuotaErrors: new Map(),
@@ -3042,15 +3048,12 @@
       }
       function emptyAccountState() {
         return {
-          profile: null,
-          subscription: null,
-          routing: null,
-          prices: null,
-          requestEvents: null,
-          errors: null,
-          analysis: null,
-          models: [],
-          authFiles: null,
+          get profile() { return resources.account.profile.value; },
+          get subscription() { return resources.account.subscription.value; },
+          get routing() { return resources.account.routing.value; },
+          get prices() { return resources.account.catalog.value?.prices ?? null; },
+          get models() { return resources.account.models.value || []; },
+          get authFiles() { return resources.account.authFiles.value; },
           authQuotas: new Map(),
           authQuotaLoading: new Set(),
           authQuotaErrors: new Map(),
@@ -3058,8 +3061,8 @@
       }
       let state = emptyAdminState();
       let accountState = emptyAccountState();
-      let authQuotaGeneration = { admin: 0, account: 0 };
-      let credentialScope = { admin: "", account: "" };
+      const authQuotaGeneration = { admin: 0, account: 0 };
+      const credentialScope = { admin: "", account: "" };
       let accountTab = initialRoute.role === "account" ? initialRoute.tab : "subscription";
 
       function openCredentialDB() {
@@ -3211,34 +3214,83 @@
         admin: { hour: 8, day: 7, custom: null },
         account: { hour: 8, day: 7, custom: null },
       };
-      const LIVE_CACHE_MS = 30000;
-      const CONFIG_CACHE_MS = 5 * 60000;
-
-      function emptyLoadState(maxAge = LIVE_CACHE_MS) {
-        return { promise: null, error: "", generation: 0, maxAge };
+      // Data groups publish independently; saves replace their returned entries.
+      // Each entry retains its last successful value when a read fails.
+      function dataEntries(labels) {
+        return Object.fromEntries(Object.entries(labels).map(([name, label]) =>
+          [name, { label, value: null, error: "" }]));
       }
 
-      const detailLoads = {
-        adminKeys: emptyLoadState(),
-        adminPlans: emptyLoadState(CONFIG_CACHE_MS),
-        adminRoutes: emptyLoadState(CONFIG_CACHE_MS),
-        adminCredentials: emptyLoadState(CONFIG_CACHE_MS),
-        adminModels: emptyLoadState(CONFIG_CACHE_MS),
-        adminEventKeys: emptyLoadState(CONFIG_CACHE_MS),
-        adminAPIKeys: emptyLoadState(CONFIG_CACHE_MS),
-        adminPrices: emptyLoadState(CONFIG_CACHE_MS),
-        adminPriceStatus: emptyLoadState(CONFIG_CACHE_MS),
-        accountProfile: emptyLoadState(),
-        accountSubscription: emptyLoadState(),
-        accountRouting: emptyLoadState(CONFIG_CACHE_MS),
-        accountModels: emptyLoadState(CONFIG_CACHE_MS),
-        accountPrices: emptyLoadState(CONFIG_CACHE_MS),
-        adminAnalysis: emptyLoadState(),
-        accountAnalysis: emptyLoadState(),
-        adminAuthFiles: emptyLoadState(),
-        accountAuthFiles: emptyLoadState(),
-        adminKeySync: emptyLoadState(CONFIG_CACHE_MS),
+      const resources = {
+        admin: dataEntries({
+          keys: "API Key", plans: "订阅计划", routes: "路由规则", credentials: "凭证目录",
+          models: "模型目录", catalog: "模型价格", priceStatus: "参考价状态", authFiles: "认证文件",
+        }),
+        account: dataEntries({
+          profile: "账户资料", subscription: "订阅", routing: "访问权限",
+          models: "模型目录", catalog: "模型价格", authFiles: "认证文件",
+        }),
       };
+      const resourceGroups = {
+        admin: {
+          configuration: { names: ["keys", "plans", "routes", "credentials", "models"], syncErrors: [] },
+          pricing: { names: ["catalog", "priceStatus"], after: "configuration" },
+          authFiles: { names: ["authFiles"] },
+        },
+        account: {
+          ...Object.fromEntries(Object.keys(resources.account).map((name) => [name, { names: [name] }])),
+          catalog: { names: ["catalog"], after: "models" },
+        },
+      };
+      // These are also page dependencies, even when the editor is still closed.
+      const EDITOR_RESOURCES = {
+        plan: ["keys", "plans"],
+        route: ["keys", "routes", "credentials", "models"],
+      };
+
+      // A query caches one explicit selection. Changing that selection or starting
+      // a new session discards the result; elapsed time never invalidates it.
+      function createQuery(label) {
+        const query = {
+          label, value: null, error: "", key: "", task: null, request: null,
+          clear() {
+            Object.assign(query, { value: null, error: "", key: "", task: null, request: null });
+          },
+          read(key, fetch, reload = false) {
+            if (key !== query.key) query.clear();
+            if (!reload && query.task) return query.task;
+            if (!reload && (query.value !== null || query.error)) return Promise.resolve(query.value);
+            const request = {};
+            query.key = key;
+            query.request = request;
+            query.error = "";
+            const task = Promise.resolve().then(() => {
+              if (query.request !== request) throw new StaleRequestError();
+              return fetch();
+            }).then((value) => {
+              if (query.request !== request) throw new StaleRequestError();
+              query.value = value;
+              return value;
+            }).catch((error) => {
+              if (query.request !== request) throw new StaleRequestError();
+              query.error = error.message || String(error);
+              throw error;
+            }).finally(() => {
+              if (query.request === request) {
+                query.task = null;
+                renderPage();
+              }
+            });
+            query.task = task;
+            return task;
+          },
+        };
+        return query;
+      }
+
+      const analysisQueries = Object.fromEntries(["admin", "account"].map((role) =>
+        [role, createQuery("分析")]));
+      const eventKeysQuery = createQuery("事件 Key 筛选");
 
       function nextEventPage(page, entries) {
         return entries.length < page.total ? { offset: entries.length, snapshot_id: page.snapshot_id } : null;
@@ -3247,7 +3299,6 @@
       const PAGED_LIST_VIEWS = {
         events: {
           tab: "request-events",
-          data: "requestEvents",
           label: "请求事件",
           scrollers: ["request-events-body", "account-request-events-body"],
           timed: true,
@@ -3257,7 +3308,6 @@
         },
         errors: {
           tab: "errors",
-          data: "errors",
           label: "错误事件",
           scrollers: ["errors-body", "account-errors"],
           timed: true,
@@ -3267,7 +3317,6 @@
         },
         logs: {
           tab: "settings",
-          data: "pluginLogs",
           label: "插件日志",
           scrollers: ["plugin-logs-body"],
           path: (_account, _range, cursor) => {
@@ -3279,148 +3328,131 @@
             return "/plugin-logs?" + params;
           },
           next: (page) => Number(page.next_before_id) || null,
-          idle: () => expandedPluginLogIDs.size === 0,
           render: renderPluginLogs,
         },
       };
 
       function createPagedList(kind, account) {
         const view = PAGED_LIST_VIEWS[kind];
+        const query = createQuery(view.label);
         const list = {
-          ...emptyLoadState(),
-          pending: "",
-          errorAction: "",
-          range: null,
-          cursor: null,
-          pages: 0,
-          get data() {
-            return (account ? accountState : state)[view.data];
-          },
-          set data(value) {
-            (account ? accountState : state)[view.data] = value;
-          },
-          get scroller() {
-            return $(view.scrollers[account ? 1 : 0]);
-          },
+          query,
+          append: false,
+          rendered: null,
+          get data() { return query.value?.page || null; },
+          get loading() { return !!query.task; },
+          get scroller() { return $(view.scrollers[account ? 1 : 0]); },
           active() {
-            return (
-              currentRole === (account ? "account" : "admin") &&
-              activeTab(account) === view.tab &&
-              (kind !== "logs" || sectionVisible($("tab-plugin-logs")))
-            );
+            return currentRole === (account ? "account" : "admin") && activeTab(account) === view.tab;
           },
-          canRefresh() {
-            return list.active() && list.pages <= 1 && list.scroller.scrollTop <= 0 && (view.idle?.() ?? true);
+          selection() {
+            return JSON.stringify([
+              view.timed ? sharedTimeRanges[account ? "account" : "admin"] : null,
+              view.path(account, {}, null),
+            ]);
+          },
+          replace(page) {
+            Object.assign(query, {
+              key: list.selection(), error: "", task: null, request: null,
+              value: { page, range: null, cursor: view.next(page, page.entries) },
+            });
+            list.append = false;
+            list.scroller.scrollTop = 0;
           },
           reset() {
-            resetLoadState(list);
-            Object.assign(list, { pending: "", errorAction: "", range: null, cursor: null, pages: 0 });
-            list.data = null;
+            query.clear();
+            list.append = false;
+            list.rendered = null;
             list.scroller.scrollTop = 0;
             list.scroller.scrollLeft = 0;
           },
           render() {
             if (list.active()) view.render(account);
           },
-          load(action = "replace", selected = selectedRange(account)) {
-            const cacheKey = timeRangeCacheKey(account, selected);
-            const passive = action === "navigation" || action === "visible";
-            if (passive && list.promise) return list.promise;
-            if (action === "visible" && list.data && !list.canRefresh()) return Promise.resolve();
-            if (passive && list.cache?.key === cacheKey && Date.now() - list.cache.at < list.maxAge) {
-              return list.promise || Promise.resolve();
+          renderItems(items, options) {
+            const previous = list.rendered;
+            const columns = JSON.stringify(options.headers || null);
+            // Appended pages retain the same entry objects. Rebuild when the
+            // table shape changes or the previous rows are no longer a prefix.
+            const append = previous?.rows?.isConnected && previous.columns === columns &&
+              previous.items.length <= items.length && previous.items.every((item, index) => item === items[index]);
+            const rows = append ? previous.rows : renderCollection(list.scroller, items, options);
+            if (append) rows.append(...items.slice(previous.items.length).map(options.render));
+            list.rendered = { items, columns, rows };
+          },
+          reload() {
+            const task = list.read(false, true);
+            if (list.active()) {
+              if (list.data) list.renderStatus();
+              else list.render();
             }
-            const append = action === "append";
-            const background = action === "background";
-            if (append && (list.cursor === null || list.promise)) return list.promise || Promise.resolve();
-            if (background && (list.promise || !list.canRefresh())) return list.promise || Promise.resolve();
-            const generation = ++list.generation;
-            const previous = list.data;
-            const range = append ? list.range : view.timed ? { ...selected } : null;
+            return task;
+          },
+          loadMore() {
+            if (query.task || !query.value?.cursor) return query.task || Promise.resolve();
+            const task = list.read(true, true);
+            if (list.active()) list.renderStatus();
+            return task;
+          },
+          read(append, reload) {
+            const selection = list.selection();
+            if (selection !== query.key) {
+              append = false;
+              list.scroller.scrollTop = 0;
+              list.scroller.scrollLeft = 0;
+            }
+            const previous = query.value;
+            const range = append ? previous.range : view.timed ? selectedRange(account) : null;
             if (!append && range) range.to = new Date(Math.min(Date.now(), Date.parse(range.to))).toISOString();
-            const path = view.path(account, range, append ? list.cursor : null);
-            list.pending = action;
-            list.error = "";
-            list.errorAction = "";
-            const task = Promise.resolve()
-              .then(() => {
-                if (generation !== list.generation) throw new StaleRequestError();
-                return account ? accountAPI(path) : plugin("GET", path);
-              })
-              .then((page) => {
-                if (
-                  generation !== list.generation ||
-                  ((background || action === "visible") && previous && !list.canRefresh())
-                )
-                  return;
-                const incoming = page.entries || [];
-                const entries = append ? (previous?.entries || []).concat(incoming) : incoming;
-                // Commit rows, cursor and snapshot together. A discarded refresh must
-                // leave the existing list fully pageable, including its time boundary.
-                list.data = {
-                  ...page,
-                  entries,
-                  filter_options: page.filter_options || (append ? previous?.filter_options : undefined),
-                };
-                list.range = range;
-                list.cursor = incoming.length ? view.next(page, entries) : null;
-                list.pages = append ? list.pages + 1 : 1;
-                if (!append) list.cache = { key: cacheKey, at: Date.now() };
-                if (!append) list.scroller.scrollTop = 0;
-              })
-              .catch((error) => {
-                if (generation !== list.generation || error instanceof StaleRequestError) return;
-                list.error = error.message || String(error);
-                list.errorAction = action;
-                throw error;
-              })
-              .finally(() => {
-                if (generation !== list.generation) return;
-                list.promise = null;
-                list.pending = "";
-                list.render();
-              });
-            list.promise = task;
-            if (!previous) list.render();
-            else list.renderStatus();
+            const path = view.path(account, range, append ? previous.cursor : null);
+            const pending = query.task;
+            const task = query.read(selection, async () => {
+              const page = requireObject(await (account ? accountAPI(path) : plugin("GET", path)), view.label);
+              const incoming = requireArray(page.entries, view.label);
+              if (incoming.some((entry) => !entry || typeof entry !== "object" || !entry.id))
+                throw new Error(view.label + "记录格式无效");
+              if (view.timed && (!Number.isInteger(page.total) || page.total < 0 || !/^\d+$/.test(String(page.snapshot_id))))
+                throw new Error(view.label + "分页信息无效");
+              const entries = append ? previous.page.entries.concat(incoming) : incoming;
+              return {
+                page: { ...page, entries, filter_options: page.filter_options || (append ? previous.page.filter_options : undefined) },
+                range,
+                cursor: incoming.length ? view.next(page, entries) : null,
+              };
+            }, reload);
+            if (query.task && query.task !== pending) list.append = append;
             return task;
           },
           maybeLoadMore() {
-            if (!list.active() || list.promise || list.cursor === null || list.errorAction === "append") return;
-            if (isNearScrollEnd(list.scroller)) guard(() => list.load("append"));
+            if (list.active() && !query.task && !query.error && isNearScrollEnd(list.scroller))
+              guard(() => list.loadMore());
           },
           renderEmpty() {
             if (list.data) return false;
-            const message = list.promise ? "加载中…" : list.error ? view.label + "加载失败" : "暂无" + view.label;
-            const retry =
-              list.error && !list.promise
-                ? el("button", { class: "retry-button", onclick: () => guard(() => list.load()) }, "重试")
-                : null;
-            replaceContent(list.scroller, el("div", { class: "empty" }, el("div", { text: message }), retry));
+            list.rendered = null;
+            const message = query.error ? view.label + "加载失败：" + query.error : "加载中…";
+            list.scroller.replaceChildren(el("div", { class: "empty" },
+              el("div", { text: message }),
+              query.error && !query.task ? el("button", { class: "retry-button", onclick: () => guard(() => list.reload()) }, "重试") : null));
             return true;
           },
           renderStatus() {
             const scroller = list.scroller;
-            const top = scroller.scrollTop;
-            const left = scroller.scrollLeft;
-            let status = null;
-            if (list.pending === "append") {
-              status = el("div", { class: "event-load-state", role: "status", text: "正在加载更多…" });
-            } else if (list.errorAction && !list.promise) {
-              const action = list.errorAction === "append" ? "append" : "replace";
-              status = el(
-                "div",
-                { class: "event-load-state" },
-                el("button", { onclick: () => guard(() => list.load(action)) }, "重试加载"),
-              );
-            }
+            const top = scroller.scrollTop, left = scroller.scrollLeft;
+            const notices = [];
+            if (query.task) notices.push(el("div", { text: list.append ? "正在加载更多…" : "正在加载…" }));
+            if (query.error) notices.push(el("div", {}, el("span", { text: query.error }),
+              el("button", { onclick: () => guard(() => list.append ? list.loadMore() : list.reload()) }, "重试加载")));
+            else if (query.value?.cursor) notices.push(el("button", {
+              disabled: !!query.task, onclick: () => guard(() => list.loadMore()),
+            }, "加载更多"));
+            const status = notices.length ? el("div", { class: "event-load-state", role: "status" }, notices) : null;
             const previous = scroller.querySelector(":scope > .event-load-state");
-            if (status && previous) patchDisplayNode(previous, status);
+            if (status && previous) previous.replaceWith(status);
             else if (status) scroller.append(status);
             else previous?.remove();
             scroller.scrollTop = top;
             scroller.scrollLeft = left;
-            requestAnimationFrame(() => list.maybeLoadMore());
           },
         };
         return list;
@@ -3439,7 +3471,7 @@
         return pagedLists[account ? "account" : "admin"][kind];
       }
 
-      let sharedTimeRanges = { admin: { mode: "30d" }, account: { mode: "30d" } };
+      const sharedTimeRanges = { admin: { mode: "30d" }, account: { mode: "30d" } };
 
       function viewPreferenceKey(role, name) {
         const scope = credentialScope[role];
@@ -3451,7 +3483,8 @@
         if (!key) return fallback;
         try {
           const raw = localStorage.getItem(key);
-          return raw === null ? fallback : JSON.parse(raw);
+          const value = raw === null ? fallback : JSON.parse(raw);
+          return typeof value === typeof fallback ? value : fallback;
         } catch (_) {
           return fallback;
         }
@@ -3465,16 +3498,16 @@
         } catch (_) {}
       }
 
-      function restoreChoice(role, id, fallback) {
+      function restoreChoice(role, id, fallback, allowMissing = false) {
         const control = $(id);
-        const value = viewPreference(role, id, fallback);
+        let value = viewPreference(role, id, fallback);
         if (control.type === "checkbox") {
-          control.checked = typeof value === "boolean" ? value : fallback;
+          control.checked = value;
           return;
         }
-        if (typeof value !== "string") return;
-        if (value && !Array.from(control.options).some((option) => option.value === value)) {
-          control.add(el("option", { value, text: value }));
+        if (!Array.from(control.options).some((option) => option.value === value)) {
+          if (allowMissing && value) control.add(el("option", { value, text: value }));
+          else value = fallback;
         }
         control.value = value;
       }
@@ -3486,9 +3519,12 @@
 
       function storedTimeRange(role) {
         const range = viewPreference(role, "time-range", { mode: "30d" });
-        if (!range || !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode)))
+        if (!range || typeof range.mode !== "string" ||
+            !(rollingTimeMode(range.mode) || ["today", "yesterday", "custom"].includes(range.mode)))
           return { mode: "30d" };
         if (range.mode !== "custom") return { mode: range.mode };
+        if (!["day", "hour"].includes(range.unit) || typeof range.from !== "string" || typeof range.to !== "string")
+          return { mode: "30d" };
         const from = new Date(range.from);
         const to = new Date(range.to);
         if (
@@ -3506,15 +3542,16 @@
 
       function restoreRolePreferences(role) {
         const account = role === "account";
-        for (const id of REQUEST_EVENT_FILTER_IDS[role]) restoreChoice(role, id, "");
         const prefix = account ? "account-" : "";
-        restoreChoice(role, prefix + "error-model", "");
-        restoreChoice(role, prefix + "error-source", "");
-        restoreChoice(role, prefix + "error-type", "");
+        // Dynamic choices must exist before the first filtered request, even
+        // when the current result no longer contains the stored selection.
+        for (const id of ["request-event-model", "request-event-source", "error-model", "error-source", "error-type"])
+          restoreChoice(role, prefix + id, "", true);
+        restoreChoice(role, prefix + "request-event-status", "");
         restoreChoice(role, prefix + "auth-enabled-only", true);
         restoreChoice(role, prefix + "auth-provider", "");
         if (!account) {
-          restoreChoice(role, "analysis-key", "");
+          restoreChoice(role, "analysis-key", "", true);
           restoreChoice(role, "keys-include-deleted", false);
           restoreChoice(role, "plugin-log-level", "all");
         }
@@ -3534,14 +3571,6 @@
         updateFilterClearButton($(prefix + "errors-filter-clear"));
       }
 
-      function resetLoadState(load) {
-        load.generation++;
-        load.promise = null;
-        load.error = "";
-        load.cache = null;
-        load.requestKey = "";
-      }
-
       function resetRoleControls(role) {
         const account = role === "account";
         const prefix = account ? "account-" : "";
@@ -3558,16 +3587,22 @@
       function resetRoleData(role) {
         const account = role === "account";
         destroyAnalysisCharts(account);
-        delete $(account ? "account-analysis-body" : "analysis-body").dataset.analysisSignature;
         if (role === "account") accountState = emptyAccountState();
         else {
           routePicker.saving = false;
           closeRoutePicker();
           state = emptyAdminState();
           expandedPluginLogIDs.clear();
-          adminMutationQueue = Promise.resolve();
+          resourceGroups.admin.configuration.syncErrors = [];
         }
-        invalidateResources(role);
+        for (const entry of Object.values(resources[role])) Object.assign(entry, { value: null, error: "" });
+        for (const group of Object.values(resourceGroups[role])) group.task = null;
+        for (const page of Object.values(pages[role])) {
+          page.task = null;
+          for (const section of page.sections) section.displayed = null;
+        }
+        analysisQueries[role].clear();
+        if (!account) eventKeysQuery.clear();
         for (const list of Object.values(pagedLists[role])) list.reset();
         resetRoleControls(role);
       }
@@ -3602,10 +3637,10 @@
 
       async function api(method, path, body, opts) {
         const generation = sessionGeneration;
-        const init = { method, headers: { Authorization: "Bearer " + (opts?.key ?? authKey) } };
+        const init = { method, cache: "no-store", headers: { Authorization: "Bearer " + (opts?.key ?? authKey) } };
         const timeoutMS = Number(opts?.timeoutMS ?? 30000);
         const controller = new AbortController();
-        activeRequests.add(controller);
+        if (!opts?.command) activeRequests.add(controller);
         const timeout = setTimeout(() => controller.abort(), timeoutMS);
         init.signal = controller.signal;
         if (body !== undefined && body !== null) {
@@ -3623,7 +3658,7 @@
           if (error instanceof TypeError) throw new Error("无法连接服务");
           throw error;
         } finally {
-          if (timeout) clearTimeout(timeout);
+          clearTimeout(timeout);
           activeRequests.delete(controller);
         }
         let payload = null;
@@ -3640,7 +3675,7 @@
           // Proxy error pages and response dumps are not user-facing messages.
           const message =
             decoded && !/<[^>]+>/.test(decoded) ? decoded.slice(0, 200) + (decoded.length > 200 ? "…" : "") : "";
-          if ((resp.status === 401 || resp.status === 403) && !opts?.key) {
+          if ((resp.status === 401 || resp.status === 403) && !opts?.auxiliaryCredential) {
             throw new AuthError(
               message || (currentRole === "account" ? "API Key 无效或无访问权限" : "管理密钥无效或无访问权限"),
             );
@@ -3652,11 +3687,11 @@
                 : "服务返回错误（HTTP " + resp.status + "）"),
           );
         }
-        return opts && opts.raw ? payload : unescapeDeep(payload);
+        return opts?.raw ? payload : unescapeDeep(payload);
       }
 
       const plugin = (method, path, body, opts) => api(method, PLUGIN_BASE + path, body, opts);
-      const accountAPI = (path, opts) => api("GET", ACCOUNT_BASE + path, null, { ...(opts || {}), raw: true });
+      const accountAPI = (path, opts) => api("GET", ACCOUNT_BASE + path, null, { ...opts, raw: true });
 
       function usd(value) {
         const amount = Number(value || 0);
@@ -3721,13 +3756,17 @@
         const parts = dateTimeParts(value);
         return parts ? parts.date + " " + parts.time : "—";
       }
+      const dateFormatter = new Intl.DateTimeFormat("zh-CN");
+      const timeFormatter = new Intl.DateTimeFormat("zh-CN", {
+        hour: "numeric", minute: "numeric", second: "numeric", hour12: false,
+      });
       function dateTimeParts(value) {
         if (!value) return null;
         const date = new Date(value);
         if (isNaN(date.getTime()) || date.getFullYear() < 2000) return null;
         return {
-          time: date.toLocaleTimeString("zh-CN", { hour12: false }),
-          date: date.toLocaleDateString("zh-CN"),
+          time: timeFormatter.format(date),
+          date: dateFormatter.format(date),
         };
       }
       function dateTimeLines(value) {
@@ -3736,8 +3775,6 @@
         return [el("div", {}, parts.time), el("div", { class: "muted small mono" }, parts.date)];
       }
 
-      const nodeListeners = new WeakMap();
-
       function el(tag, attrs, ...children) {
         const node = document.createElement(tag);
         for (const [name, value] of Object.entries(attrs || {})) {
@@ -3745,8 +3782,6 @@
           else if (name === "text") node.textContent = value;
           else if (name.startsWith("on")) {
             node.addEventListener(name.slice(2), value);
-            if (!nodeListeners.has(node)) nodeListeners.set(node, new Map());
-            nodeListeners.get(node).set(name.slice(2), value);
           } else if (value !== null && value !== undefined && value !== false) node.setAttribute(name, value);
         }
         for (const child of children.flat()) {
@@ -3755,129 +3790,27 @@
         }
         return node;
       }
-      function replaceContent(target, ...children) {
-        if (
-          target.childNodes.length === children.length &&
-          children.every((child, index) => target.childNodes[index].isEqualNode(child))
-        )
-          return;
-        target.replaceChildren(...children);
-      }
 
-      // Only renderer-owned display trees use this patcher, never editor drafts
-      // or chart canvases. Refresh closures as well as markup to avoid stale actions.
-      function patchDisplayNode(current, next) {
-        const nextValue = next.value;
-        const nextChecked = next.checked;
-        if (current.nodeType !== next.nodeType || current.nodeName !== next.nodeName) {
-          current.replaceWith(next);
-          return next;
+      // Replace a display collection while retaining its scroll position.
+      // Paged lists also use the returned row container to append new entries.
+      function renderCollection(target, items, { render, headers, attrs, empty = "暂无数据" }) {
+        const top = target.scrollTop, left = target.scrollLeft;
+        const tableLeft = target.querySelector(":scope > .table-scroll")?.scrollLeft || 0;
+        let content = el("div", { class: "empty", text: empty });
+        let rows = null;
+        if (items.length) {
+          rows = el(headers ? "tbody" : "div", headers ? {} : attrs, items.map(render));
+          content = headers
+            ? el("div", { class: "table-scroll" }, el("table", {},
+                el("thead", {}, el("tr", {}, headers.map((h) => el("th", { class: h.num ? "num" : "" }, h.label ?? h)))),
+                rows))
+            : rows;
         }
-        if (current.nodeType === Node.TEXT_NODE) {
-          if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue;
-          return current;
-        }
-        for (const attr of [...current.attributes]) {
-          if (!next.hasAttribute(attr.name)) current.removeAttribute(attr.name);
-        }
-        for (const attr of next.attributes) {
-          if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name, attr.value);
-        }
-        for (const [type, listener] of nodeListeners.get(current) || []) current.removeEventListener(type, listener);
-        for (const [type, listener] of nodeListeners.get(next) || []) current.addEventListener(type, listener);
-        nodeListeners.set(current, nodeListeners.get(next));
-        const oldChildren = [...current.childNodes];
-        const newChildren = [...next.childNodes];
-        for (let index = 0; index < Math.max(oldChildren.length, newChildren.length); index++) {
-          if (!newChildren[index]) oldChildren[index].remove();
-          else if (!oldChildren[index]) current.append(newChildren[index]);
-          else patchDisplayNode(oldChildren[index], newChildren[index]);
-        }
-        if (current instanceof HTMLInputElement) {
-          if (current.value !== nextValue) current.value = nextValue;
-          if (current.checked !== nextChecked) current.checked = nextChecked;
-        } else if (current instanceof HTMLSelectElement && current.value !== nextValue) current.value = nextValue;
-        return current;
-      }
-
-      const renderedCollections = new WeakMap();
-
-      function renderCollection(
-        target,
-        items,
-        {
-          key = (item) => item.id,
-          signature = (item) => item,
-          context = null,
-          render,
-          headers,
-          attrs,
-          empty = "暂无数据",
-        },
-      ) {
-        let collection = renderedCollections.get(target);
-        if (!collection || collection.root.parentNode !== target || collection.generation !== sessionGeneration) {
-          const body = el(headers ? "tbody" : "div", headers ? {} : attrs);
-          const head = headers ? el("thead", {}) : null;
-          const root = headers ? el("div", { class: "table-scroll" }, el("table", {}, head, body)) : body;
-          collection = {
-            root,
-            body,
-            head,
-            generation: sessionGeneration,
-            rows: new Map(),
-            empty: el("div", { class: "empty" }),
-          };
-          renderedCollections.set(target, collection);
-          target.replaceChildren(root, collection.empty);
-        }
-        const headerSignature = JSON.stringify(headers);
-        if (headers && collection.headerSignature !== headerSignature) {
-          const row = el(
-            "tr",
-            {},
-            headers.map((h) => el("th", { class: h.num ? "num" : "" }, h.label ?? h)),
-          );
-          if (collection.head.firstChild) patchDisplayNode(collection.head.firstChild, row);
-          else collection.head.append(row);
-          collection.headerSignature = headerSignature;
-        }
-        collection.root.classList.toggle("hidden", !items.length);
-        collection.empty.classList.toggle("hidden", !!items.length);
-        if (collection.empty.textContent !== empty) collection.empty.textContent = empty;
-        const nextRows = new Map();
-        const contextStamp = JSON.stringify(context);
-        const contextChanged = collection.contextStamp !== contextStamp;
-        let position = collection.body.firstChild;
-        for (const item of items) {
-          const id = String(key(item));
-          if (nextRows.has(id)) continue;
-          // Immutable rows only track joined display names; logs need no signature.
-          const stamp = signature ? JSON.stringify(signature(item)) : "";
-          let row = collection.rows.get(id);
-          if (!row) row = { node: render(item), stamp };
-          else if (row.stamp !== stamp || contextChanged) {
-            row = { node: patchDisplayNode(row.node, render(item)), stamp };
-          }
-          nextRows.set(id, row);
-          if (row.node !== position) collection.body.insertBefore(row.node, position);
-          position = row.node.nextSibling;
-        }
-        for (const [id, row] of collection.rows) if (!nextRows.has(id)) row.node.remove();
-        collection.rows = nextRows;
-        collection.contextStamp = contextStamp;
-      }
-
-      const renderedSections = new WeakMap();
-
-      function renderSection(target, value, render) {
-        const signature = JSON.stringify([sessionGeneration, value]);
-        const previous = renderedSections.get(target);
-        if (previous?.signature === signature && previous.node.parentNode === target) return;
-        const next = render();
-        const node = previous?.node.parentNode === target ? patchDisplayNode(previous.node, next) : next;
-        if (node.parentNode !== target) target.replaceChildren(node);
-        renderedSections.set(target, { signature, node });
+        target.replaceChildren(content);
+        if (headers) content.scrollLeft = tableLeft;
+        target.scrollTop = top;
+        target.scrollLeft = left;
+        return rows;
       }
       let noticeTimer = 0;
       function notify(message, kind) {
@@ -3898,10 +3831,13 @@
           kind === "err" ? 9000 : 4000,
         );
       }
-      function fail(err) {
+      async function fail(err) {
         if (err instanceof StaleRequestError) return;
         if (err instanceof AuthError) {
-          showGate(currentRole || loginMode, err.message);
+          const role = currentRole || loginMode;
+          const generation = sessionGeneration;
+          await deleteCredential(role);
+          if (generation === sessionGeneration) showGate(role, err.message);
           return;
         }
         notify(err.message || String(err), "err");
@@ -3910,7 +3846,7 @@
         try {
           await fn();
         } catch (err) {
-          fail(err);
+          await fail(err);
         }
       }
 
@@ -3961,17 +3897,17 @@
           editor.notice.textContent = "正在加载编辑数据…";
           dialog.showModal();
           try {
-            await load?.();
+            const data = await load?.();
             if (!editorCurrent(editor)) return;
-            editor.initial = initialize();
+            editor.data = data;
+            editor.initial = initialize(data);
             editor.ready = true;
             editor.notice.className = "editor-state notice hidden";
             editorBusy(editor, false);
             dialog.querySelector("input:not([type=hidden]):not(.hidden):enabled")?.focus();
           } catch (error) {
             if (!editorCurrent(editor)) return;
-            if (error instanceof StaleRequestError) return prepare();
-            if (error instanceof AuthError) return fail(error);
+            if (error instanceof AuthError || error instanceof StaleRequestError) return fail(error);
             editor.notice.className = "editor-state notice err show";
             editor.notice.replaceChildren(
               el("span", { text: error.message || String(error) }),
@@ -4052,16 +3988,12 @@
       }
 
       function showGate(mode, error) {
-        stopAutoRefresh();
         sessionGeneration++;
         try {
           sessionStorage.removeItem(SESSION_CREDENTIAL_PREFIX + mode);
         } catch (_) {}
         for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
         for (const controller of activeRequests) controller.abort();
-        pageRefreshPromise = null;
-        queuedForegroundRefresh = null;
-        setRefreshButtonsDisabled(false);
         if (currentRole) {
           clearCredentialScope(currentRole === "account");
           resetRoleData(currentRole);
@@ -4077,44 +4009,24 @@
         setLoginMode(mode, true);
       }
 
-      function invalidateResources(role) {
-        for (const [name, load] of Object.entries(detailLoads)) {
-          if (name.startsWith(role)) resetLoadState(load);
-        }
+      function requireObject(value, label) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(label + "响应格式无效");
+        return value;
       }
 
-      function loadResource(load, request, apply, render, { cacheKey = "" } = {}) {
-        if (load.promise && load.requestKey !== cacheKey) resetLoadState(load);
-        if (load.promise) return load.promise;
-        load.error = "";
-        if (load.cache?.key === cacheKey && Date.now() - load.cache.at < load.maxAge) {
-          return Promise.resolve(load.cache.value);
-        }
-        load.requestKey = cacheKey;
-        const generation = load.generation;
-        const task = Promise.resolve()
-          .then(() => {
-            if (load.generation !== generation) throw new StaleRequestError();
-            return request();
-          })
-          .then((result) => {
-            if (load.generation !== generation) throw new StaleRequestError();
-            apply?.(result);
-            load.cache = { key: cacheKey, at: Date.now(), value: result };
-            return result;
-          })
-          .catch((err) => {
-            if (load.generation !== generation || err instanceof StaleRequestError) throw new StaleRequestError();
-            load.error = err.message || String(err);
-            throw err;
-          })
-          .finally(() => {
-            if (load.promise === task) load.promise = null;
-            if (load.generation === generation) render?.();
-          });
-        load.promise = task;
-        render?.();
-        return task;
+      function requireArray(value, label) {
+        if (!Array.isArray(value)) throw new Error(label + "响应格式无效");
+        return value;
+      }
+
+      async function settleLoads(tasks) {
+        const results = await Promise.allSettled(tasks);
+        const failures = results.filter((result) => result.status === "rejected").map((result) => result.reason);
+        // Let every independent read finish, but never swallow unexpected errors.
+        // Authentication takes precedence over ordinary failures and cancellation.
+        const failure = failures.find((error) => error instanceof AuthError) ||
+          failures.find((error) => !(error instanceof StaleRequestError));
+        if (failure) throw failure;
       }
 
       const CONFIGURED_CREDENTIAL_ENDPOINTS = [
@@ -4127,31 +4039,14 @@
       ];
 
       function configuredEntryEnabled(entry) {
-        if (!entry || entry.disabled === true) return false;
-        const weight = Number(entry.weight ?? 1);
-        return !Number.isFinite(weight) || weight > 0;
-      }
-
-      function openAICompatibleProvider(name) {
-        const value = String(name || "")
-          .trim()
-          .toLowerCase();
-        if (!value || value === "openai-compatibility") return "openai-compatibility";
-        return value.startsWith("openai-compatible-") ? value : "openai-compatible-" + value;
-      }
-
-      function configuredKeyPreview(value) {
-        const key = String(value || "").trim();
-        if (!key) return "未配置 API Key";
-        if (key.length <= 12) return "*".repeat(key.length);
-        return key.slice(0, 6) + "…" + key.slice(-4);
+        return entry.disabled !== true && (entry.weight ?? 1) > 0;
       }
 
       function sortedConfiguredHeaders(headers) {
-        if (!headers || typeof headers !== "object" || Array.isArray(headers)) return "";
+        if (!headers) return "";
         return Object.keys(headers)
           .sort()
-          .map((key) => key + "\0" + String(headers[key]) + "\0")
+          .map((key) => key + "\0" + headers[key] + "\0")
           .join("");
       }
 
@@ -4229,10 +4124,31 @@
 
       async function configuredCredentialEntries(field) {
         const payload = await api("GET", "/v0/management/" + field, null, { raw: true, timeoutMS: 5000 });
-        return Array.isArray(payload?.[field]) ? payload[field] : [];
+        requireObject(payload, field);
+        const entries = payload[field] === null ? [] : requireArray(payload[field], field);
+        const validateEntry = (entry) => {
+          requireObject(entry, field);
+          for (const key of ["api-key", "base-url", "proxy-url", "prefix", "name"])
+            if (entry[key] != null && typeof entry[key] !== "string") throw new Error(field + "配置格式无效");
+          if (entry.disabled != null && typeof entry.disabled !== "boolean") throw new Error(field + "启用状态无效");
+          if (entry.weight != null && (typeof entry.weight !== "number" || !Number.isFinite(entry.weight)))
+            throw new Error(field + "权重格式无效");
+          if (entry.headers != null) {
+            requireObject(entry.headers, field);
+            if (Object.values(entry.headers).some((value) => typeof value !== "string"))
+              throw new Error(field + "请求头配置格式无效");
+          }
+        };
+        for (const entry of entries) {
+          validateEntry(entry);
+          if (field === "openai-compatibility" && entry["api-key-entries"] != null) {
+            for (const key of requireArray(entry["api-key-entries"], field)) validateEntry(key);
+          }
+        }
+        return entries;
       }
 
-      async function loadConfiguredCredentials() {
+      async function readConfiguredCredentials() {
         const generation = sessionGeneration;
         const counters = new Map();
         const credentials = [];
@@ -4245,33 +4161,31 @@
           const [, provider, kind, usesHeaders] = CONFIGURED_CREDENTIAL_ENDPOINTS[index];
           const entries = configuredEntries[index];
           for (const entry of entries) {
-            const apiKey = String(entry?.["api-key"] || "").trim();
-            const baseURL = String(entry?.["base-url"] || "").trim();
+            const apiKey = (entry["api-key"] || "").trim();
+            const baseURL = (entry["base-url"] || "").trim();
             if (!apiKey && !baseURL) continue;
-            const parts = [apiKey, baseURL, String(entry?.["proxy-url"] || "")];
-            if (usesHeaders) parts.push(String(entry?.prefix || ""), sortedConfiguredHeaders(entry?.headers));
+            const parts = [apiKey, baseURL, entry["proxy-url"]];
+            if (usesHeaders) parts.push(entry.prefix, sortedConfiguredHeaders(entry.headers));
             credentials.push({
               ref: await configuredCredentialRef(kind, parts, counters),
               provider,
-              display_name: configuredKeyPreview(apiKey),
+              display_name: previewCredential(apiKey) || "未配置 API Key",
               disabled: !configuredEntryEnabled(entry),
             });
           }
         }
 
         for (const entry of compatibilityEntries) {
-          const providerName =
-            String(entry?.name || "")
-              .trim()
-              .toLowerCase() || "openai-compatibility";
-          const provider = openAICompatibleProvider(providerName);
-          const apiKeys = Array.isArray(entry?.["api-key-entries"]) ? entry["api-key-entries"] : [];
-          const parentEnabled = entry?.disabled !== true;
+          const providerName = (entry.name || "").trim().toLowerCase() || "openai-compatibility";
+          const provider = providerName === "openai-compatibility" || providerName.startsWith("openai-compatible-")
+            ? providerName : "openai-compatible-" + providerName;
+          const apiKeys = entry["api-key-entries"] || [];
+          const parentEnabled = entry.disabled !== true;
           if (!apiKeys.length) {
             credentials.push({
               ref: await configuredCredentialRef(
                 "openai-compatibility:" + providerName,
-                [entry?.["base-url"]],
+                [entry["base-url"]],
                 counters,
               ),
               provider,
@@ -4281,142 +4195,137 @@
             continue;
           }
           for (const apiKeyEntry of apiKeys) {
-            const apiKey = String(apiKeyEntry?.["api-key"] || "").trim();
+            const apiKey = (apiKeyEntry["api-key"] || "").trim();
             credentials.push({
               ref: await configuredCredentialRef(
                 "openai-compatibility:" + providerName,
-                [apiKey, entry?.["base-url"], apiKeyEntry?.["proxy-url"]],
+                [apiKey, entry["base-url"], apiKeyEntry["proxy-url"]],
                 counters,
               ),
               provider,
-              display_name: configuredKeyPreview(apiKey),
+              display_name: previewCredential(apiKey) || "未配置 API Key",
               disabled: !parentEnabled || !configuredEntryEnabled(apiKeyEntry),
             });
           }
         }
 
         if (generation !== sessionGeneration) throw new StaleRequestError();
-        await plugin("POST", "/credentials/sync", { credentials });
+        return credentials;
       }
 
-      const adminCollections = {
-        keys: detailLoads.adminKeys,
-        plans: detailLoads.adminPlans,
-        routes: detailLoads.adminRoutes,
-      };
-
-      function loadAdminCollection(name) {
-        return loadResource(
-          adminCollections[name],
-          () => plugin("GET", "/" + name),
-          (result) => {
-            state[name] = result[name];
-          },
-          renderAdminConfiguration,
-        );
+      async function fetchAdminCollection(name) {
+        const result = await plugin("GET", "/" + name);
+        return requireArray(result?.[name], resources.admin[name].label);
       }
 
-      function loadAdminCredentials() {
-        return loadResource(
-          detailLoads.adminCredentials,
-          async () => {
-            await loadConfiguredCredentials();
-            return plugin("GET", "/credentials");
-          },
-          (result) => {
-            state.credentials = result.credentials;
-          },
-        );
-      }
-
-      function loadRouteEditorData() {
-        return Promise.all([
-          loadKeysForView(false),
-          loadAdminCollection("routes"),
-          loadModels(false),
-          loadAdminCredentials(),
-        ]);
-      }
-
-      function acceptResource(load, value, apply) {
-        resetLoadState(load);
-        load.cache = { key: "", at: Date.now(), value };
-        apply?.(value);
-      }
-
-      let adminMutationQueue = Promise.resolve();
-
-      // Serialize writes and retire older reads so late responses cannot undo edits.
-      function mutateAdmin(method, path, data = null, options) {
-        const generation = sessionGeneration;
-        const payload = structuredClone(data);
-        const task = adminMutationQueue
-          .catch(() => {})
-          .then(async () => {
-            if (generation !== sessionGeneration || currentRole !== "admin") throw new StaleRequestError();
-            const models = path.startsWith("/prices") ? state.models : undefined;
-            const result = await plugin(
-              method,
-              path + (path.includes("?") ? "&" : "?") + "view=1",
-              { data: payload, models },
-              options,
-            );
-            if (generation !== sessionGeneration) throw new StaleRequestError();
-            const view = result.view;
-            if (view.keys) {
-              for (const name of ["keys", "plans", "routes"]) {
-                if (!Object.hasOwn(view, name)) continue;
-                acceptResource(adminCollections[name], { [name]: view[name] }, (result) => {
-                  state[name] = result[name];
-                });
-              }
-              renderAdminConfiguration();
-              if (path === "/keys/label") {
-                resetLoadState(detailLoads.adminEventKeys);
-                resetEventViews(false);
-              }
-            }
-            if (view.prices) {
-              const modelCache = detailLoads.adminModels.cache;
-              const modelError =
-                modelCache?.value === models
-                  ? ""
-                  : state.priceModelError || "模型列表尚未加载完整，当前仅展示已知模型和自定义价格";
-              acceptResource(
-                detailLoads.adminPrices,
-                {
-                  prices: view.prices,
-                  modelError,
-                },
-                applyAdminPrices,
-              );
-              // Price writes do not refresh the model inventory used for this view.
-              if (modelError) detailLoads.adminPrices.cache = null;
-              else detailLoads.adminPrices.cache.at = modelCache.at;
-            }
-            if (view.metadata) {
-              acceptResource(detailLoads.adminPriceStatus, { metadata: view.metadata });
-            }
-            if (view.logs_cleared) {
-              const list = pagedList("logs");
-              list.reset();
-              expandedPluginLogIDs.clear();
-              list.data = { entries: [], level_counts: {}, next_before_id: 0 };
-              list.pages = 1;
-              list.cache = { key: timeRangeCacheKey(false, selectedRange(false)), at: Date.now() };
-              list.render();
-            }
-            if (view.error) {
-              resetLoadState(detailLoads.adminPrices);
-              state.priceModelError = "写入已成功，价格视图暂时无法更新：" + view.error;
-            }
-            if (view.prices) renderAdminPrices();
-            else if (view.metadata || view.error) renderReferencePriceStatus();
-            if (view.error) guard(loadAdminPrices);
-            return result;
+      async function loadEditorData(kind) {
+        const names = EDITOR_RESOURCES[kind];
+        const groups = Object.entries(resourceGroups.admin).filter(([, group]) =>
+          group.names.some((name) => names.includes(name) && resources.admin[name].value === null));
+        if (groups.length) {
+          await settleLoads(groups.map(([name]) => loadDataGroup(false, name, true))).catch((error) => {
+            if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
           });
-        adminMutationQueue = task;
+        }
+        for (const name of names) {
+          const resource = resources.admin[name];
+          if (resource.value === null) throw new Error(resource.error || resource.label + "尚未加载");
+        }
+        // Resources are replaced on reads and writes. Holding these values gives
+        // an editor stable options until it closes, including search and toggles.
+        return Object.fromEntries(names.map((name) => [name, resources.admin[name].value]));
+      }
+
+      // Each write family has its own order. Configuration and pricing also
+      // serialize their reads; clearing logs never waits for either family.
+      const adminDataQueues = { configuration: Promise.resolve(), pricing: Promise.resolve(), logs: Promise.resolve() };
+      function queueAdminData(group, operation) {
+        const generation = sessionGeneration;
+        const current = () => {
+          if (generation !== sessionGeneration || currentRole !== "admin") throw new StaleRequestError();
+        };
+        const task = adminDataQueues[group].catch(() => {}).then(async () => {
+          current();
+          return operation(current);
+        });
+        adminDataQueues[group] = task;
         return task;
+      }
+
+      async function readAdminConfiguration(read) {
+        // This load owns the CPA inputs. Key synchronization and model discovery
+        // consume the same read; plaintext keys never enter the resource cache.
+        const configuredKeys = loadConfiguredAPIKeys();
+        const errors = [];
+        const sync = async (label, operation) => {
+          try {
+            await operation();
+          } catch (error) {
+            if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
+            errors.push(label + "同步失败：" + error.message);
+          }
+        };
+        await settleLoads([
+          sync("API Key", async () => plugin("POST", "/keys/sync",
+            { keys: await configuredKeys, allow_empty: true }, { command: true })),
+          sync("凭证", async () => plugin("POST", "/credentials/sync",
+            { credentials: await readConfiguredCredentials() }, { command: true })),
+          read("models", async () => fetchModels(false, (await configuredKeys).find((key) => key.trim())?.trim() || "")),
+        ]);
+        await settleLoads(["keys", "plans", "routes", "credentials"].map((name) =>
+          read(name, () => fetchAdminCollection(name))));
+        return errors;
+      }
+
+      function writeAdmin(method, path, data = null, options) {
+        const payload = structuredClone(data);
+        const group = path.startsWith("/prices") ? "pricing" : path === "/plugin-logs" ? "logs" : "configuration";
+        return queueAdminData(group, async (current) => {
+          const body = { data: payload };
+          const models = resources.admin.models.value;
+          if (path.startsWith("/prices")) body.models = models || [];
+          const result = await plugin(method, path + (path.includes("?") ? "&" : "?") + "view=1", body,
+            { ...options, command: true });
+          current();
+          // Display errors must not turn a committed write into a failed save.
+          try {
+            applyAdminView(requireObject(result.view, "保存结果"), models);
+          } catch (error) {
+            notify("保存已完成，但更新显示失败：" + error.message, "err");
+          }
+          return result;
+        });
+      }
+
+      function applyAdminView(view, models) {
+        for (const name of ["keys", "plans", "routes"]) {
+          if (!Object.hasOwn(view, name)) continue;
+          const resource = resources.admin[name];
+          Object.assign(resource, { value: requireArray(view[name], resource.label), error: "" });
+        }
+        const catalog = resources.admin.catalog;
+        if (Object.hasOwn(view, "prices")) {
+          const prices = requireArray(view.prices, catalog.label);
+          catalog.value = {
+            models,
+            prices: prices.map((price) => ({ ...price, in_models: models === null ? undefined : price.in_models })),
+          };
+          catalog.error = "";
+        }
+        if (view.error) catalog.error = view.error;
+        if (Object.hasOwn(view, "metadata")) {
+          Object.assign(resources.admin.priceStatus, { value: { metadata: view.metadata }, error: "" });
+        }
+        if (view.logs_cleared) {
+          pagedList("logs").replace({ entries: [], level_counts: {}, next_before_id: 0 });
+          expandedPluginLogIDs.clear();
+        }
+      }
+
+      async function mutateAdmin(method, path, data = null, options) {
+        const result = await writeAdmin(method, path, data, options);
+        renderPage();
+        return result;
       }
 
       async function fetchModelPrices(models, account) {
@@ -4437,7 +4346,8 @@
           batch.set("include_custom", String(!account && index === 0));
           const path = "/prices?" + batch.toString();
           const rows = await (account ? accountAPI(path) : plugin("GET", path));
-          for (const row of rows) {
+          for (const row of requireArray(rows, "模型价格")) {
+            if (!row || typeof row.model_id !== "string") throw new Error("模型价格响应格式无效");
             const key = row.model_id.toLowerCase();
             const previous = prices.get(key);
             prices.set(key, { ...row, in_models: row.in_models || previous?.in_models || false });
@@ -4446,122 +4356,60 @@
         return [...prices.values()];
       }
 
-      function loadConfiguredAPIKeys() {
-        return loadResource(detailLoads.adminAPIKeys, async () => {
-          const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
-          const keys = result?.["api-keys"];
-          if (keys === null) return [];
-          if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string"))
-            throw new Error("CPA API Key 列表格式无效");
-          return keys;
-        });
+      async function loadConfiguredAPIKeys() {
+        const result = await api("GET", "/v0/management/api-keys", null, { raw: true });
+        const keys = result?.["api-keys"];
+        if (keys === null) return [];
+        if (!Array.isArray(keys) || keys.some((key) => typeof key !== "string"))
+          throw new Error("CPA API Key 列表格式无效");
+        return keys;
       }
 
-      async function fetchPricingModels(account) {
-        let key = authKey;
-        if (!account) {
-          const keys = await loadConfiguredAPIKeys();
-          key = keys.find((value) => value.trim()) || "";
-        }
-        const result = await api("GET", "/v1/models", null, { raw: true, key });
-        if (!Array.isArray(result.data)) throw new Error("CPA 模型列表格式无效");
-        return [...new Set(result.data.map((item) => item.id).filter((id) => typeof id === "string" && id.trim()))];
+      async function fetchModels(account, key) {
+        const result = await api("GET", "/v1/models", null, { raw: true, key, auxiliaryCredential: !account });
+        const rows = requireArray(result?.data, "CPA 模型列表");
+        if (rows.some((row) => !row || typeof row.id !== "string" || !row.id.trim()))
+          throw new Error("CPA 模型列表格式无效");
+        const models = [...new Set(rows.map((row) => row.id))].sort(compareModelId);
+        const previous = resources[account ? "account" : "admin"].models.value;
+        // The model list is the catalog's input. Preserve its identity when
+        // discovery returns the same IDs, even if their server order changed.
+        return previous?.length === models.length && previous.every((model, index) => model === models[index])
+          ? previous : models;
       }
 
-      function loadModels(account) {
-        return loadResource(
-          account ? detailLoads.accountModels : detailLoads.adminModels,
-          () => fetchPricingModels(account),
-          (models) => {
-            (account ? accountState : state).models = models;
-          },
-        );
-      }
-
-      async function loadAdminPrices() {
-        const result = await loadResource(
-          detailLoads.adminPrices,
-          async () => {
-            let models = [];
-            let modelError = "";
-            try {
-              models = await loadModels(false);
-            } catch (error) {
-              if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
-              modelError = "模型列表获取失败：" + error.message;
-            }
-            const prices = await fetchModelPrices(models, false);
-            return { prices, modelError };
-          },
-          applyAdminPrices,
-          renderAdminPrices,
-        );
-        if (result.modelError && detailLoads.adminPrices.cache?.value === result) detailLoads.adminPrices.cache = null;
-        return result;
-      }
-
-      function applyAdminPrices({ prices, modelError }) {
-        state.prices = prices.map((price) => ({ ...price, in_models: modelError ? undefined : price.in_models }));
-        state.priceModelError = modelError;
-      }
-
-      function renderAdminPrices() {
-        renderReferencePriceStatus();
-        if (currentRole === "admin" && activeAdminTab() === "settings") renderPriceTable();
-      }
-
-      function loadAdminPriceStatus() {
-        return loadResource(
-          detailLoads.adminPriceStatus,
-          () => plugin("GET", "/prices/reference/status"),
-          undefined,
-          renderReferencePriceStatus,
-        );
+      async function fetchCatalog(account) {
+        const models = resources[account ? "account" : "admin"].models.value;
+        if (account && models === null) throw new Error("尚未取得模型目录");
+        const prices = await fetchModelPrices(models || [], account);
+        return { models, prices: prices.map((price) => ({ ...price, in_models: models === null ? undefined : price.in_models })) };
       }
 
       function renderReferencePriceStatus() {
-        const load = detailLoads.adminPriceStatus;
-        const metadata = load.cache?.value.metadata;
+        const load = resources.admin.priceStatus;
+        const metadata = load.value?.metadata;
         $("price-status").textContent = [
           metadata?.usable && metadata?.fetched_at
             ? "参考价更新时间：" + new Date(metadata.fetched_at).toLocaleString()
-            : load.promise
-              ? "正在加载参考价状态…"
-              : load.error
-                ? ""
-                : "暂无参考价",
-          load.error,
+            : load.value ? "暂无参考价" : load.error ? "" : "正在加载参考价状态…",
           metadata?.last_error,
-          state.priceModelError,
         ]
           .filter(Boolean)
           .join("；");
       }
 
-      function loadAccountData(name, load) {
-        return loadResource(
-          load,
-          () => accountAPI("/" + name),
-          (result) => {
-            accountState[name] = result;
-          },
-          () => {
-            if (currentRole === "account") renderAccount(false);
-          },
-        );
-      }
-
-      function loadAccountPrices() {
-        return loadResource(
-          detailLoads.accountPrices,
-          async () => fetchModelPrices(await loadModels(true), true),
-          (prices) => {
-            accountState.prices = prices;
-          },
-          () => {
-            if (currentRole === "account") renderAccount(false);
-          },
-        );
+      async function fetchAccountData(name) {
+        const result = requireObject(await accountAPI("/" + name), name);
+        if (name === "profile" && typeof result.tracked !== "boolean") throw new Error("账户资料响应格式无效");
+        if (name === "subscription") {
+          requireObject(result.subscription, "订阅");
+          requireObject(result.concurrency, "并发状态");
+        }
+        if (name === "routing") {
+          requireArray(result.models, "模型权限");
+          requireArray(result.credentials, "凭证权限");
+        }
+        return result;
       }
 
       function recentTimeRange(mode) {
@@ -4593,29 +4441,24 @@
         return recentTimeRange(range.mode);
       }
 
-      function loadAnalysis(account, range = selectedRange(account)) {
-        const load = account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis;
+      function readAnalysis(account, reload) {
+        const role = account ? "account" : "admin";
+        const range = selectedRange(account);
         const params = new URLSearchParams(range);
-        params.set("timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
-        if (!account && $("analysis-key").value) {
-          params.set("api_key", $("analysis-key").value);
-        }
-        const render = () =>
-          currentRole === (account ? "account" : "admin") &&
-          activeTab(account) === "analysis" &&
-          renderAnalysis(account);
-        return loadResource(
-          load,
-          () => (account ? accountAPI("/analysis?" + params) : plugin("GET", "/analysis?" + params)),
-          (analysis) => {
-            const target = account ? accountState : state;
-            target.analysis = analysis;
-          },
-          render,
-          {
-            cacheKey: JSON.stringify([timeRangeCacheKey(account, range), account ? "" : $("analysis-key").value]),
-          },
-        );
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        const key = account ? "" : $("analysis-key").value;
+        params.set("timezone", timezone);
+        if (key) params.set("api_key", key);
+        const selection = JSON.stringify([sharedTimeRanges[role], key, timezone]);
+        return analysisQueries[role].read(selection, async () => {
+          const value = requireObject(await (account ? accountAPI("/analysis?" + params) : plugin("GET", "/analysis?" + params)), "分析");
+          requireObject(value.summary, "分析摘要");
+          requireObject(value.trends, "分析趋势");
+          requireObject(value.summary.cost, "分析成本");
+          for (const name of ["requests", "total_tokens", "total_cost", "cache_rate"])
+            requireArray(value.trends[name], "分析趋势");
+          return value;
+        }, reload);
       }
 
       function errorEventPath(account, range, cursor) {
@@ -4702,233 +4545,259 @@
         tabBar.addEventListener("scroll", () => updateTabScrollHint(tabBar), { passive: true });
       }
 
-      const VIEW_DEPENDENCIES = {
-        admin: {
-          keys: ["keys", "plans"],
-          analysis: ["analysis"],
-          "request-events": ["events"],
-          errors: ["errors"],
-          "auth-files": ["authFiles"],
-          settings: [],
-        },
-        account: {
-          subscription: ["subscription"],
-          analysis: ["analysis"],
-          "request-events": ["events"],
-          errors: ["errors"],
-          "auth-files": ["authFiles"],
-        },
-      };
-
-      function viewDependencies(account, tab, background, range) {
-        const duration = Date.parse(range.to) - Date.parse(range.from);
-        if (background && (tab === "auth-files" || (tab === "analysis" && !(duration > 0 && duration <= 86400000))))
-          return [];
-        const names = [...VIEW_DEPENDENCIES[account ? "account" : "admin"][tab]];
-        if (!account && ["analysis", "request-events", "errors"].includes(tab)) names.push("eventKeys");
-        names.push(...visibleDependencies(account, tab));
-        return [...new Set(names)];
+      function dataGroupCached(account, group) {
+        const data = resources[account ? "account" : "admin"];
+        return group.names.every((name) => data[name].value !== null || data[name].error) &&
+          (!group.names.includes("catalog") || !data.catalog.value || data.catalog.value.models === data.models.value);
       }
 
-      async function loadKeysForView(background) {
+      // Groups own complete loading flows, including their upstream inputs.
+      // A catalog waits for its model source and records the list it priced;
+      // a changed directory does not clear a hidden page's existing prices.
+      function loadDataGroup(account, name, reload = false) {
+        const role = account ? "account" : "admin";
+        const group = resourceGroups[role][name];
+        if (group.task) return group.task;
+        const prerequisite = group.after ? loadDataGroup(account, group.after, reload).catch((error) => error) : null;
+        if (!reload && dataGroupCached(account, group) && (!group.after || !resourceGroups[role][group.after].task))
+          return Promise.resolve();
         const generation = sessionGeneration;
-        let syncError;
-        if (!background) {
-          try {
-            await loadResource(
-              detailLoads.adminKeySync,
-              async () => {
-                const summary = await autoSyncKeys();
-                if (summary) notify(summary);
-              },
-              // A concurrent live read may predate the completed synchronization.
-              () => resetLoadState(detailLoads.adminKeys),
-            );
-          } catch (error) {
-            syncError = error;
-          }
-        }
-        if (generation !== sessionGeneration) return;
-        await loadAdminCollection("keys");
-        if (syncError) throw syncError;
-      }
-
-      function viewResources(account, reason, range) {
-        const background = reason === "background";
-        const resources = {
-          keys: {
-            state: detailLoads.adminKeys,
-            invalidate: [detailLoads.adminKeys, detailLoads.adminKeySync, detailLoads.adminAPIKeys],
-            load: () => loadKeysForView(background),
-          },
-          plans: { state: detailLoads.adminPlans, load: () => loadAdminCollection("plans") },
-          routes: { state: detailLoads.adminRoutes, load: () => loadAdminCollection("routes") },
-          eventKeys: { state: detailLoads.adminEventKeys, load: () => loadEventKeys(range) },
-          subscription: {
-            state: detailLoads.accountSubscription,
-            load: () => loadAccountData("subscription", detailLoads.accountSubscription),
-          },
-          routing: {
-            state: detailLoads.accountRouting,
-            load: () => loadAccountData("routing", detailLoads.accountRouting),
-          },
-          prices: {
-            state: account ? detailLoads.accountPrices : detailLoads.adminPrices,
-            invalidate: account
-              ? [detailLoads.accountPrices, detailLoads.accountModels]
-              : [detailLoads.adminPrices, detailLoads.adminModels, detailLoads.adminAPIKeys],
-            load: () => (account ? loadAccountPrices() : loadAdminPrices()),
-          },
-          priceStatus: { state: detailLoads.adminPriceStatus, load: loadAdminPriceStatus },
-          analysis: {
-            state: account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis,
-            load: () => loadAnalysis(account, range),
-          },
-          authFiles: {
-            state: account ? detailLoads.accountAuthFiles : detailLoads.adminAuthFiles,
-            load: () => loadAuthFiles(account),
-          },
-        };
-        for (const [name, list] of Object.entries(pagedLists[account ? "account" : "admin"])) {
-          resources[name] = {
-            load: () => list.load(["background", "navigation", "visible"].includes(reason) ? reason : "replace", range),
+        const load = async () => {
+          const error = await prerequisite;
+          if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
+          if (generation !== sessionGeneration) throw new StaleRequestError();
+          if (!reload && dataGroupCached(account, group)) return;
+          for (const key of group.names) resources[role][key].error = "";
+          renderPage();
+          const values = {}, failures = [];
+          const read = async (key, fetch) => {
+            try {
+              values[key] = await fetch();
+            } catch (error) {
+              if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
+              failures.push({ key, error });
+            }
           };
-        }
-        return resources;
-      }
-
-      const viewLoadGenerations = { admin: 0, account: 0 };
-
-      function sectionVisible(section) {
-        const rect = section.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && rect.top < innerHeight + 160 && rect.bottom > -160;
-      }
-
-      const deferredSections = new Map([
-        [$("tab-plans"), { account: false, tab: "settings", resources: ["keys", "plans"] }],
-        [$("tab-routes"), { account: false, tab: "settings", resources: ["keys", "routes"] }],
-        [$("tab-prices"), { account: false, tab: "settings", resources: ["prices", "priceStatus"] }],
-        [$("tab-plugin-logs"), { account: false, tab: "settings", resources: ["logs"] }],
-        [$("account-access").parentElement, { account: true, tab: "subscription", resources: ["routing"] }],
-        [$("account-models").parentElement, { account: true, tab: "subscription", resources: ["routing", "prices"] }],
-      ]);
-
-      function visibleDependencies(account, tab, sections = deferredSections.keys()) {
-        const names = new Set();
-        for (const section of sections) {
-          const config = deferredSections.get(section);
-          if (config.account === account && config.tab === tab && sectionVisible(section)) {
-            for (const name of config.resources) names.add(name);
+          if (account) {
+            await read(name, () => name === "authFiles" ? fetchAuthFiles(true) :
+              name === "models" ? fetchModels(true, authKey) :
+              name === "catalog" ? fetchCatalog(true) : fetchAccountData(name));
+          } else if (name === "configuration") {
+            group.syncErrors = await readAdminConfiguration(read);
+          } else if (name === "pricing") {
+            await settleLoads([
+              read("catalog", () => fetchCatalog(false)),
+              read("priceStatus", async () => requireObject(await plugin("GET", "/prices/reference/status"), "参考价状态")),
+            ]);
+          } else {
+            await read("authFiles", () => fetchAuthFiles(false));
           }
-        }
-        return [...names];
+          if (generation !== sessionGeneration) throw new StaleRequestError();
+          if (account && name !== "profile" && !accountState.profile?.tracked) return;
+          if (values.authFiles) updateAuthFiles(account, values.authFiles);
+          for (const [key, value] of Object.entries(values)) Object.assign(resources[role][key], { value, error: "" });
+          for (const { key, error } of failures) resources[role][key].error = error.message || String(error);
+          if (values.profile?.tracked === false) {
+            for (const [key, resource] of Object.entries(resources.account)) {
+              if (key !== "profile") Object.assign(resource, { value: null, error: "" });
+            }
+            analysisQueries.account.clear();
+            for (const list of Object.values(pagedLists.account)) list.reset();
+            resetAuthQuotaMemory(true);
+            persistAuthQuotaCache(true);
+          }
+          if (failures.length) throw failures[0].error;
+        };
+        const task = !account && ["configuration", "pricing"].includes(name)
+          ? queueAdminData(name, load) : Promise.resolve().then(load);
+        group.task = task.finally(() => {
+          if (generation === sessionGeneration) {
+            group.task = null;
+            renderPage();
+          }
+        });
+        return group.task;
       }
-
-      function loadVisibleSections(sections) {
-        const account = currentRole === "account";
-        if (!currentRole || (account && !accountState.profile?.tracked)) return Promise.resolve();
-        const resources = viewResources(account, "visible", selectedRange(account));
-        const names = visibleDependencies(account, activeTab(account), sections);
-        return Promise.all(
-          names.map((name) => {
-            const load = resources[name].state || pagedLists[account ? "account" : "admin"][name];
-            if (!load.error) return resources[name].load();
-          }),
-        );
-      }
-      const deferredSectionObserver = new IntersectionObserver(
-        (entries) => {
-          const sections = entries.filter((entry) => entry.isIntersecting).map((entry) => entry.target);
-          if (sections.length) guard(() => loadVisibleSections(sections));
-        },
-        { rootMargin: "160px" },
-      );
-      for (const section of deferredSections.keys()) deferredSectionObserver.observe(section);
 
       let chartLoadPromise;
       let chartError = "";
       function loadCharts() {
-        if (typeof Chart !== "undefined") return Promise.resolve();
+        if (typeof Chart === "function") return Promise.resolve();
         if (chartLoadPromise) return chartLoadPromise;
         chartError = "";
         chartLoadPromise = new Promise((resolve, reject) => {
           const script = document.createElement("script");
-          const timer = setTimeout(() => {
+          const failed = (message) => {
+            clearTimeout(timer);
+            script.onload = script.onerror = null;
             script.remove();
             chartLoadPromise = null;
-            chartError = "图表加载超时";
-            reject(new Error("图表加载超时"));
-          }, 10000);
+            chartError = message;
+            reject(new Error(message));
+          };
+          const timer = setTimeout(() => failed("图表加载超时"), 10000);
           script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js";
           script.onload = () => {
+            if (typeof Chart !== "function") return failed("图表脚本未正确初始化");
             clearTimeout(timer);
+            script.onload = script.onerror = null;
             resolve();
           };
-          script.onerror = () => {
-            clearTimeout(timer);
-            script.remove();
-            chartLoadPromise = null;
-            chartError = "图表加载失败";
-            reject(new Error("图表加载失败"));
-          };
+          script.onerror = () => failed("图表加载失败");
           document.head.append(script);
-        });
+        }).finally(renderLoadedCharts);
         return chartLoadPromise;
       }
 
-      async function loadView(account, reason = "navigation") {
-        const role = account ? "account" : "admin";
-        const viewGeneration = ++viewLoadGenerations[role];
-        const tab = activeTab(account);
-        const generation = sessionGeneration;
-        const background = reason === "background";
-        if (background && (document.querySelector("dialog[open]") || routePicker.scope)) return;
-        const range = selectedRange(account);
-        let dependencies = background ? viewDependencies(account, tab, true, range) : null;
-        if (background && !dependencies.length) return;
+      function renderLoadedCharts() {
+        const account = currentRole === "account";
+        if (currentRole && activeTab(account) === "analysis" && analysisQueries[currentRole].value)
+          renderAnalysis(account);
+      }
+
+      // A page owns both its displays and its editors. Loading and refresh use
+      // their union; rendering uses only each display's own dependencies.
+      function createPages(role) {
+        const account = role === "account";
+        const data = {
+          ...resources[role], analysis: analysisQueries[role], eventKeys: eventKeysQuery,
+          ...Object.fromEntries(Object.entries(pagedLists[role]).map(([name, list]) => [name, list.query])),
+        };
+        const section = (names, render) => ({ sources: names.map((name) => data[name]), render, displayed: null });
+        const result = {
+          analysis: { query: "analysis", sections: [] },
+          "request-events": { query: "events", sections: [section(["events"], () => renderRequestEvents(account))] },
+          errors: { query: "errors", sections: [section(["errors"], () => renderErrors(account))] },
+          "auth-files": { sections: [section(["authFiles"], () => renderAuthFiles(account))] },
+        };
         if (account) {
-          if (reason === "foreground") resetLoadState(detailLoads.accountProfile);
-          await loadAccountData("profile", detailLoads.accountProfile);
-          if (generation !== sessionGeneration || !accountState.profile?.tracked) return;
+          result.subscription = { sections: [
+            section(["subscription"], renderAccountSubscription),
+            section(["models", "catalog", "routing"], renderAccountModels),
+            section(["routing"], renderAccountRouting),
+          ] };
+        } else {
+          const keyFilter = section(["eventKeys"], renderEventKeys);
+          for (const tab of ["analysis", "request-events", "errors"]) result[tab].sections.unshift(keyFilter);
+          result.keys = { editors: ["route"], sections: [section(["keys", "plans", "routes", "credentials"], renderKeys)] };
+          result.settings = { editors: ["plan", "route"], query: "logs", sections: [
+            section(["plans", "keys"], renderPlans),
+            section(["routes", "keys", "credentials"], renderRoutes),
+            section(["catalog"], renderPriceTable),
+            section(["priceStatus", "catalog"], renderReferencePriceStatus),
+            section(["logs"], renderPluginLogs),
+          ] };
         }
-        dependencies ||= viewDependencies(account, tab, false, range);
-        const resources = viewResources(account, reason, range);
-        if (reason === "foreground") {
-          const loads = new Set(
-            dependencies.flatMap((name) => resources[name].invalidate || [resources[name].state]).filter(Boolean),
-          );
-          for (const load of loads) resetLoadState(load);
-        }
-        if (background) {
-          for (const name of dependencies) {
-            const load = resources[name].state;
-            if (load?.maxAge === LIVE_CACHE_MS) load.cache = null;
+        for (const page of Object.values(result)) {
+          page.sources = [...new Set(page.sections.flatMap((section) => section.sources))];
+          for (const editor of page.editors || []) {
+            for (const name of EDITOR_RESOURCES[editor]) if (!page.sources.includes(data[name])) page.sources.push(data[name]);
           }
+          if (page.sources.includes(data.catalog) && !page.sources.includes(data.models)) page.sources.push(data.models);
+          if (page.query === "analysis") page.sources.push(data.analysis);
+          page.groups = Object.entries(resourceGroups[role])
+            .filter(([, group]) => group.names.some((name) => page.sources.includes(data[name])))
+            .map(([name]) => name);
+          if (account) page.sources.unshift(data.profile);
+          page.task = null;
         }
-        if (tab === "analysis") {
-          const render = () => {
-            if (generation === sessionGeneration && currentRole === role && activeTab(account) === "analysis")
-              renderAnalysis(account);
-          };
-          loadCharts().then(render, render);
+        return result;
+      }
+      const pages = { admin: createPages("admin"), account: createPages("account") };
+
+      function currentPage() {
+        return currentRole ? pages[currentRole][activeTab(currentRole === "account")] : null;
+      }
+
+      // Cached navigation only paints changed sections. A refresh retains the
+      // existing DOM until new data arrives; hidden pages are painted on entry.
+      function renderPage() {
+        const page = currentPage();
+        if (!page) return;
+        const account = currentRole === "account";
+        updateRefreshButtons();
+        renderDataNotice();
+        if (account && !renderAccountProfile()) return;
+        for (const section of page.sections) {
+          const values = section.sources.flatMap((source) =>
+            [source.value, source.value === null ? source.error : ""]);
+          if (section.displayed?.every((value, index) => value === values[index])) continue;
+          if (section.render() !== false) section.displayed = values;
         }
-        const results = await Promise.allSettled(
-          dependencies.map(async (name) => {
-            if (generation !== sessionGeneration || viewGeneration !== viewLoadGenerations[role]) return;
-            return resources[name].load();
-          }),
-        );
-        if (generation !== sessionGeneration) return;
-        const failed =
-          results.find((result) => result.status === "rejected" && result.reason instanceof AuthError) ||
-          results.find((result) => result.status === "rejected");
-        if (failed) throw failed.reason;
+        // Charts also depend on theme and library availability, and retain
+        // their own canvas/update state across navigation and resizing.
+        if (page.query === "analysis") renderAnalysis(account);
+        else if (page.query) {
+          const list = pagedList(page.query, account);
+          if (list.data) list.renderStatus();
+        }
+      }
+
+      function loadPage(account, { reload = false } = {}) {
+        const role = account ? "account" : "admin";
+        const page = pages[role][activeTab(account)];
+        const generation = sessionGeneration;
+        const task = (async () => {
+          let profile;
+          if (account) {
+            profile = loadDataGroup(true, "profile", reload);
+            try {
+              await profile;
+            } catch (error) {
+              if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
+              // A temporary profile failure can still use the last known account.
+            }
+          }
+          if (generation !== sessionGeneration || currentPage() !== page) return;
+          const tasks = profile ? [profile] : [];
+          if (!account || accountState.profile?.tracked) {
+            tasks.push(...page.groups.map((name) => loadDataGroup(account, name, reload)));
+            if (page.sources.includes(eventKeysQuery)) tasks.push(readEventKeys(reload));
+            if (page.query === "analysis") {
+              tasks.push(readAnalysis(account, reload));
+              if (typeof Chart !== "function" && (!chartError || reload)) tasks.push(loadCharts());
+            } else if (page.query) {
+              const list = pagedList(page.query, account);
+              tasks.push(reload ? list.reload() : list.read(false, false));
+            }
+          }
+          renderPage();
+          try {
+            await settleLoads(tasks);
+          } catch (error) {
+            // Hidden pages keep their errors for the next visit. Only an
+            // authentication failure concerns the whole session.
+            if (currentPage() === page || error instanceof AuthError) throw error;
+          }
+        })().finally(() => {
+          if (generation !== sessionGeneration) return;
+          if (page.task === task) page.task = null;
+          renderPage();
+        });
+        page.task = task;
+        renderPage();
+        return task;
+      }
+
+      function renderDataNotice() {
+        const page = currentPage();
+        if (!page) return;
+        const account = currentRole === "account";
+        // Paged lists have their own loading/error footer and retry action.
+        const listQuery = pagedLists[currentRole][page.query]?.query;
+        const visible = page.sources.filter((source) => source !== listQuery);
+        const errors = visible.filter((source) => source.error).map((source) =>
+          source.label + "：" + source.error + (source.value !== null ? "（当前显示上次成功的数据）" : ""));
+        if (!account && page.groups.includes("configuration")) errors.push(...resourceGroups.admin.configuration.syncErrors);
+        renderLoadNotice(account ? "account-data-status" : "admin-data-status", errors.join("；"), !!page.task, refreshPage);
       }
 
       async function startAdmin(key) {
+        const generation = sessionGeneration;
         currentRole = "admin";
         authKey = key;
         await activateCredentialScope(false, key);
+        if (generation !== sessionGeneration) throw new StaleRequestError();
         restoreRolePreferences("admin");
         const route = pageRoute();
         setAdminTab(route.role === "admin" ? route.tab : "keys");
@@ -4936,17 +4805,18 @@
         $("account-app").classList.add("hidden");
         $("app").classList.remove("hidden");
         schedulePageTabLayout();
-        await loadView(false).catch(fail);
-        scheduleAutoRefresh();
+        await loadPage(false).catch(fail);
       }
 
       async function startAccount(key) {
+        const generation = sessionGeneration;
         currentRole = "account";
         authKey = key;
         // CLIProxyAPI remains authoritative for whether this downstream key is
         // currently valid. The plugin endpoint only uses the key to select its hash.
-        await loadModels(true);
+        resources.account.models.value = await fetchModels(true, key);
         await activateCredentialScope(true, key);
+        if (generation !== sessionGeneration) throw new StaleRequestError();
         restoreRolePreferences("account");
         $("gate").classList.add("hidden");
         $("app").classList.add("hidden");
@@ -4954,9 +4824,8 @@
         $("account-identity").textContent = previewCredential(key);
         const route = pageRoute();
         setAccountTab(route.role === "account" ? route.tab : "subscription");
-        await loadView(true, "login").catch(fail);
+        await loadPage(true).catch(fail);
         schedulePageTabLayout();
-        scheduleAutoRefresh();
       }
 
       function setAccountTab(tab) {
@@ -4967,7 +4836,7 @@
           button.classList.toggle("active", active);
           button.setAttribute("aria-selected", String(active));
         });
-        for (const name of ["subscription", "analysis", "request-events", "errors", "auth-files"]) {
+        for (const name of ACCOUNT_TAB_IDS) {
           $("account-tab-" + name).classList.toggle("hidden", name !== accountTab);
         }
         $("account-shared-time-filter").classList.toggle(
@@ -4979,33 +4848,24 @@
           closeSharedTimePopover(true);
         }
         schedulePageTabLayout();
-        if (currentRole === "account" && accountState.profile) renderAccount();
         revealTab(document.querySelector(`[data-account-tab="${accountTab}"]`));
       }
 
-      function renderAccount(renderDetail = true) {
+      function renderAccountProfile() {
         const profile = accountState.profile;
         const tracked = profile?.tracked === true;
         $("account-untracked").classList.toggle("hidden", !profile || tracked);
-        $("account-content").classList.toggle("hidden", !!profile && !tracked);
-        if (!profile) return;
-        const identity = profile.identity || {};
-        if (tracked) $("account-identity").textContent = apiKeyIdentity(identity).text;
+        $("account-content").classList.toggle("hidden", !tracked);
+        if (tracked) $("account-identity").textContent = apiKeyIdentity(profile.identity || {}).text;
+        else closeSharedTimePopover(true);
+        return tracked;
+      }
+
+      function renderAccountSubscription() {
         const subscription = accountState.subscription?.subscription || {};
         const concurrency = accountState.subscription?.concurrency || {};
-        $("account-concurrency").textContent =
-          !tracked || !accountState.subscription
-            ? "—"
-            : int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
-        if (!tracked) return;
-        if (accountTab !== "subscription") {
-          if (renderDetail && accountTab === "analysis") renderAnalysis(true);
-          if (renderDetail && accountTab === "request-events") renderRequestEvents(true);
-          if (renderDetail && accountTab === "errors") renderErrors(true);
-          if (renderDetail && accountTab === "auth-files") renderAuthFiles(true);
-          return;
-        }
-
+        $("account-concurrency").textContent = !accountState.subscription ? "—" :
+          int(concurrency.current) + " / " + (Number(concurrency.limit || 0) > 0 ? int(concurrency.limit) : "∞");
         $("account-plan-name").textContent = !accountState.subscription
           ? "订阅额度"
           : subscription.name || (subscription.unlimited ? "未绑定订阅计划" : "订阅额度");
@@ -5017,20 +4877,14 @@
             : subscription.blocked
               ? "额度用尽"
               : "正常";
-        // Countdown labels change even when the subscription response does not.
-        renderSection(
-          $("account-windows"),
-          [
-            subscription,
-            detailLoads.accountSubscription.error,
-            (subscription.windows || []).map((row) => quotaWindowResetLabel(row, true)),
-          ],
-          () =>
-            accountState.subscription
-              ? renderQuotaWindows(subscription, true)
-              : el("div", { class: "empty", text: detailLoads.accountSubscription.error || "正在加载订阅状态…" }),
+        $("account-windows").replaceChildren(
+          accountState.subscription
+            ? renderQuotaWindows(subscription, true)
+            : el("div", { class: "empty", text: resources.account.subscription.error || "正在加载订阅状态…" }),
         );
+      }
 
+      function renderAccountModels() {
         const access = accountState.routing || {};
         const routingValid = access.routing_valid !== false;
         const modelScope = new Set((access.models || []).map((model) => model.toLowerCase()));
@@ -5046,16 +4900,18 @@
           .slice()
           .sort(compareModelId);
         renderCollection($("account-models"), models, {
-          key: (model) => model,
-          signature: (model) => [model, accountModelPrice(model)],
           attrs: { class: "display-contents" },
-          empty: detailLoads.accountPrices.error || (!accountState.prices ? "正在加载模型价格…" : "暂无模型价格"),
+          empty: resources.account.routing.error || resources.account.catalog.error ||
+            (!accountState.routing || !accountState.prices ? "正在加载模型价格…" : "暂无模型价格"),
           render: renderAccountModel,
         });
-        renderSection($("account-access"), [accountState.routing, detailLoads.accountRouting.error], () =>
+      }
+
+      function renderAccountRouting() {
+        $("account-access").replaceChildren(
           accountState.routing
-            ? renderAccountAccess(access)
-            : el("div", { class: "empty", text: detailLoads.accountRouting.error || "正在加载路由权限…" }),
+            ? renderAccountAccess(accountState.routing)
+            : el("div", { class: "empty", text: resources.account.routing.error || "正在加载路由权限…" }),
         );
       }
 
@@ -5097,14 +4953,14 @@
               "div",
               { class: "auth-file-card" },
               el("div", { class: "account-access-scope-label", text: "允许的模型" }),
-              chips((access.models || []).slice().sort(compareModelId), routingValid ? "全部模型" : "无法确定"),
+              chips(access.models.slice().sort(compareModelId), routingValid ? "全部模型" : "无法确定"),
             ),
             el(
               "div",
               { class: "auth-file-card" },
               el("div", { class: "account-access-scope-label", text: "允许的凭证" }),
               chips(
-                (access.credentials || [])
+                access.credentials
                   .map(accountCredentialLabel)
                   .sort((a, b) => a.text.localeCompare(b.text, "zh-CN")),
                 routingValid ? "全部凭证" : "无法确定",
@@ -5112,23 +4968,19 @@
             ),
           ),
         ];
-        if ((access.warnings || []).length)
+        if (access.warnings?.length)
           nodes.push(
             el(
               "div",
               { class: "account-access-warnings" },
-              ...(access.warnings || []).map((warning) => el("span", { class: "tag warn", text: warning })),
+              access.warnings.map((warning) => el("span", { class: "tag warn", text: warning })),
             ),
           );
         return el("div", { class: "display-contents" }, nodes);
       }
 
-      function accountModelPrice(model) {
-        return (accountState.prices || []).find((price) => price.model_id.toLowerCase() === model.toLowerCase());
-      }
-
       function renderAccountModel(model) {
-        const candidate = accountModelPrice(model);
+        const candidate = accountState.prices.find((price) => price.model_id.toLowerCase() === model.toLowerCase());
         const price = candidate?.source === "none" ? null : candidate;
         const fields = [
           ["输入", "input_per_1m"],
@@ -5176,7 +5028,7 @@
             ? el(
                 "div",
                 { class: "account-model-price-list" },
-                priceRows.map((item) => priceRow(item)),
+                priceRows.map(priceRow),
               )
             : el("span", { class: "muted small", text: "未定价，暂时无法使用" }),
         );
@@ -5202,16 +5054,42 @@
         cost_usd: { label: "总成本", option: "成本占比", format: (row) => usd(row.cost_usd) },
       };
       const analysisCharts = {
-        admin: { trend: null, trendSignature: "", distribution: null },
-        account: { trend: null, trendSignature: "", distribution: null },
+        admin: { trend: null, distribution: null, rendered: null },
+        account: { trend: null, distribution: null, rendered: null },
       };
 
       function destroyAnalysisCharts(account) {
         const role = account ? "account" : "admin";
         for (const chart of [analysisCharts[role].trend, analysisCharts[role].distribution]) chart?.destroy();
         analysisCharts[role].trend = null;
-        analysisCharts[role].trendSignature = "";
         analysisCharts[role].distribution = null;
+        analysisCharts[role].rendered = null;
+        $(account ? "account-analysis-body" : "analysis-body").replaceChildren();
+      }
+
+      function analysisChartPanel(className, id, label) {
+        return el("div", { class: className },
+          el("canvas", { id, role: "img", "aria-label": label }),
+          el("div", { class: "empty hidden" }));
+      }
+
+      // The canvas and Chart instance belong to the page, not to a response.
+      // Replacing options also replaces tooltip callbacks with the current data.
+      function updateAnalysisChart(account, kind, canvas, config, { empty = "", animate = false } = {}) {
+        const charts = analysisCharts[account ? "account" : "admin"];
+        const message = empty || (typeof Chart !== "function" ? chartError || "正在加载图表…" : "");
+        const status = canvas.parentElement.querySelector(".empty");
+        canvas.classList.toggle("hidden", !!message);
+        status.classList.toggle("hidden", !message);
+        status.textContent = message;
+        if (message) return;
+        if (charts[kind]) {
+          charts[kind].data = config.data;
+          charts[kind].options = config.options;
+          charts[kind].update(animate ? undefined : "none");
+        } else {
+          charts[kind] = new Chart(canvas, config);
+        }
       }
 
       function themeColor(property, fallback) {
@@ -5249,46 +5127,12 @@
         return visible;
       }
 
-      function renderUsageDistributionChart(account, rows, dimension, dimensionLabel, metric, colors) {
-        const role = account ? "account" : "admin";
+      function renderUsageDistributionChart(account, rows, dimension, dimensionLabel, metric, colors, animate) {
         const canvas = $(account ? "account-usage-chart" : "usage-chart");
-        const existing = analysisCharts[role].distribution;
-        if (!canvas || !rows.length) {
-          existing?.destroy();
-          analysisCharts[role].distribution = null;
-          return;
-        }
-        if (!rows.some((row) => row.percent > 0)) {
-          existing?.destroy();
-          analysisCharts[role].distribution = null;
-          const text = "当前范围内：" + DISTRIBUTION_METRICS[metric].label + "为 0";
-          canvas.parentElement.replaceChildren(el("div", { class: "empty", text }));
-          return;
-        }
-        if (typeof Chart === "undefined") {
-          canvas.parentElement.replaceChildren(el("div", { class: "empty", text: chartError || "正在加载图表…" }));
-          return;
-        }
-        if (existing && existing.canvas === canvas) {
-          existing.data.labels = rows.map((row) =>
-            dimension === "api_keys" && row.key !== "other" ? apiKeyIdentity(row).text : row.label || row.key || "未知",
-          );
-          existing.data.datasets[0].data = rows.map((row) => row.percent);
-          existing.data.datasets[0].backgroundColor = rows.map((_, index) => colors[index % colors.length]);
-          existing.options.plugins.tooltip.callbacks.title = (items) =>
-            items.length ? dimensionLabel + " · " + items[0].label : dimensionLabel;
-          existing.options.plugins.tooltip.callbacks.label = (context) => {
-            const row = rows[context.dataIndex];
-            return [
-              DISTRIBUTION_METRICS[metric].option + " " + row.percent.toFixed(2) + "%",
-              ...Object.values(DISTRIBUTION_METRICS).map((item) => item.label + " " + item.format(row)),
-            ];
-          };
-          existing.update("none");
-          return;
-        }
-        existing?.destroy();
-        analysisCharts[role].distribution = new Chart(canvas, {
+        canvas.setAttribute("aria-label", dimensionLabel + DISTRIBUTION_METRICS[metric].option + "环形图");
+        const empty = rows.some((row) => row.percent > 0) ? "" :
+          "当前范围内：" + DISTRIBUTION_METRICS[metric].label + "为 0";
+        updateAnalysisChart(account, "distribution", canvas, {
           type: "doughnut",
           data: {
             labels: rows.map((row) =>
@@ -5313,6 +5157,7 @@
             responsive: true,
             maintainAspectRatio: false,
             cutout: "62%",
+            layout: { padding: 12 },
             plugins: {
               legend: { display: false },
               tooltip: {
@@ -5334,22 +5179,15 @@
               },
             },
           },
-        });
+        }, { empty, animate });
       }
 
       function renderUsageTrendChart(account, trends, colors, daily) {
-        const role = account ? "account" : "admin";
         const canvas = $(account ? "account-usage-trend-chart" : "usage-trend-chart");
         const points = trends.total_tokens;
-        const existing = analysisCharts[role].trend;
-        if (!canvas || !points.length) {
-          existing?.destroy();
-          analysisCharts[role].trend = null;
-          analysisCharts[role].trendSignature = "";
-          return;
-        }
-        if (typeof Chart === "undefined") {
-          canvas.parentElement.replaceChildren(el("div", { class: "empty", text: chartError || "正在加载图表…" }));
+        if (!points.length) {
+          canvas.closest(".usage-trend-card").querySelector(".usage-trend-legend").replaceChildren();
+          updateAnalysisChart(account, "trend", canvas, null, { empty: "当前时间范围内暂无趋势数据" });
           return;
         }
         const values = (name) => trends[name].map((point) => Number(point.value || 0));
@@ -5429,12 +5267,6 @@
           pointHoverRadius: 0,
         });
         const narrow = canvas.parentElement.clientWidth <= 520;
-        const trendSignature = JSON.stringify([
-          daily,
-          narrow,
-          cacheWriteTokens.some((value) => value > 0),
-          costs.length > 0,
-        ]);
         const gridColor = themeColor("--analysis-grid-color", "rgba(45, 42, 38, 0.08)");
         const legend = canvas.closest(".usage-trend-card").querySelector(".usage-trend-legend");
         legend.replaceChildren(
@@ -5447,25 +5279,7 @@
             ),
           ),
         );
-        if (existing && existing.canvas === canvas && analysisCharts[role].trendSignature === trendSignature) {
-          existing.data.labels = labels;
-          existing.data.datasets = datasets;
-          existing.options.scales.x.ticks.maxTicksLimit = narrow ? 4 : 8;
-          existing.options.scales.requests.display = !narrow;
-          existing.options.scales.cost.display = !narrow && costs.length > 0;
-          existing.options.plugins.tooltip.callbacks.footer = (items) =>
-            items.length ? "Token 总数：" + tokens(totalTokens[items[0].dataIndex]) : "";
-          existing.options.onResize = (chart, size) => {
-            const compact = size.width <= 520;
-            chart.options.scales.x.ticks.maxTicksLimit = compact ? 4 : 8;
-            chart.options.scales.requests.display = !compact;
-            chart.options.scales.cost.display = !compact && costs.length > 0;
-          };
-          existing.update("none");
-          return;
-        }
-        existing?.destroy();
-        analysisCharts[role].trend = new Chart(canvas, {
+        updateAnalysisChart(account, "trend", canvas, {
           type: "bar",
           data: { labels, datasets },
           options: {
@@ -5540,16 +5354,16 @@
             },
           },
         });
-        analysisCharts[role].trendSignature = trendSignature;
       }
 
       function drawAnalysisTrend(canvas, points) {
-        const values = points.map((point) => Number(point.value || 0));
-        if (!values.length) return;
-        if (values.length === 1) values.push(values[0]);
         const context = canvas.getContext("2d");
         const width = canvas.width;
         const height = canvas.height;
+        context.clearRect(0, 0, width, height);
+        const values = points.map((point) => Number(point.value || 0));
+        if (!values.length) return;
+        if (values.length === 1) values.push(values[0]);
         const padding = 12;
         const minimum = Math.min(...values);
         const maximum = Math.max(...values);
@@ -5628,7 +5442,7 @@
         if (hasCacheWriteTokens) tokenRows.push(detail("缓存写", tokens(summary.cache_write_tokens)));
         return el(
           "div",
-          { class: "analysis-summary-grid", "data-analysis-summary": "true" },
+          { class: "analysis-summary-grid" },
           card(
             "请求总数",
             int(summary.requests),
@@ -5664,18 +5478,13 @@
         );
       }
 
-      function renderAnalysisDistribution(account, colors = analysisColors()) {
+      function renderAnalysisDistribution(account, { colors = analysisColors(), animate = false } = {}) {
         const role = account ? "account" : "admin";
-        const analysis = (account ? accountState : state).analysis;
+        const analysis = analysisQueries[role].value;
         const target = $(account ? "account-usage-distribution" : "usage-distribution");
         const labels = { api_keys: "API Key", models: "模型", sources: "来源" };
         if (account || $("analysis-key").value) delete labels.api_keys;
-        let dimension = analysisDimensions[role];
-        if (!labels[dimension]) {
-          dimension = "models";
-          analysisDimensions[role] = dimension;
-          saveViewPreference(role, "analysis-dimension", dimension);
-        }
+        const dimension = labels[analysisDimensions[role]] ? analysisDimensions[role] : "models";
         const metric = analysisMetrics[role];
         const rows = compactDistribution(analysis.usage_distribution[dimension], metric);
         if (dimension === "sources") {
@@ -5688,7 +5497,7 @@
             onchange: (event) => {
               analysisMetrics[role] = event.target.value;
               saveViewPreference(role, "analysis-metric", event.target.value);
-              renderAnalysisDistribution(account);
+              renderAnalysisDistribution(account, { animate: true });
             },
           },
           Object.entries(DISTRIBUTION_METRICS).map(([key, item]) =>
@@ -5703,7 +5512,7 @@
             onclick: () => {
               analysisDimensions[role] = key;
               saveViewPreference(role, "analysis-dimension", key);
-              renderAnalysisDistribution(account);
+              if (key !== dimension) renderAnalysisDistribution(account, { animate: true });
             },
           }),
         );
@@ -5732,134 +5541,66 @@
             ),
           ),
         );
-        const distributionSignature = JSON.stringify([
-          dimension,
-          metric,
-          rows.length > 0,
-          rows.some((row) => row.percent > 0),
-        ]);
-        if (target.dataset.analysisStructureSignature === distributionSignature) {
-          target.querySelector(".usage-distribution-list")?.replaceChildren(...list);
-          renderUsageDistributionChart(account, rows, dimension, labels[dimension], metric, colors);
-          return;
-        }
-        target.replaceChildren(
+        target.querySelector(".usage-distribution-header").replaceChildren(
+          el("h2", {}, "用量分布"),
           el(
             "div",
-            { class: "row spread usage-distribution-header" },
-            el("h2", {}, "用量分布"),
-            el(
-              "div",
-              { class: "row usage-distribution-controls" },
-              el("div", { class: "usage-distribution-tabs" }, tabs),
-              el("span", { class: "native-select" }, metricSelect),
-            ),
+            { class: "row usage-distribution-controls" },
+            el("div", { class: "usage-distribution-tabs" }, tabs),
+            el("span", { class: "native-select" }, metricSelect),
           ),
-          rows.length
-            ? el(
-                "div",
-                { class: "usage-distribution-layout" },
-                el(
-                  "div",
-                  { class: "usage-distribution-chart" },
-                  el("canvas", {
-                    id: account ? "account-usage-chart" : "usage-chart",
-                    role: "img",
-                    "aria-label": labels[dimension] + DISTRIBUTION_METRICS[metric].option + "环形图",
-                  }),
-                ),
-                el("div", { class: "usage-distribution-list" }, list),
-              )
-            : el("div", { class: "empty", text: "当前时间范围内暂无请求事件" }),
         );
-        target.dataset.analysisStructureSignature = distributionSignature;
-        renderUsageDistributionChart(account, rows, dimension, labels[dimension], metric, colors);
+        target.querySelector(".usage-distribution-list").replaceChildren(...list);
+        target.querySelector(".usage-distribution-layout").classList.toggle("hidden", !rows.length);
+        target.querySelector(".usage-distribution-empty").classList.toggle("hidden", !!rows.length);
+        renderUsageDistributionChart(account, rows, dimension, labels[dimension], metric, colors, animate);
       }
 
       function renderAnalysis(account) {
-        const owner = account ? accountState : state;
         const target = $(account ? "account-analysis-body" : "analysis-body");
-        const load = account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis;
-        if (!owner.analysis) {
-          destroyAnalysisCharts(account);
-          delete target.dataset.analysisSignature;
-          delete target.dataset.analysisStructureSignature;
-          replaceContent(
-            target,
-            el("div", {
-              class: "card empty",
-              text: load.promise ? "加载中…" : load.error ? "分析数据加载失败：" + load.error : "暂无分析数据",
-            }),
-          );
+        const load = account ? analysisQueries.account : analysisQueries.admin;
+        const charts = analysisCharts[account ? "account" : "admin"];
+        let content = target.querySelector(".analysis-content");
+        if (!content) {
+          const prefix = account ? "account-" : "";
+          content = el("div", { class: "analysis-content" },
+            el("div", { class: "analysis-summary-grid" }),
+            el("section", { class: "card usage-trend-card" },
+              el("h2", {}, "用量趋势"),
+              el("div", { class: "usage-trend-legend" }),
+              analysisChartPanel("usage-trend-chart", prefix + "usage-trend-chart", "用量趋势组合图")),
+            el("section", { id: prefix + "usage-distribution", class: "card usage-distribution-card" },
+              el("div", { class: "row spread usage-distribution-header" }),
+              el("div", { class: "usage-distribution-layout" },
+                analysisChartPanel("usage-distribution-chart", prefix + "usage-chart", "用量分布环形图"),
+                el("div", { class: "usage-distribution-list" })),
+              el("div", { class: "empty usage-distribution-empty", text: "当前时间范围内暂无请求事件" })));
+          target.replaceChildren(el("div", { class: "card empty analysis-state" }), content);
+        }
+        const analysis = load.value;
+        const status = target.querySelector(".analysis-state");
+        status.classList.toggle("hidden", !!analysis);
+        content.classList.toggle("hidden", !analysis);
+        if (!analysis) {
+          status.textContent = load.error ? "分析数据加载失败：" + load.error : "加载中…";
           return;
         }
-        const analysis = owner.analysis;
+        const theme = window.billingTheme.current();
+        const library = typeof Chart === "function" ? "ready" : chartError || "loading";
+        const rendered = charts.rendered;
+        if (rendered?.value === analysis && rendered.theme === theme && rendered.library === library) return;
         const summary = analysis.summary;
         const trends = analysis.trends;
         const points = trends.total_tokens;
         const daily = points.length > 1 && new Date(points[1].time) - new Date(points[0].time) > 12 * 3600000;
-        const renderSignature = JSON.stringify([
-          typeof Chart === "undefined" ? chartError : "ready",
-          document.documentElement.getAttribute("data-theme") || "",
-          summary,
-          trends,
-          analysis.usage_distribution,
-        ]);
-        const trendCanvasID = account ? "account-usage-trend-chart" : "usage-trend-chart";
-        const distributionID = account ? "account-usage-distribution" : "usage-distribution";
-        const structureSignature = JSON.stringify([
-          typeof Chart === "undefined" ? chartError : "ready",
-          document.documentElement.getAttribute("data-theme") || "",
-          points.length > 0,
-        ]);
-        if (
-          target.dataset.analysisSignature === renderSignature &&
-          (!trends.total_tokens.length || document.getElementById(trendCanvasID))
-        ) {
-          return;
-        }
         const colors = analysisColors();
-        if (target.dataset.analysisStructureSignature === structureSignature && target.children.length) {
-          const summaryTarget = target.querySelector("[data-analysis-summary]");
-          if (summaryTarget) {
-            const summary = renderAnalysisSummary(analysis.summary, trends, daily);
-            summaryTarget.replaceWith(summary);
-            for (const canvas of summary.querySelectorAll("[data-analysis-trend]")) {
-              drawAnalysisTrend(canvas, trends[canvas.dataset.analysisTrend]);
-            }
-          }
-          target.dataset.analysisSignature = renderSignature;
-          renderUsageTrendChart(account, trends, colors, daily);
-          renderAnalysisDistribution(account, colors);
-          return;
-        }
-        replaceContent(
-          target,
-          renderAnalysisSummary(summary, trends, daily),
-          el(
-            "section",
-            { class: "card usage-trend-card" },
-            el("h2", {}, "用量趋势"),
-            trends.total_tokens.length
-              ? [
-                  el("div", { class: "usage-trend-legend" }),
-                  el(
-                    "div",
-                    { class: "usage-trend-chart" },
-                    el("canvas", { id: trendCanvasID, role: "img", "aria-label": "用量趋势组合图" }),
-                  ),
-                ]
-              : el("div", { class: "empty", text: "当前时间范围内暂无趋势数据" }),
-          ),
-          el("section", { id: distributionID, class: "card usage-distribution-card" }),
-        );
-        target.dataset.analysisSignature = renderSignature;
-        target.dataset.analysisStructureSignature = structureSignature;
+        content.querySelector(".analysis-summary-grid").replaceWith(renderAnalysisSummary(summary, trends, daily));
         for (const canvas of target.querySelectorAll("[data-analysis-trend]")) {
           drawAnalysisTrend(canvas, trends[canvas.dataset.analysisTrend]);
         }
         renderUsageTrendChart(account, trends, colors, daily);
-        renderAnalysisDistribution(account, colors);
+        renderAnalysisDistribution(account, { colors });
+        charts.rendered = { value: analysis, theme, library };
       }
 
       function populateErrorFilters(view, account) {
@@ -5881,22 +5622,17 @@
         populateEventFilterSelect($(prefix + "error-source"), "全部来源", filters.sources, undefined, sourceLabel);
       }
 
-      // The stored event is immutable. Only these joined names can change after
-      // a key or credential rename, independently of the event's database ID.
-      function eventDisplayIdentity(entry, account) {
-        return account ? [entry.source] : [entry.preview, entry.label, entry.source];
-      }
-
       function renderErrors(account) {
-        const owner = account ? accountState : state;
         const note = $(account ? "account-error-note" : "error-note");
         const list = pagedList("errors", account);
-        if (!owner.errors) note.textContent = "";
-        if (list.renderEmpty()) return;
-        populateErrorFilters(owner.errors, account);
+        if (list.renderEmpty()) {
+          note.textContent = "";
+          return;
+        }
+        const view = list.data;
+        populateErrorFilters(view, account);
         updateFilterClearButton($(account ? "account-errors-filter-clear" : "errors-filter-clear"));
-        renderCollection(list.scroller, owner.errors.entries || [], {
-          signature: (entry) => eventDisplayIdentity(entry, account),
+        list.renderItems(view.entries, {
           attrs: { class: "event-list", role: "list", "aria-label": "错误事件列表" },
           empty: "暂无错误事件",
           render: (entry) => {
@@ -5933,7 +5669,7 @@
           },
         });
         list.renderStatus();
-        note.textContent = "已加载 " + int(owner.errors.entries?.length) + " / " + int(owner.errors.total) + " 条";
+        note.textContent = "已加载 " + int(view.entries.length) + " / " + int(view.total) + " 条";
       }
 
       const AUTH_CATEGORY_LABELS = {
@@ -5995,10 +5731,8 @@
 
       function resetAuthQuotaBatch(account) {
         const bulk = authUI(account).bulk;
-        if (bulk) {
-          bulk.dataset.loading = "false";
-          setLabeledActionIcon(bulk, "refresh", "更新限额");
-        }
+        bulk.dataset.loading = "false";
+        setLabeledActionIcon(bulk, "refresh", "更新限额");
       }
 
       function authQuotaStorageKey(role) {
@@ -6029,12 +5763,16 @@
       }
 
       async function activateCredentialScope(account, credential) {
+        const generation = sessionGeneration;
         const role = account ? "account" : "admin";
         resetAuthQuotaMemory(account);
         credentialScope[role] = "";
         try {
-          credentialScope[role] = (await sha256Hex(role + "|" + credential)).slice(0, 32);
+          const scope = (await sha256Hex(role + "|" + credential)).slice(0, 32);
+          if (generation !== sessionGeneration) throw new StaleRequestError();
+          credentialScope[role] = scope;
         } catch (_) {
+          if (generation !== sessionGeneration) throw new StaleRequestError();
           return;
         }
         let cached;
@@ -6046,24 +5784,15 @@
         if (!Array.isArray(cached?.entries)) return;
         const owner = account ? accountState : state;
         for (const entry of cached.entries) {
-          if (Array.isArray(entry) && typeof entry[0] === "string" && entry[1] && typeof entry[1] === "object") {
+          if (Array.isArray(entry) && typeof entry[0] === "string" && Array.isArray(entry[1]?.quota)) {
             owner.authQuotas.set(entry[0], entry[1]);
           }
         }
       }
 
-      function loadAuthFiles(account) {
-        account = account === true;
-        const load = account ? detailLoads.accountAuthFiles : detailLoads.adminAuthFiles;
-        return loadResource(
-          load,
-          () => (account ? accountAPI("/auth-files") : plugin("GET", "/auth-files")),
-          (result) => updateAuthFiles(account, result.files || []),
-          () =>
-            currentRole === (account ? "account" : "admin") &&
-            activeTab(account) === "auth-files" &&
-            renderAuthFiles(account),
-        );
+      async function fetchAuthFiles(account) {
+        const result = await (account ? accountAPI("/auth-files") : plugin("GET", "/auth-files"));
+        return requireArray(result?.files, "认证文件");
       }
 
       function updateAuthFiles(account, files) {
@@ -6087,7 +5816,6 @@
         const stale = [...owner.authQuotas.keys(), ...owner.authQuotaErrors.keys(), ...owner.authQuotaLoading].some(
           staleIndex,
         );
-        owner.authFiles = files;
         if (!stale) return;
         authQuotaGeneration[role]++;
         resetAuthQuotaBatch(account);
@@ -6253,23 +5981,19 @@
 
       function renderAuthFiles(account) {
         const ui = authUI(account);
-        if (!ui.body) return;
         if (!ui.owner.authFiles) {
-          const load = account ? detailLoads.accountAuthFiles : detailLoads.adminAuthFiles;
-          if (load.promise) {
-            replaceContent(ui.body, el("div", { class: "empty", text: "加载中…" }));
-          } else if (load.error) {
-            replaceContent(
-              ui.body,
+          const load = account ? resources.account.authFiles : resources.admin.authFiles;
+          if (load.error) {
+            ui.body.replaceChildren(
               el(
                 "div",
                 { class: "empty" },
                 el("div", { text: "认证文件加载失败" }),
-                el("button", { class: "retry-button", onclick: () => guard(() => loadAuthFiles(account)) }, "重试"),
+                el("button", { class: "retry-button", onclick: refreshPage }, "重试"),
               ),
             );
           } else {
-            replaceContent(ui.body, el("div", { class: "empty", text: "暂无认证文件" }));
+            ui.body.replaceChildren(el("div", { class: "empty", text: "加载中…" }));
           }
           return;
         }
@@ -6277,19 +6001,8 @@
         const refreshable = files.filter((file) => file.quota_supported).length;
         ui.bulk.disabled = refreshable === 0 || ui.bulk.dataset.loading === "true";
         renderCollection(ui.body, files, {
-          key: (file) => file.auth_index,
           attrs: { class: "auth-file-grid" },
           empty: "没有符合筛选条件的认证文件",
-          signature: (file) => {
-            const quota = ui.owner.authQuotas.get(file.auth_index);
-            return [
-              file,
-              quota,
-              ui.owner.authQuotaErrors.get(file.auth_index),
-              ui.owner.authQuotaLoading.has(file.auth_index),
-              (quota?.quota || []).map(quotaResetMeta),
-            ];
-          },
           render: (file) => {
             const statusText = file.disabled ? "已停用" : file.unavailable ? "不可用" : "已启用";
             const statusClass = file.disabled ? "plain" : file.unavailable ? "bad" : "ok";
@@ -6310,7 +6023,7 @@
               {
                 type: "button",
                 class: "auth-refresh-icon-button" + (loading ? " loading" : ""),
-                disabled: !file.quota_supported || loading,
+                disabled: !file.quota_supported || loading || ui.bulk.dataset.loading === "true",
                 "aria-label": "更新限额",
                 title: file.quota_supported
                   ? "更新限额"
@@ -6360,30 +6073,42 @@
       const AUTH_QUOTA_TIMEOUT_MS = 65000;
       const AUTH_QUOTA_BATCH_CONCURRENCY = 3;
 
-      async function refreshAuthQuota(file, account, shouldRender = true) {
+      // Fetching quota updates memory only. Single and batch actions own their
+      // display and persistence, so a batch never redraws the list per response.
+      async function loadAuthQuota(file, account) {
         const owner = account ? accountState : state;
         const role = account ? "account" : "admin";
         const generation = authQuotaGeneration[role];
         if (owner.authQuotaLoading.has(file.auth_index)) return;
         owner.authQuotaLoading.add(file.auth_index);
         owner.authQuotaErrors.delete(file.auth_index);
-        if (shouldRender) renderAuthFiles(account);
         try {
           const path = "/auth-files/quota?auth_index=" + encodeURIComponent(file.auth_index);
           const opts = { timeoutMS: AUTH_QUOTA_TIMEOUT_MS };
           const result = account ? await accountAPI(path, opts) : await plugin("GET", path, null, opts);
-          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) {
-            owner.authQuotas.set(file.auth_index, result);
-            persistAuthQuotaCache(account);
-          }
+          requireObject(result, "上游限额");
+          requireArray(result.quota, "上游限额");
+          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) owner.authQuotas.set(file.auth_index, result);
         } catch (error) {
-          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) {
+          if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
+          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index))
             owner.authQuotaErrors.set(file.auth_index, error.message || String(error));
-          }
         } finally {
-          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) {
-            owner.authQuotaLoading.delete(file.auth_index);
-            if (shouldRender) renderAuthFiles(account);
+          if (authQuotaCacheCurrent(account, owner, generation, file.auth_index)) owner.authQuotaLoading.delete(file.auth_index);
+        }
+      }
+
+      async function refreshAuthQuota(file, account) {
+        const role = account ? "account" : "admin";
+        const generation = authQuotaGeneration[role];
+        const task = loadAuthQuota(file, account);
+        renderAuthFiles(account);
+        try {
+          await task;
+        } finally {
+          if (generation === authQuotaGeneration[role]) {
+            persistAuthQuotaCache(account);
+            renderAuthFiles(account);
           }
         }
       }
@@ -6397,56 +6122,25 @@
         );
         if (!files.length || ui.bulk.dataset.loading === "true") return;
         ui.bulk.dataset.loading = "true";
-        ui.bulk.disabled = true;
-        let next = 0;
-        let completed = 0;
+        const progress = el("span", { text: "更新中 0 / " + files.length });
+        ui.bulk.removeAttribute("aria-label");
+        ui.bulk.replaceChildren(actionIcon("refresh"), progress);
+        renderAuthFiles(account);
+        let next = 0, completed = 0;
         try {
           const worker = async () => {
-            while (next < files.length) {
-              const file = files[next++];
-              await refreshAuthQuota(file, account, false);
-              if (generation !== authQuotaGeneration[role]) return;
-              completed++;
-              setLabeledActionIcon(ui.bulk, "refresh", "更新中 " + completed + " / " + files.length);
-              renderAuthFiles(account);
+            while (next < files.length && generation === authQuotaGeneration[role]) {
+              await loadAuthQuota(files[next++], account);
+              progress.textContent = "更新中 " + ++completed + " / " + files.length;
             }
           };
-          await Promise.all(Array.from({ length: Math.min(AUTH_QUOTA_BATCH_CONCURRENCY, files.length) }, worker));
+          await settleLoads(Array.from({ length: Math.min(AUTH_QUOTA_BATCH_CONCURRENCY, files.length) }, worker));
         } finally {
           if (generation === authQuotaGeneration[role]) {
-            ui.bulk.dataset.loading = "false";
-            setLabeledActionIcon(ui.bulk, "refresh", "更新限额");
+            persistAuthQuotaCache(account);
+            resetAuthQuotaBatch(account);
             renderAuthFiles(account);
           }
-        }
-      }
-
-      function renderAdminConfiguration() {
-        if (currentRole !== "admin") return;
-        if (activeAdminTab() === "keys" && !routePicker.scope) renderKeys();
-        if (activeAdminTab() === "settings") {
-          renderPlans();
-          renderRoutes();
-        }
-      }
-
-      function renderAdminTab(tab) {
-        if (tab === "keys") {
-          // Replacing the anchor row would close a picker the user is working in.
-          if (!routePicker.scope) renderKeys();
-        } else if (tab === "analysis") {
-          renderAnalysis(false);
-        } else if (tab === "request-events") {
-          renderRequestEvents();
-        } else if (tab === "errors") {
-          renderErrors(false);
-        } else if (tab === "auth-files") {
-          renderAuthFiles(false);
-        } else if (tab === "settings") {
-          renderPlans();
-          renderRoutes();
-          renderPriceTable();
-          renderPluginLogs();
         }
       }
 
@@ -6550,17 +6244,20 @@
         const owner = state;
         if (owner.keySubmissions.has(scope)) return;
         owner.keySubmissions.add(scope);
-        renderAdminConfiguration();
+        renderKeys();
         try {
           await save();
         } finally {
           owner.keySubmissions.delete(scope);
-          if (owner === state) renderAdminConfiguration();
+          if (owner === state) renderKeys();
         }
       }
 
       function renderKeys() {
-        const plansReady = !!detailLoads.adminPlans.cache && !detailLoads.adminPlans.error;
+        // Keep the anchor row in place while its route picker is open.
+        if (currentRole !== "admin" || activeAdminTab() !== "keys" || routePicker.scope) return false;
+        if (renderConfigurationPending("keys", ["keys"])) return;
+        const plansReady = resources.admin.plans.value !== null;
         const filter = $("key-filter").value.trim().toLowerCase();
         const keys = state.keys
           .filter((key) => !key.deleted_at || $("keys-include-deleted").checked)
@@ -6574,9 +6271,6 @@
                 .includes(filter),
           );
         renderCollection($("keys-body"), keys, {
-          key: (view) => view.scope,
-          signature: (view) => [view, state.keySubmissions.has(view.scope)],
-          context: [state.plans, plansReady],
           headers: ["API Key", "订阅计划", "路由规则", "并发限制", "订阅额度", "状态", "操作"],
           render: (view) => {
             const deleted = !!view.deleted_at;
@@ -6587,7 +6281,7 @@
               {
                 name: "plan_id",
                 disabled: deleted || saving || !plansReady,
-                title: !plansReady ? detailLoads.adminPlans.error || "正在加载订阅计划…" : null,
+                title: !plansReady ? resources.admin.plans.error || "正在加载订阅计划…" : null,
                 "aria-label": name + " 的订阅计划",
                 onchange: (event) =>
                   guard(async () => {
@@ -6704,7 +6398,7 @@
                 el("button", {
                   class: "link",
                   text: "重置",
-                  disabled: deleted || view.unlimited || undefined,
+                  disabled: deleted || view.unlimited,
                   onclick: () =>
                     openActionDialog(
                       "重置订阅额度？",
@@ -6737,7 +6431,8 @@
       }
 
       function boundCredentialLabel(ref, labels) {
-        return labels[ref] || "指定上游凭证 · " + ref.slice(-8);
+        const credential = state.credentials.find((item) => item.ref === ref);
+        return (credential && credentialLabel(credential)) || labels?.[ref] || "指定上游凭证 · " + ref.slice(-8);
       }
 
       function credentialSourceLabel(source) {
@@ -6821,13 +6516,9 @@
         );
       }
 
-      function currentModelIDs() {
-        return [...state.models].sort(compareModelId);
-      }
-
       // Keep retired selections so a temporary provider outage cannot rewrite access.
-      function retiredModels(selected) {
-        const known = new Set(currentModelIDs().map((model) => model.toLowerCase()));
+      function retiredModels(selected, models) {
+        const known = new Set(models.map((model) => model.toLowerCase()));
         return [...selected].filter((model) => !known.has(model.toLowerCase())).sort(compareModelId);
       }
 
@@ -6835,28 +6526,16 @@
         return !term || String(text).toLowerCase().includes(term);
       }
 
-      let routePicker = {
-        scope: "",
-        routeIDs: new Set(),
-        models: new Set(),
-        credentialIDs: new Set(),
-        credentialProviders: [],
-        expanded: { routes: true, credentials: true, models: true },
-        enabledOnly: true,
-        searching: false,
-        beforeSearch: null,
-        anchor: null,
-      };
+      let routePicker = { scope: "" };
 
       function openRoutePicker(view, anchor) {
         if (routePicker.saving) return;
-        const bindings = view.route_bindings;
         routePicker = {
           scope: view.scope,
-          routeIDs: new Set(bindings.route_ids),
-          models: new Set(bindings.models),
-          credentialIDs: new Set(bindings.credential_ids),
-          credentialProviders: [...bindings.credential_providers],
+          routeIDs: new Set(),
+          models: new Set(),
+          credentialIDs: new Set(),
+          credentialProviders: [],
           expanded: { routes: true, credentials: true, models: true },
           enabledOnly: viewPreference("admin", "route-picker-enabled-only", true),
           searching: false,
@@ -6868,9 +6547,8 @@
         $("route-picker-search").value = "";
         $("route-picker-save").textContent = "保存";
         $("route-picker").classList.remove("hidden");
-        renderRoutePicker();
-        $("route-picker-search").focus();
         guard(loadRoutePicker);
+        $("route-picker-search").focus();
       }
 
       async function loadRoutePicker() {
@@ -6879,16 +6557,10 @@
         picker.error = "";
         renderRoutePicker();
         try {
-          while (picker === routePicker && picker.scope) {
-            try {
-              await loadRouteEditorData();
-              break;
-            } catch (error) {
-              if (!(error instanceof StaleRequestError)) throw error;
-            }
-          }
+          const data = await loadEditorData("route");
           if (picker !== routePicker || !picker.scope) return;
-          const key = state.keys.find((entry) => entry.scope === picker.scope);
+          picker.data = data;
+          const key = data.keys.find((entry) => entry.scope === picker.scope);
           if (!key || key.deleted_at) throw new Error("API Key 已不存在，请关闭后刷新列表");
           const bindings = key.route_bindings;
           picker.routeIDs = new Set(bindings.route_ids);
@@ -6896,7 +6568,7 @@
           picker.credentialIDs = new Set(bindings.credential_ids);
           picker.credentialProviders = structuredClone(bindings.credential_providers);
         } catch (error) {
-          if (error instanceof AuthError) throw error;
+          if (error instanceof AuthError || error instanceof StaleRequestError) throw error;
           picker.error = error.message || String(error);
         } finally {
           if (picker === routePicker && picker.scope) {
@@ -6907,11 +6579,11 @@
       }
 
       function closeRoutePicker() {
-        if (routePicker.saving) return;
+        if (routePicker.saving || !routePicker.scope) return;
         routePicker.scope = "";
         routePicker.anchor = null;
         $("route-picker").classList.add("hidden");
-        renderAdminConfiguration();
+        renderPage();
       }
 
       function positionRoutePicker() {
@@ -6942,8 +6614,8 @@
           },
           el("input", {
             type: "checkbox",
-            checked: checked || undefined,
-            disabled: disabled || undefined,
+            checked,
+            disabled,
             onchange: (event) => onToggle(event.target.checked),
           }),
           iconName ? actionIcon(iconName) : null,
@@ -6985,10 +6657,11 @@
           positionRoutePicker();
           return;
         }
+        const { routes, credentials, models } = routePicker.data;
         const sections = [];
 
         const routeOptions = [];
-        for (const route of state.routes) {
+        for (const route of routes) {
           if (!matchesTerm(route.name || route.id, term)) continue;
           routeOptions.push(
             pickerOption(routePicker.routeIDs.has(route.id), "route", route.name || route.id, "自定义", (checked) => {
@@ -6999,7 +6672,7 @@
           );
         }
         for (const id of routePicker.routeIDs)
-          if (!state.routes.some((route) => route.id === id) && matchesTerm(id, term))
+          if (!routes.some((route) => route.id === id) && matchesTerm(id, term))
             routeOptions.push(
               pickerOption(true, "route", "路由规则已不存在，请重新选择", id, (checked) => {
                 if (!checked) routePicker.routeIDs.delete(id);
@@ -7008,10 +6681,10 @@
             );
         sections.push(pickerSection("routes", "路由规则", routeOptions, term ? "没有匹配的路由规则" : "暂无路由规则"));
 
-        for (const item of state.credentials) {
+        for (const item of credentials) {
           if (hasCredentialProvider(routePicker.credentialProviders, item)) routePicker.credentialIDs.delete(item.ref);
         }
-        const credentialOptions = routeProviderChoices(routePicker.credentialProviders)
+        const credentialOptions = routeProviderChoices(credentials, routePicker.credentialProviders)
           .filter((item) => !routePicker.enabledOnly || item.available)
           .filter((item) => matchesTerm(credentialProviderLabel(item) + " 整类 类别", term))
           .map((item) => {
@@ -7033,7 +6706,7 @@
             );
           });
         credentialOptions.push(
-          ...state.credentials
+          ...credentials
             .filter((item) => (!routePicker.enabledOnly || !item.disabled) && matchesTerm(credentialLabel(item), term))
             .sort(compareCredentials)
             .map((item) => {
@@ -7056,7 +6729,7 @@
             }),
         );
         for (const ref of routePicker.credentialIDs) {
-          if (state.credentials.some((item) => item.ref === ref) || !matchesTerm(ref, term)) continue;
+          if (credentials.some((item) => item.ref === ref) || !matchesTerm(ref, term)) continue;
           credentialOptions.push(
             pickerOption(
               true,
@@ -7075,7 +6748,7 @@
           pickerSection("credentials", "上游凭证", credentialOptions, term ? "没有匹配的上游凭证" : "暂无上游凭证"),
         );
 
-        const modelOptions = currentModelIDs()
+        const modelOptions = models
           .filter((model) => matchesTerm(model, term))
           .map((model) => {
             return pickerOption(routePicker.models.has(model), "model", model, "", (checked) => {
@@ -7085,7 +6758,7 @@
             });
           });
         for (const model of routePicker.models)
-          if (!currentModelIDs().some((item) => item.toLowerCase() === model.toLowerCase()) && matchesTerm(model, term))
+          if (!models.some((item) => item.toLowerCase() === model.toLowerCase()) && matchesTerm(model, term))
             modelOptions.push(
               pickerOption(true, "model", model, "不在 CPA 模型列表中", (checked) => {
                 if (!checked) routePicker.models.delete(model);
@@ -7156,7 +6829,7 @@
           { class: "toggle-filter compact-toggle", title },
           el("input", {
             type: "checkbox",
-            checked: checked || undefined,
+            checked,
             onchange: (event) => onChange(event.target.checked),
           }),
           el("span", { class: "toggle-track", "aria-hidden": "true" }),
@@ -7183,7 +6856,9 @@
           await mutateAdmin("PUT", "/keys/routes", body);
           notify("API Key 路由规则已保存");
           picker.saving = false;
-          if (picker === routePicker && picker.scope) closeRoutePicker();
+          if (picker === routePicker && picker.scope) {
+            closeRoutePicker();
+          }
         } finally {
           if (picker === routePicker) {
             picker.saving = false;
@@ -7250,7 +6925,6 @@
           boundKeys: state.keys.filter((key) => key.plan_id === plan.id),
         }));
         renderCollection($("plans-body"), plans, {
-          key: ({ plan }) => plan.id,
           attrs: { class: "event-list settings-card-list", role: "list" },
           empty: "暂无订阅计划",
           render: ({ plan, boundKeys }) => {
@@ -7280,20 +6954,37 @@
         });
       }
 
+      function renderLoadNotice(id, message, loading, retry) {
+        const target = $(id);
+        target.classList.toggle("show", !!message);
+        target.replaceChildren(
+          ...(message
+            ? [
+                el("div", { text: message }),
+                el(
+                  "button",
+                  { class: "retry-button", disabled: loading, onclick: () => guard(retry) },
+                  loading ? "正在重试…" : "重试",
+                ),
+              ]
+            : []),
+        );
+      }
+
+
       function renderConfigurationPending(name, dependencies) {
-        const missing = dependencies.filter((key) => !adminCollections[key].cache && !state[key].length);
+        const missing = dependencies.filter((key) => resources.admin[key].value === null);
         if (!missing.length) return false;
         const error = missing
-          .map((key) => adminCollections[key].error)
+          .map((key) => resources.admin[key].error)
           .filter(Boolean)
           .join("；");
-        replaceContent(
-          $(name + "-body"),
+        $(name + "-body").replaceChildren(
           el(
             "div",
             { class: "empty section-loading" },
             el("div", { text: error || "正在加载…" }),
-            error ? el("button", { class: "retry-button", onclick: () => guard(() => loadView(false)) }, "重试") : null,
+            error ? el("button", { class: "retry-button", onclick: () => guard(() => refreshPage()) }, "重试") : null,
           ),
         );
         return true;
@@ -7306,7 +6997,6 @@
           boundKeys: state.keys.filter((key) => key.route_bindings.route_ids.includes(route.id)),
         }));
         renderCollection($("routes-body"), routes, {
-          key: ({ route }) => route.id,
           attrs: { class: "event-list settings-card-list", role: "list" },
           empty: "暂无路由规则",
           render: ({ route, boundKeys }) => {
@@ -7352,9 +7042,9 @@
         return $("route-rule-search").value.trim().toLowerCase();
       }
 
-      function routeProviderChoices(selected) {
+      function routeProviderChoices(credentials, selected) {
         const providers = [];
-        for (const item of state.credentials) {
+        for (const item of credentials) {
           const existing = providers.find((provider) => sameCredentialProvider(provider, item));
           if (existing) {
             existing.available ||= !item.disabled && !item.unavailable;
@@ -7379,13 +7069,18 @@
         return item.hasCredentials ? "暂无可用凭证" : "暂无凭证";
       }
 
+      function routeEditorData() {
+        return editors.get($("route-dialog")).data;
+      }
+
       function renderRouteCredentialList() {
-        for (const item of state.credentials) {
+        const data = routeEditorData();
+        for (const item of data.credentials) {
           if (hasCredentialProvider(routeProviders, item)) routeCredentialIDs.delete(item.ref);
         }
         const term = routeRuleSearchTerm();
         const enabledOnly = $("route-credential-enabled-only").checked;
-        const options = routeProviderChoices(routeProviders)
+        const options = routeProviderChoices(data.credentials, routeProviders)
           .filter(
             (item) => (!enabledOnly || item.available) && matchesTerm(credentialProviderLabel(item) + " 整类", term),
           )
@@ -7396,7 +7091,7 @@
               {},
               el("input", {
                 type: "checkbox",
-                checked: hasCredentialProvider(routeProviders, item) || undefined,
+                checked: hasCredentialProvider(routeProviders, item),
                 onchange: (event) => {
                   if (event.target.checked) routeProviders.push({ source: item.source, provider: item.provider });
                   else routeProviders = routeProviders.filter((provider) => !sameCredentialProvider(provider, item));
@@ -7411,7 +7106,7 @@
                 : el("span", { class: "muted small", text: credentialProviderAvailabilityNote(item) }),
             );
           });
-        const credentials = state.credentials
+        const credentials = data.credentials
           .filter((item) => (!enabledOnly || !item.disabled) && matchesTerm(credentialLabel(item), term))
           .sort(compareCredentials);
         for (const item of credentials) {
@@ -7423,8 +7118,8 @@
               { class: covered ? "disabled" : "" },
               el("input", {
                 type: "checkbox",
-                checked: routeCredentialIDs.has(item.ref) || undefined,
-                disabled: covered || undefined,
+                checked: routeCredentialIDs.has(item.ref),
+                disabled: covered,
                 onchange: (event) => {
                   if (event.target.checked) routeCredentialIDs.add(item.ref);
                   else routeCredentialIDs.delete(item.ref);
@@ -7438,7 +7133,7 @@
           );
         }
         for (const ref of routeCredentialIDs)
-          if (!state.credentials.some((item) => item.ref === ref) && matchesTerm(ref, term))
+          if (!data.credentials.some((item) => item.ref === ref) && matchesTerm(ref, term))
             options.push(
               el(
                 "label",
@@ -7465,8 +7160,9 @@
       function renderRouteModelList() {
         const node = $("route-model-list");
         const term = routeRuleSearchTerm();
-        const retired = new Set(retiredModels(routeModels));
-        const models = currentModelIDs().concat([...retired]);
+        const available = routeEditorData().models;
+        const retired = new Set(retiredModels(routeModels, available));
+        const models = available.concat([...retired]);
         $("route-model-count").textContent = routeModels.size ? String(routeModels.size) : "全部";
         const options = models
           .filter((model) => matchesTerm(model, term))
@@ -7477,7 +7173,7 @@
               el("input", {
                 type: "checkbox",
                 value: model,
-                checked: routeModels.has(model) || undefined,
+                checked: routeModels.has(model),
                 onchange: (event) => {
                   if (event.target.checked) routeModels.add(model);
                   else routeModels.delete(model);
@@ -7494,7 +7190,7 @@
             : [
                 el("div", {
                   class: "empty",
-                  text: currentModelIDs().length ? "没有匹配的模型" : "暂无可选模型",
+                  text: available.length ? "没有匹配的模型" : "暂无可选模型",
                 }),
               ]),
         );
@@ -7502,7 +7198,7 @@
 
       function renderRouteKeyList(routeID) {
         const list = $("route-key-list");
-        const keys = state.keys.filter(
+        const keys = routeEditorData().keys.filter(
           (key) => !key.deleted_at || (routeID && key.route_bindings.route_ids.includes(routeID)),
         );
         if (!keys.length) {
@@ -7515,7 +7211,7 @@
             return el(
               "label",
               {},
-              el("input", { type: "checkbox", value: key.scope, checked: checked || undefined }),
+              el("input", { type: "checkbox", value: key.scope, checked }),
               renderAPIKeyIdentity(key),
               key.deleted_at ? el("span", { class: "tag plain", text: "已删除", title: "可取消勾选以解除绑定" }) : null,
             );
@@ -7532,8 +7228,8 @@
 
       function editRoute(route) {
         const id = route?.id;
-        openEditor("route-dialog", loadRouteEditorData, () => {
-          const current = id ? state.routes.find((entry) => entry.id === id) : null;
+        openEditor("route-dialog", () => loadEditorData("route"), (data) => {
+          const current = id ? data.routes.find((entry) => entry.id === id) : null;
           if (id && !current) throw new Error("路由规则已不存在，请关闭后刷新列表");
           $("route-form-title").textContent = current ? "编辑路由规则：" + (current.name || id) : "新建路由规则";
           $("route-id").value = id || "";
@@ -7603,9 +7299,8 @@
 
       function renderPriceTable() {
         if (!state.prices) {
-          replaceContent(
-            $("prices-body"),
-            el("div", { class: "empty", text: detailLoads.adminPrices.error || "正在加载模型价格…" }),
+          $("prices-body").replaceChildren(
+            el("div", { class: "empty", text: resources.admin.catalog.error || "正在加载模型价格…" }),
           );
           return;
         }
@@ -7657,7 +7352,6 @@
           "操作",
         ];
         renderCollection($("prices-body"), rows, {
-          key: (row) => row.model_id,
           headers,
           render: renderRow,
         });
@@ -7783,35 +7477,27 @@
         populateEventFilterSelect($(prefix + "-source"), "全部来源", filters.sources, undefined, sourceLabel);
       }
 
-      function timeRangeCacheKey(account, range) {
-        const mode = sharedTimeRanges[account ? "account" : "admin"].mode;
-        if (mode === "custom") return JSON.stringify([mode, range.from, range.to]);
-        // Natural-day ranges change at midnight; rolling ranges share a short TTL.
-        return mode === "today" || mode === "yesterday" ? JSON.stringify([mode, range.from]) : mode;
+      function readEventKeys(reload) {
+        const range = selectedRange(false);
+        return eventKeysQuery.read(JSON.stringify(sharedTimeRanges.admin),
+          async () => requireArray(await plugin("GET", "/events/keys?" + new URLSearchParams(range)), "事件 Key"), reload);
       }
 
-      function loadEventKeys(range) {
-        const load = detailLoads.adminEventKeys;
-        return loadResource(
-          load,
-          () => plugin("GET", "/events/keys?" + new URLSearchParams(range)),
-          (keys) => {
-            const select = $("analysis-key");
-            const selected = select.value;
-            renderSelectOptions(select, [
-              { value: "", text: "全部 API Key" },
-              ...keys.map((key) => ({
-                value: key.scope,
-                text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
-              })),
-              ...(selected && !keys.some((key) => key.scope === selected)
-                ? [{ value: selected, text: select.selectedOptions[0]?.textContent || selected }]
-                : []),
-            ]);
-          },
-          undefined,
-          { cacheKey: timeRangeCacheKey(false, range) },
-        );
+      function renderEventKeys() {
+        const keys = eventKeysQuery.value;
+        if (!keys) return;
+        const select = $("analysis-key");
+        const selected = select.value;
+        renderSelectOptions(select, [
+          { value: "", text: "全部 API Key" },
+          ...keys.map((key) => ({
+            value: key.scope,
+            text: apiKeyIdentity(key).text + (key.deleted_at ? "（已删除）" : ""),
+          })),
+          ...(selected && !keys.some((key) => key.scope === selected)
+            ? [{ value: selected, text: select.selectedOptions[0]?.textContent || selected }]
+            : []),
+        ]);
       }
 
       function requestEventPath(account, range, cursor) {
@@ -8353,7 +8039,9 @@
         saveViewPreference(role, "time-range", range);
         updateSharedTimeControl(account);
         if (close) closeSharedTimePopover(account, true);
-        if (JSON.stringify(previous) !== JSON.stringify(range)) return applySharedTimeRange(account);
+        if (JSON.stringify(previous) !== JSON.stringify(range)) {
+          return loadPage(account);
+        }
       }
 
       function bindSharedTimeControls(account) {
@@ -8452,12 +8140,13 @@
 
       function renderRequestEvents(account = false) {
         hideCostTooltip();
-        const owner = account ? accountState : state;
-        const view = owner.requestEvents;
         const list = pagedList("events", account);
         const note = $(account ? "account-request-event-note" : "request-event-note");
-        if (!view) note.textContent = "";
-        if (list.renderEmpty()) return;
+        if (list.renderEmpty()) {
+          note.textContent = "";
+          return;
+        }
+        const view = list.data;
         const prefix = account ? "account-request-event" : "request-event";
         populateRequestEventFilters(view.filter_options, account);
         labelRequestEventStatuses($(prefix + "-status"), view.status_counts);
@@ -8567,9 +8256,7 @@
           );
         };
 
-        renderCollection(list.scroller, entries, {
-          context: hasCacheWrite,
-          signature: (entry) => eventDisplayIdentity(entry, account),
+        list.renderItems(entries, {
           render: renderRow,
           headers: [
             "时间",
@@ -8615,9 +8302,11 @@
       function renderPluginLogs() {
         const list = pagedList("logs");
         const note = $("plugin-log-note");
-        if (!list.data) note.textContent = "";
-        if (list.renderEmpty()) return;
-        const pluginLogs = list.data.entries || [];
+        if (list.renderEmpty()) {
+          note.textContent = "";
+          return;
+        }
+        const pluginLogs = list.data.entries;
         const filter = $("plugin-log-filter").value.trim().toLowerCase();
         const currentIDs = new Set(pluginLogs.map((entry) => String(entry.id)));
         for (const id of expandedPluginLogIDs) if (!currentIDs.has(id)) expandedPluginLogIDs.delete(id);
@@ -8632,15 +8321,14 @@
         const levelSelect = $("plugin-log-level");
         for (const option of levelSelect.options) {
           const label = option.value === "all" ? "全部级别" : pluginLogLevels[option.value].label;
-          const text = label + " · " + int(counts[option.value] || 0);
+          const text = label + " · " + int(counts[option.value]);
           if (option.textContent !== text) option.textContent = text;
         }
         const total = counts[levelSelect.value] || 0;
         note.textContent = "已加载 " + int(pluginLogs.length) + " / " + int(total) + " 条";
-        renderCollection(list.scroller, searched, {
+        list.renderItems(searched, {
           attrs: { class: "event-list", role: "list", "aria-label": "插件日志列表" },
-          empty: pluginLogs.length ? "没有匹配的日志" : "暂无插件日志",
-          signature: null,
+          empty: pluginLogs.length ? "已加载日志中没有匹配项" : "暂无插件日志",
           render: (pluginLog) => {
             const level = pluginLogLevels[pluginLog.level] || pluginLogLevels.info;
             return el(
@@ -8820,9 +8508,9 @@
         buttons.forEach((button) => (button.disabled = buttons.length === 1));
       }
 
-      function renderPlanKeyPicker(planID) {
+      function renderPlanKeyPicker(planID, data) {
         const picker = $("plan-key-picker");
-        const keys = state.keys.filter((key) => !key.deleted_at || (planID && key.plan_id === planID));
+        const keys = data.keys.filter((key) => !key.deleted_at || (planID && key.plan_id === planID));
         if (!keys.length) {
           picker.replaceChildren(el("div", { class: "empty", text: "暂无 API Key" }));
           return;
@@ -8830,7 +8518,7 @@
         picker.replaceChildren(
           ...keys.map((key) => {
             const ownedByOther = !!key.plan_id && key.plan_id !== planID;
-            const owner = ownedByOther ? state.plans.find((plan) => plan.id === key.plan_id) : null;
+            const owner = ownedByOther ? data.plans.find((plan) => plan.id === key.plan_id) : null;
             return el(
               "label",
               { class: ownedByOther ? "disabled" : "" },
@@ -8852,9 +8540,9 @@
         const id = plan?.id;
         openEditor(
           "plan-dialog",
-          () => Promise.all([loadKeysForView(false), loadAdminCollection("plans")]),
-          () => {
-            const current = id ? state.plans.find((entry) => entry.id === id) : null;
+          () => loadEditorData("plan"),
+          (data) => {
+            const current = id ? data.plans.find((entry) => entry.id === id) : null;
             if (id && !current) throw new Error("订阅计划已不存在，请关闭后刷新列表");
             $("plan-form-title").textContent = current ? "编辑订阅计划：" + (current.name || id) : "新建订阅计划";
             $("plan-id").value = id || "";
@@ -8862,7 +8550,7 @@
             $("plan-name").value = current?.name || "";
             $("plan-windows").replaceChildren();
             (current ? current.windows : [{}]).forEach(addPlanWindow);
-            renderPlanKeyPicker(id || "");
+            renderPlanKeyPicker(id || "", data);
             return {
               plan: current ? { ...structuredClone(current), windows: planFromForm().windows } : null,
               scopes: selectedPlanScopes(),
@@ -9050,6 +8738,8 @@
 
       function editPrice(row) {
         const modelID = row.model_id;
+        // Price fields use the clicked row (or a new blank row), not shared
+        // option lists. Reference search owns its separate request and result.
         openEditor("price-dlg", null, () => {
           $("price-dialog-title").textContent = modelID ? "编辑模型定价" : "新增模型定价";
           $("price-save").textContent = "保存";
@@ -9061,14 +8751,7 @@
         });
       }
 
-      async function autoSyncKeys() {
-        const keys = await loadConfiguredAPIKeys();
-        const result = await plugin("POST", "/keys/sync", { keys, allow_empty: true });
-        if (result.added || result.deleted) {
-          return "API Key 同步完成：新增 " + result.added + " 个，删除 " + result.deleted + " 个";
-        }
-        return keys.length ? "" : "CLIProxyAPI 尚未配置 API Key";
-      }
+
 
       async function importCPAMPLabels() {
         const generation = sessionGeneration;
@@ -9104,12 +8787,14 @@
               unchanged++;
               continue;
             }
-            await mutateAdmin("POST", "/keys/label", { scope, label });
+            await writeAdmin("POST", "/keys/label", { scope, label });
             imported++;
           }
         } catch (err) {
           if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
           throw new Error("已导入 " + imported + " 条备注，导入中断：" + (err.message || err));
+        } finally {
+          if (imported && generation === sessionGeneration) renderPage();
         }
         const skipped = result.items.length - imported - unchanged;
         notify(
@@ -9144,8 +8829,8 @@
           $("gate-key").value = "";
         } catch (err) {
           if (generation !== sessionGeneration || err instanceof StaleRequestError) return;
-          if (err instanceof AuthError) await deleteCredential(role);
-          showGate(role, err instanceof AuthError ? err.message : "登录失败：" + (err.message || err));
+          if (err instanceof AuthError) await fail(err);
+          else showGate(role, "登录失败：" + (err.message || err));
         } finally {
           $("gate-submit").disabled = false;
         }
@@ -9205,16 +8890,13 @@
 
       function updateThemedVisuals() {
         updateThemeButtons();
-        if (currentRole === "admin" && activeAdminTab() === "analysis" && state.analysis) {
-          renderAnalysis(false);
-        } else if (currentRole === "account" && accountTab === "analysis" && accountState.analysis) {
-          renderAnalysis(true);
-        }
+        if (currentRole && activeTab(currentRole === "account") === "analysis")
+          renderAnalysis(currentRole === "account");
       }
 
       for (const button of document.querySelectorAll('[data-page-action="refresh"]')) {
         setActionIcon(button, "refresh", "刷新");
-        button.onclick = () => refreshPage("foreground");
+        button.onclick = () => refreshPage();
       }
       for (const button of document.querySelectorAll('[data-page-action="logout"]')) {
         setActionIcon(button, "logout", "退出登录");
@@ -9234,119 +8916,44 @@
       });
       window.addEventListener("billing-theme-change", updateThemedVisuals);
 
-      const AUTO_REFRESH_MS = 60000;
-      let autoRefreshTimer = 0;
-      let pageRefreshPromise = null;
-      let queuedForegroundRefresh = null;
-
-      function stopAutoRefresh() {
-        clearTimeout(autoRefreshTimer);
-        autoRefreshTimer = 0;
-      }
 
       function activeTab(account) {
         return account ? accountTab : activeAdminTab();
       }
 
-      function scheduleAutoRefresh() {
-        stopAutoRefresh();
-        if (!currentRole || document.hidden) return;
-        autoRefreshTimer = setTimeout(() => {
-          autoRefreshTimer = 0;
-          refreshPage("background");
-        }, AUTO_REFRESH_MS);
-      }
-
-      function setRefreshButtonsDisabled(disabled) {
-        document.querySelectorAll('[data-page-action="refresh"]').forEach((button) => {
-          button.disabled = disabled;
-        });
-      }
-
-      function refreshPage(reason) {
-        const background = reason === "background";
-        const generation = sessionGeneration;
-        const role = currentRole;
-        if (!currentRole || (background && document.hidden)) return Promise.resolve();
-        if (pageRefreshPromise) {
-          if (background) return pageRefreshPromise;
-          if (!queuedForegroundRefresh) {
-            setRefreshButtonsDisabled(true);
-            queuedForegroundRefresh = pageRefreshPromise.then(() => {
-              if (generation !== sessionGeneration) return;
-              queuedForegroundRefresh = null;
-              if (!currentRole) {
-                setRefreshButtonsDisabled(false);
-                return undefined;
-              }
-              return refreshPage("foreground");
-            });
-          }
-          return queuedForegroundRefresh;
+      function updateRefreshButtons() {
+        const page = currentPage();
+        const label = currentRole ? document.querySelector(currentRole === "account"
+          ? "[data-account-tab].active" : "[data-tab].active")?.textContent.trim() : "";
+        for (const button of document.querySelectorAll('[data-page-action="refresh"]')) {
+          button.disabled = !!page?.task;
+          button.title = button.ariaLabel = label ? "刷新" + label : "刷新";
         }
-        stopAutoRefresh();
-        if (!background) setRefreshButtonsDisabled(true);
-        pageRefreshPromise = (async () => {
-          try {
-            await loadView(currentRole === "account", reason);
-          } catch (err) {
-            if (generation !== sessionGeneration || err instanceof StaleRequestError) return;
-            if (err instanceof AuthError) {
-              await deleteCredential(role);
-              if (generation === sessionGeneration) showGate(role, err.message);
-              return;
-            }
-            const message = (background ? "自动刷新失败：" : "刷新失败：") + (err.message || err);
-            notify(message, "err");
-          } finally {
-            if (generation === sessionGeneration) {
-              pageRefreshPromise = null;
-              if (!background && !queuedForegroundRefresh) setRefreshButtonsDisabled(false);
-              if (!queuedForegroundRefresh) scheduleAutoRefresh();
-            }
-          }
-        })();
-        return pageRefreshPromise;
       }
 
-      document.addEventListener("visibilitychange", () => {
-        if (document.hidden) stopAutoRefresh();
-        else if (currentRole) refreshPage("background");
-      });
+      function refreshPage() {
+        if (!currentRole) return Promise.resolve();
+        return currentPage().task || guard(() => loadPage(currentRole === "account", { reload: true }));
+      }
+
       document.querySelectorAll("[data-account-tab]").forEach((button) => {
         button.onclick = () => {
           if (activeTab(true) === button.dataset.accountTab) return;
           setAccountTab(button.dataset.accountTab);
-          guard(() => loadView(true));
+          guard(() => loadPage(true));
         };
       });
       $("analysis-key").addEventListener("change", () =>
         guard(() => {
           saveChoice("admin", "analysis-key");
-          resetEventViews(false);
-          return loadView(false);
+          return loadPage(false);
         }),
       );
-
-      function resetEventViews(account) {
-        const owner = account ? accountState : state;
-        owner.analysis = null;
-        resetLoadState(account ? detailLoads.accountAnalysis : detailLoads.adminAnalysis);
-        pagedList("errors", account).reset();
-        pagedList("events", account).reset();
-      }
-
-      function applySharedTimeRange(account) {
-        if (!account) resetLoadState(detailLoads.adminEventKeys);
-        resetEventViews(account);
-        return loadView(account);
-      }
 
       function bindPagedListFilters(list, role, ids, clear) {
         const reload = () => {
           updateFilterClearButton(clear);
-          list.reset();
-          guard(() => list.load());
+          guard(() => list.reload());
         };
         for (const id of ids) {
           $(id).addEventListener("change", () => {
@@ -9425,16 +9032,13 @@
           closeSharedTimePopover(false);
         }
         schedulePageTabLayout();
-        if (currentRole === "admin") {
-          renderAdminTab(selected);
-        }
         revealTab(document.querySelector(`[data-tab="${selected}"]`));
       }
       for (const tab of TABS)
         tab.onclick = () => {
           if (activeTab(false) === tab.dataset.tab) return;
           setAdminTab(tab.dataset.tab);
-          guard(() => loadView(false));
+          guard(() => loadPage(false));
         };
 
       $("key-filter").addEventListener("input", renderKeys);
@@ -9524,9 +9128,9 @@
         renderRouteCredentialList();
       });
       $("route-rule-all").onclick = () => {
-        routeModels = new Set(currentModelIDs());
+        routeModels = new Set(routeEditorData().models);
         routeCredentialIDs = new Set();
-        routeProviders = routeProviderChoices(routeProviders).map((item) => ({
+        routeProviders = routeProviderChoices(routeEditorData().credentials, routeProviders).map((item) => ({
           source: item.source,
           provider: item.provider,
         }));
@@ -9579,8 +9183,7 @@
       $("plugin-log-filter").addEventListener("input", renderPluginLogs);
       $("plugin-log-level").addEventListener("change", () => {
         saveChoice("admin", "plugin-log-level");
-        pagedList("logs").reset();
-        guard(() => pagedList("logs").load());
+        guard(() => pagedList("logs").reload());
       });
       $("plugin-logs-clear").onclick = () =>
         openActionDialog(
@@ -9714,16 +9317,6 @@
           try {
             const result = await mutateAdmin("POST", "/prices/reference/refresh", null, { timeoutMS: 45000 });
             notify(result.changed ? "参考价已更新" : "参考价已是最新");
-          } catch (err) {
-            if (err instanceof AuthError || err instanceof StaleRequestError) throw err;
-            try {
-              resetLoadState(detailLoads.adminPriceStatus);
-              await loadAdminPriceStatus();
-            } catch (statusError) {
-              if (statusError instanceof AuthError || statusError instanceof StaleRequestError) throw statusError;
-              throw new Error((err.message || err) + "；参考价状态获取失败：" + (statusError.message || statusError));
-            }
-            throw err;
           } finally {
             button.disabled = false;
           }
@@ -9750,8 +9343,8 @@
           if (loginMode === "account") await startAccount(saved);
           else await startAdmin(saved);
         } catch (err) {
-          await deleteCredential(loginMode);
-          showGate(loginMode, err instanceof AuthError ? err.message : "登录失败：" + (err.message || err));
+          if (err instanceof AuthError) await fail(err);
+          else showGate(loginMode, "登录失败：" + (err.message || err));
         }
       })();
     </script>
