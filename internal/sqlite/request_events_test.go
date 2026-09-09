@@ -132,6 +132,16 @@ func TestRequestEventFieldAndTimeFilters(t *testing.T) {
 	}); outside.Total != 0 {
 		t.Fatalf("outside range total = %d, want 0", outside.Total)
 	}
+
+	entry.At = entry.At.Add(time.Minute)
+	entry.BillingModel = ""
+	mustSave(t, database, state, billing.Changes{NormalRequestEvents: []billing.RequestEvent{entry}})
+	view = mustQueryRequestEvents(t, database, billing.RequestEventQuery{
+		Model: entry.UpstreamModel, From: entry.At, To: entry.At.Add(time.Minute), IncludeFilters: true,
+	})
+	if view.Total != 1 || len(view.Entries) != 1 || len(view.Filters.Models) != 1 || view.Filters.Models[0] != entry.UpstreamModel {
+		t.Fatalf("upstream model filter = %+v", view)
+	}
 }
 
 func TestRequestEventAccountChangesPreserveHistory(t *testing.T) {
@@ -311,5 +321,23 @@ func TestEventKeysFollowTimeRangeAndRetainDeletedIdentities(t *testing.T) {
 	keys, err = database.EventKeys(start.Add(3*time.Minute), start.Add(time.Hour), start)
 	if err != nil || keys == nil || len(keys) != 0 {
 		t.Fatalf("empty range = %+v, %v", keys, err)
+	}
+}
+
+func TestEventKeysIncludeOrphanedZeroUsage(t *testing.T) {
+	d := openTestDB(t)
+	if _, err := d.db.Exec(`WITH RECURSIVE seq(n) AS (
+		VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n < 1100)
+		INSERT INTO request_events(at, scope) SELECT ?, 'orphan-' || n FROM seq`, nanos(eventStart)); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := d.EventKeys(eventStart, eventStart.Add(time.Hour), eventStart)
+	if err != nil || len(keys) != 1100 {
+		t.Fatalf("keys=%d, err=%v", len(keys), err)
+	}
+	for _, key := range keys {
+		if key.Preview != billing.UnknownKeyPreview {
+			t.Fatalf("unexpected preview: %+v", key)
+		}
 	}
 }

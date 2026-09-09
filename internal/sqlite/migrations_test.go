@@ -327,6 +327,7 @@ func TestV13CredentialMigrationAndRollback(t *testing.T) {
 		{"incompatible-table", "ALTER TABLE credentials ADD COLUMN unknown_field TEXT"},
 		{"update-failure", "CREATE TRIGGER reject_update BEFORE UPDATE ON request_events BEGIN SELECT RAISE(ABORT, 'dummy failure'); END"},
 		{"config-table-conflict", "CREATE TABLE config_credentials(marker TEXT); INSERT INTO config_credentials VALUES('keep')"},
+		{"index-name-conflict", "DROP INDEX request_events_at; CREATE TABLE request_events_at(marker TEXT)"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "v13.db")

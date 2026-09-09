@@ -1,8 +1,10 @@
 package sqlite
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"cpa-key-billing/internal/billing"
@@ -74,5 +76,107 @@ func TestOpenAcceptsRelativePathWithDSNCharacters(t *testing.T) {
 	}
 	if key := mustLoad(t, database).State.Keys["scope-a"]; key == nil || key.Label != "Alice" {
 		t.Fatalf("key = %+v", key)
+	}
+}
+
+func indexDefinitions(t *testing.T, d *DB) map[string]string {
+	t.Helper()
+	rows, err := d.db.Query("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	definitions := map[string]string{}
+	for rows.Next() {
+		var name, definition string
+		if err := rows.Scan(&name, &definition); err != nil {
+			t.Fatal(err)
+		}
+		definitions[name] = definition
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return definitions
+}
+
+func ddlVersion(t *testing.T, d *DB) int {
+	t.Helper()
+	var version int
+	if err := d.db.QueryRow("PRAGMA schema_version").Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	return version
+}
+
+func TestOpenSynchronizesIndexes(t *testing.T) {
+	d, _ := requestEventDatabase(t)
+	expected := indexDefinitions(t, d)
+	events := mustQueryRequestEvents(t, d, billing.RequestEventQuery{})
+	if _, err := d.db.Exec(`DROP INDEX request_events_at;
+		CREATE INDEX request_events_at ON request_events(at);
+		DROP INDEX request_events_scope_at;
+		CREATE INDEX request_events_auth_at ON request_events(auth_index, at);
+		CREATE INDEX operator_message ON plugin_logs(message);
+		CREATE UNIQUE INDEX operator_unique_message ON plugin_logs(message)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	d = openDatabase(t, d.path)
+	actual := indexDefinitions(t, d)
+	for _, name := range []string{"operator_message", "operator_unique_message"} {
+		if actual[name] == "" {
+			t.Fatalf("removed unmanaged index %s", name)
+		}
+		delete(actual, name)
+	}
+	if !maps.Equal(expected, actual) {
+		t.Fatalf("indexes=%v, want %v", actual, expected)
+	}
+	if got := mustQueryRequestEvents(t, d, billing.RequestEventQuery{}); !reflect.DeepEqual(events, got) {
+		t.Fatal("index synchronization changed history")
+	}
+	var format int
+	if err := d.db.QueryRow("PRAGMA user_version").Scan(&format); err != nil || format != 14 {
+		t.Fatalf("format version=%d, err=%v", format, err)
+	}
+	version := ddlVersion(t, d)
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	d = openDatabase(t, d.path)
+	if ddlVersion(t, d) != version {
+		t.Fatal("unchanged restart rebuilt indexes")
+	}
+}
+
+func TestOpenRollsBackOnIndexNameCollision(t *testing.T) {
+	for _, ddl := range []string{
+		"CREATE UNIQUE INDEX request_events_at ON request_events(at)",
+		"CREATE INDEX request_events_at ON plugin_logs(at)",
+		"CREATE TABLE request_events_at (value TEXT)",
+	} {
+		t.Run(ddl, func(t *testing.T) {
+			d, _ := requestEventDatabase(t)
+			if _, err := d.db.Exec(`DROP INDEX plugin_logs_at;
+				CREATE INDEX plugin_logs_at ON plugin_logs(at DESC);
+				DROP INDEX request_events_at; ` + ddl); err != nil {
+				t.Fatal(err)
+			}
+			before, version := indexDefinitions(t, d), ddlVersion(t, d)
+			events := mustQueryRequestEvents(t, d, billing.RequestEventQuery{})
+			if reopened, err := Open(d.path); err == nil {
+				reopened.Close()
+				t.Fatal("replaced an incompatible object")
+			}
+			if !maps.Equal(before, indexDefinitions(t, d)) || ddlVersion(t, d) != version {
+				t.Fatal("failed synchronization did not restore the original indexes")
+			}
+			if got := mustQueryRequestEvents(t, d, billing.RequestEventQuery{}); !reflect.DeepEqual(events, got) {
+				t.Fatal("failed synchronization changed history")
+			}
+		})
 	}
 }

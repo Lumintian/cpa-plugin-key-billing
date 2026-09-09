@@ -3,7 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,27 +25,18 @@ func appendRequestErrorEvent(tx *sql.Tx, entry billing.RequestErrorEvent) error 
 	return nil
 }
 
-const requestErrorSource = `
-	FROM request_errors e
-	JOIN request_events r ON r.id = e.request_event_id
-	LEFT JOIN api_keys k ON k.scope = r.scope
-	WHERE r.at >= ?`
-
 func requestErrorFilter(query billing.RequestErrorQuery, since time.Time) (string, []any) {
-	where, args := eventPageFilter(requestErrorSource, query.From, query.To, since, query.SnapshotID)
-	for _, filter := range []struct{ expression, value string }{
-		{"r.scope", query.Scope},
-		{"r.scope", query.KeyScope},
-		{"coalesce(NULLIF(r.billing_model, ''), r.upstream_model)", query.Model},
-		{"(" + requestEventSourceName + ")", query.Source},
-		{"r.executor_type", query.Executor},
-		{"r.provider", query.Provider},
-	} {
-		if value := strings.TrimSpace(filter.value); value != "" {
-			where += " AND " + filter.expression + " = ?"
-			args = append(args, value)
-		}
+	source := " FROM request_errors e"
+	if query.StatusCode <= 0 && strings.TrimSpace(query.ErrorType) == "" && !query.ErrorTypeEmpty {
+		// Keep large error bodies out of counts and ID-only pages.
+		source += " INDEXED BY request_errors_event_type_status"
 	}
+	source += " JOIN request_events r ON r.id = e.request_event_id WHERE r.at >= ?"
+	where, args := eventFilter(source, billing.RequestEventQuery{
+		Scope: query.Scope, KeyScope: query.KeyScope, Model: query.Model,
+		Source: query.Source, Executor: query.Executor, Provider: query.Provider,
+		From: query.From, To: query.To, SnapshotID: query.SnapshotID,
+	}, since)
 	if query.StatusCode > 0 {
 		where += " AND e.status_code = ?"
 		args = append(args, query.StatusCode)
@@ -112,10 +103,16 @@ func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (bi
 		limit = -1
 	}
 	pageArgs := append(args, limit, query.Offset)
-	rows, err := d.db.Query(`SELECT r.id, r.at, r.scope, coalesce(k.preview, ''), coalesce(k.label, ''),
+	rows, err := d.db.Query(`WITH page AS MATERIALIZED (
+		SELECT r.id `+where+` ORDER BY r.at DESC, r.id DESC LIMIT ? OFFSET ?)
+		SELECT r.id, r.at, r.scope, coalesce(k.preview, ''), coalesce(k.label, ''),
 		r.auth_index, `+requestEventSourceName+`, r.provider,
 		r.executor_type, r.upstream_model, r.billing_model, r.latency_ms, r.ttft_ms,
-		e.status_code, e.error_type, e.reason, e.body`+where+` ORDER BY r.at DESC, r.id DESC LIMIT ? OFFSET ?`, pageArgs...)
+		e.status_code, e.error_type, e.reason, e.body
+		FROM page JOIN request_events r ON r.id = page.id
+		JOIN request_errors e ON e.request_event_id = r.id
+		LEFT JOIN api_keys k ON k.scope = r.scope
+		ORDER BY r.at DESC, r.id DESC`, pageArgs...)
 	if err != nil {
 		return billing.RequestErrorView{}, fmt.Errorf("读取错误事件：%w", err)
 	}
@@ -138,49 +135,45 @@ func (d *DB) RequestErrors(query billing.RequestErrorQuery, since time.Time) (bi
 }
 
 func (d *DB) requestErrorFilterValues(query billing.RequestErrorQuery, since time.Time) (*billing.RequestErrorFilterValues, error) {
-	where, args := eventPageFilter(requestErrorSource, query.From, query.To, since, query.SnapshotID)
-	if scope := strings.TrimSpace(query.Scope); scope != "" {
-		where += " AND r.scope = ?"
-		args = append(args, scope)
-	}
-	rows, err := d.db.Query(`WITH filtered AS (
-		SELECT coalesce(NULLIF(r.billing_model, ''), r.upstream_model) model, `+requestEventSourceName+` source,
-		r.executor_type executor, r.provider,
-		e.status_code, e.error_type`+where+`)
-		SELECT kind, value FROM (
-		SELECT 'model' kind, model value FROM filtered WHERE model != '' GROUP BY model
-		UNION ALL SELECT 'source', source FROM filtered WHERE source != '' GROUP BY source
-		UNION ALL SELECT 'executor', executor FROM filtered WHERE executor != '' GROUP BY executor
-		UNION ALL SELECT 'provider', provider FROM filtered WHERE provider != '' GROUP BY provider
-		UNION ALL SELECT 'status_code', CAST(status_code AS TEXT) FROM filtered WHERE status_code > 0 GROUP BY status_code
-		UNION ALL SELECT 'error_type', error_type FROM filtered WHERE error_type != '' GROUP BY error_type
-		) ORDER BY kind, value COLLATE NOCASE`, args...)
+	where, args := requestErrorFilter(billing.RequestErrorQuery{
+		Scope: query.Scope, From: query.From, To: query.To, SnapshotID: query.SnapshotID,
+	}, since)
+	rows, err := d.db.Query(`SELECT DISTINCT `+eventModelSQL+`, `+requestEventSourceName+`,
+		r.executor_type, r.provider,
+		e.status_code, e.error_type`+where, args...)
 	if err != nil {
 		return nil, fmt.Errorf("读取错误事件筛选项：%w", err)
 	}
 	defer rows.Close()
-	result := &billing.RequestErrorFilterValues{Models: []string{}, Sources: []string{}, Executors: []string{}, Providers: []string{}, StatusCodes: []int{}, ErrorTypes: []string{}}
+	models, sources, executors, providers := filterValues{}, filterValues{}, filterValues{}, filterValues{}
+	errorTypes := filterValues{}
+	codes := map[int]bool{}
 	for rows.Next() {
-		var kind, value string
-		if err := rows.Scan(&kind, &value); err != nil {
+		var model, source, executor, provider, errorType string
+		var statusCode int
+		if err := rows.Scan(&model, &source, &executor, &provider, &statusCode, &errorType); err != nil {
 			return nil, fmt.Errorf("读取错误事件筛选项：%w", err)
 		}
-		switch kind {
-		case "model":
-			result.Models = append(result.Models, value)
-		case "source":
-			result.Sources = append(result.Sources, value)
-		case "executor":
-			result.Executors = append(result.Executors, value)
-		case "provider":
-			result.Providers = append(result.Providers, value)
-		case "status_code":
-			if code, err := strconv.Atoi(value); err == nil {
-				result.StatusCodes = append(result.StatusCodes, code)
-			}
-		case "error_type":
-			result.ErrorTypes = append(result.ErrorTypes, value)
+		models.add(model)
+		sources.add(source)
+		executors.add(executor)
+		providers.add(provider)
+		errorTypes.add(errorType)
+		if statusCode > 0 {
+			codes[statusCode] = true
 		}
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("读取错误事件筛选项：%w", err)
+	}
+	result := &billing.RequestErrorFilterValues{
+		Models: models.sorted(), Sources: sources.sorted(),
+		Executors: executors.sorted(), Providers: providers.sorted(),
+		ErrorTypes: errorTypes.sorted(), StatusCodes: make([]int, 0, len(codes)),
+	}
+	for code := range codes {
+		result.StatusCodes = append(result.StatusCodes, code)
+	}
+	sort.Ints(result.StatusCodes)
+	return result, nil
 }

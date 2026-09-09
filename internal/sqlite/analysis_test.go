@@ -145,3 +145,40 @@ func TestAnalysisSummaryIncludesTokenAndCostBreakdowns(t *testing.T) {
 		t.Fatalf("token trends = %+v", trends)
 	}
 }
+
+func TestAnalysisFullRetentionKeepsZeroUsageAndEmptyScopes(t *testing.T) {
+	d := openTestDB(t)
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	from := time.Date(2025, 9, 1, 12, 30, 0, 0, location)
+	to := from.Add(billing.RequestEventRetention)
+	state := billing.NewState()
+	mustSave(t, d, state, billing.Changes{
+		NormalRequestEvents: []billing.RequestEvent{
+			{At: from, Scope: ""},
+			{At: to, Scope: "outside"},
+		},
+		RequestErrorEvents: []billing.RequestErrorEvent{
+			{Event: billing.RequestEvent{At: to.Add(-time.Nanosecond), Scope: "orphan"}},
+		},
+	})
+	view, err := d.Analysis(billing.RequestEventQuery{From: from, To: to, Timezone: location}, from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Summary.Requests != 2 || view.Summary.Failed != 1 || view.Summary.TotalTokens != 0 || len(view.Trends.Requests) != 366 {
+		t.Fatalf("summary=%+v, buckets=%d", view.Summary, len(view.Trends.Requests))
+	}
+	if view.Trends.Requests[0].Value != 1 || view.Trends.Requests[365].Value != 1 {
+		t.Fatal("range boundaries changed")
+	}
+	keys := view.UsageDistribution.APIKeys
+	if len(keys) != 2 || keys[0].Percent != 50 || keys[1].Percent != 50 {
+		t.Fatalf("zero-usage key distribution=%+v", keys)
+	}
+	if view.UsageDistribution.Models[0].Label != "未知模型" || view.UsageDistribution.Sources[0].Label != "未知来源" {
+		t.Fatalf("fallback labels=%+v", view.UsageDistribution)
+	}
+}

@@ -11,8 +11,7 @@ import (
 	"cpa-key-billing/internal/billing"
 )
 
-// Each supported version upgrades directly to v14 in one transaction.
-func (d *DB) migrateToV14(version int) error {
+func migrateToV14(tx *sql.Tx, version int) error {
 	var steps []func(*sql.Tx) error
 	switch version {
 	case 10:
@@ -24,15 +23,12 @@ func (d *DB) migrateToV14(version int) error {
 		steps = append(steps, migrateModelPricing, migrateQuotaWindows)
 	}
 	steps = append(steps, migrateCredentials)
-	return d.transact(func(tx *sql.Tx) error {
-		for _, step := range steps {
-			if err := step(tx); err != nil {
-				return err
-			}
+	for _, step := range steps {
+		if err := step(tx); err != nil {
+			return err
 		}
-		_, err := tx.Exec("PRAGMA user_version = 14")
-		return err
-	})
+	}
+	return nil
 }
 
 func migrateCredentials(tx *sql.Tx) error {
@@ -102,8 +98,6 @@ func migrateModelPricing(tx *sql.Tx) error {
             rates_json   TEXT,
             PRIMARY KEY (provider_id, model_id)
         );
-
-        CREATE INDEX reference_prices_match_key ON reference_prices(match_key);
     `)
 	return err
 }

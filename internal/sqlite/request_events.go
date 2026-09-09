@@ -3,6 +3,7 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -68,6 +69,9 @@ func pruneRequestEvents(exec execer, cutoff time.Time) error {
 	return nil
 }
 
+// Model filters and their expression index must use the same expression.
+const eventModelSQL = "coalesce(NULLIF(billing_model, ''), upstream_model)"
+
 const requestEventProviderName = `CASE WHEN substr(r.provider, 1, 18) = 'openai-compatible-'
 	THEN substr(r.provider, 19) ELSE r.provider END`
 
@@ -79,7 +83,6 @@ const requestEventSourceName = `CASE
 
 const requestEventSource = `
 	FROM request_events r
-	LEFT JOIN api_keys k ON k.scope = r.scope
 	WHERE r.at >= ?`
 
 func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (billing.RequestEventView, error) {
@@ -90,7 +93,7 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 		return view, err
 	}
 	query.SnapshotID = &view.SnapshotID
-	where, args := requestEventFilter(query, since)
+	where, args := eventFilter(requestEventSource, query, since)
 	if query.IncludeFilters {
 		filters, errFilters := d.requestEventFilterValues(query, since)
 		if errFilters != nil {
@@ -101,12 +104,10 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 
 	counts := d.db.QueryRow(`
 		SELECT count(*),
-			sum(CASE WHEN r.failed != 0 THEN 1 ELSE 0 END)`+where, args...)
-	var failed sql.NullInt64
-	if errCount := counts.Scan(&view.Statuses.All, &failed); errCount != nil {
+			coalesce(sum(r.failed != 0), 0)`+where, args...)
+	if errCount := counts.Scan(&view.Statuses.All, &view.Statuses.Failed); errCount != nil {
 		return billing.RequestEventView{}, fmt.Errorf("统计请求事件：%w", errCount)
 	}
-	view.Statuses.Failed = int(failed.Int64)
 	view.Statuses.Normal = view.Statuses.All - view.Statuses.Failed
 	view.Total = view.Statuses.All
 
@@ -127,7 +128,8 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 	page += " ORDER BY r.at DESC, r.id DESC LIMIT ? OFFSET ?"
 	pageArgs := append(args, limit, query.Offset)
 
-	rows, errQuery := d.db.Query(`
+	// Apply pagination before loading metadata and usage details.
+	rows, errQuery := d.db.Query(`WITH page AS MATERIALIZED (SELECT r.id `+page+`)
 		SELECT r.id, r.at, r.scope, r.auth_index, r.provider, r.account,
 			r.executor_type, r.reasoning_effort, r.service_tier,
 			r.upstream_model, r.billing_model, r.failed, r.latency_ms, r.ttft_ms,
@@ -137,7 +139,10 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 			r.tiered, r.long_context, r.threshold_input_tokens,
 			r.applied_input_per_1m, r.applied_output_per_1m,
 			r.applied_cache_read_per_1m, r.applied_cache_write_per_1m,
-			coalesce(k.preview, ''), coalesce(k.label, ''), `+requestEventSourceName+page, pageArgs...)
+			coalesce(k.preview, ''), coalesce(k.label, ''), `+requestEventSourceName+`
+		FROM page JOIN request_events r ON r.id = page.id
+		LEFT JOIN api_keys k ON k.scope = r.scope
+		ORDER BY r.at DESC, r.id DESC`, pageArgs...)
 	if errQuery != nil {
 		return billing.RequestEventView{}, fmt.Errorf("读取请求事件：%w", errQuery)
 	}
@@ -155,12 +160,16 @@ func (d *DB) RequestEvents(query billing.RequestEventQuery, since time.Time) (bi
 	return view, nil
 }
 
-func requestEventFilter(query billing.RequestEventQuery, since time.Time) (string, []any) {
-	where, args := eventPageFilter(requestEventSource, query.From, query.To, since, query.SnapshotID)
+func eventFilter(source string, query billing.RequestEventQuery, since time.Time) (string, []any) {
+	where, args := eventTimeFilter(source, query.From, query.To, since)
+	if query.SnapshotID != nil {
+		where += " AND r.id <= ?"
+		args = append(args, *query.SnapshotID)
+	}
 	for _, filter := range []struct{ expression, value string }{
 		{"r.scope", query.Scope},
 		{"r.scope", query.KeyScope},
-		{"coalesce(NULLIF(r.billing_model, ''), r.upstream_model)", query.Model},
+		{eventModelSQL, query.Model},
 		{"(" + requestEventSourceName + ")", query.Source},
 		{"r.executor_type", query.Executor},
 		{"r.provider", query.Provider},
@@ -186,15 +195,6 @@ func (d *DB) requestEventSnapshot(snapshot *int64) (int64, error) {
 	return id, nil
 }
 
-func eventPageFilter(source string, from, to, since time.Time, snapshot *int64) (string, []any) {
-	where, args := eventTimeFilter(source, from, to, since)
-	if snapshot != nil {
-		where += " AND r.id <= ?"
-		args = append(args, *snapshot)
-	}
-	return where, args
-}
-
 func eventTimeFilter(source string, from, to, since time.Time) (string, []any) {
 	if !from.IsZero() && from.After(since) {
 		since = from
@@ -209,50 +209,34 @@ func eventTimeFilter(source string, from, to, since time.Time) (string, []any) {
 }
 
 func (d *DB) requestEventFilterValues(query billing.RequestEventQuery, since time.Time) (*billing.RequestEventFilterValues, error) {
-	where, args := eventPageFilter(requestEventSource, query.From, query.To, since, query.SnapshotID)
-	if scope := strings.TrimSpace(query.Scope); scope != "" {
-		where += " AND r.scope = ?"
-		args = append(args, scope)
-	}
-	rows, errQuery := d.db.Query(`
-		WITH filtered AS (
-			SELECT coalesce(NULLIF(r.billing_model, ''), r.upstream_model) AS model,
-				`+requestEventSourceName+` AS source, r.executor_type AS executor,
-				r.provider AS provider`+where+`
-		)
-		SELECT kind, value FROM (
-			SELECT 'model' AS kind, model AS value FROM filtered WHERE model != '' GROUP BY model
-			UNION ALL SELECT 'source', source FROM filtered WHERE source != '' GROUP BY source
-			UNION ALL SELECT 'executor', executor FROM filtered WHERE executor != '' GROUP BY executor
-			UNION ALL SELECT 'provider', provider FROM filtered WHERE provider != '' GROUP BY provider
-		) ORDER BY kind, value COLLATE NOCASE`, args...)
+	where, args := eventFilter(requestEventSource, billing.RequestEventQuery{
+		Scope: query.Scope, From: query.From, To: query.To, SnapshotID: query.SnapshotID,
+	}, since)
+	rows, errQuery := d.db.Query(`SELECT DISTINCT `+eventModelSQL+`,
+		`+requestEventSourceName+`, r.executor_type, r.provider`+where, args...)
 	if errQuery != nil {
 		return nil, fmt.Errorf("读取请求事件筛选项：%w", errQuery)
 	}
 	defer rows.Close()
 
-	filters := &billing.RequestEventFilterValues{Models: []string{}, Sources: []string{},
-		Executors: []string{}, Providers: []string{}}
+	models, sources, executors, providers := filterValues{}, filterValues{}, filterValues{}, filterValues{}
 	for rows.Next() {
-		var kind, value string
-		if errScan := rows.Scan(&kind, &value); errScan != nil {
+		var model, source, executor, provider string
+		if errScan := rows.Scan(&model, &source, &executor, &provider); errScan != nil {
 			return nil, fmt.Errorf("读取请求事件筛选项：%w", errScan)
 		}
-		switch kind {
-		case "model":
-			filters.Models = append(filters.Models, value)
-		case "source":
-			filters.Sources = append(filters.Sources, value)
-		case "executor":
-			filters.Executors = append(filters.Executors, value)
-		case "provider":
-			filters.Providers = append(filters.Providers, value)
-		}
+		models.add(model)
+		sources.add(source)
+		executors.add(executor)
+		providers.add(provider)
 	}
 	if errRows := rows.Err(); errRows != nil {
 		return nil, fmt.Errorf("读取请求事件筛选项：%w", errRows)
 	}
-	return filters, nil
+	return &billing.RequestEventFilterValues{
+		Models: models.sorted(), Sources: sources.sorted(),
+		Executors: executors.sorted(), Providers: providers.sorted(),
+	}, nil
 }
 
 func scanRequestEventRow(rows *sql.Rows) (billing.RequestEventRow, error) {
@@ -289,12 +273,18 @@ func scanRequestEventRow(rows *sql.Rows) (billing.RequestEventRow, error) {
 }
 
 func (d *DB) EventKeys(from, to, since time.Time) ([]billing.EventKey, error) {
-	// Error records also have a request_events row.
 	where, args := eventTimeFilter("FROM request_events r WHERE r.at >= ?", from, to, since)
-	rows, err := d.db.Query(`SELECT scopes.scope, coalesce(NULLIF(k.preview, ''), ?),
+	// Seek once per scope, including historical scopes absent from api_keys.
+	rows, err := d.db.Query(`WITH RECURSIVE scopes(scope) AS (
+		SELECT min(scope) FROM request_events WHERE scope > ''
+		UNION ALL
+		SELECT (SELECT min(scope) FROM request_events WHERE scope > scopes.scope)
+		FROM scopes WHERE scopes.scope IS NOT NULL
+	) SELECT scopes.scope, coalesce(NULLIF(k.preview, ''), ?),
         coalesce(k.label, ''), coalesce(k.deleted_at, 0)
-        FROM (SELECT DISTINCT r.scope `+where+` AND r.scope != '') scopes
+        FROM scopes
         LEFT JOIN api_keys k ON k.scope = scopes.scope
+        WHERE scopes.scope IS NOT NULL AND EXISTS (SELECT 1 `+where+` AND r.scope = scopes.scope)
         ORDER BY coalesce(NULLIF(k.label, ''), k.preview, '') COLLATE NOCASE, scopes.scope`,
 		append([]any{billing.UnknownKeyPreview}, args...)...)
 	if err != nil {
@@ -315,4 +305,38 @@ func (d *DB) EventKeys(from, to, since time.Time) ([]billing.EventKey, error) {
 		return nil, fmt.Errorf("读取事件 API Key 筛选项：%w", err)
 	}
 	return keys, nil
+}
+
+type filterValues map[string]struct{}
+
+func (values filterValues) add(value string) {
+	if value != "" {
+		values[value] = struct{}{}
+	}
+}
+
+func (values filterValues) sorted() []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		a, b := asciiLower(result[i]), asciiLower(result[j])
+		if a == b {
+			return result[i] < result[j]
+		}
+		return a < b
+	})
+	return result
+}
+
+// Match SQLite NOCASE, which folds ASCII only.
+func asciiLower(value string) string {
+	bytes := []byte(value)
+	for i, c := range bytes {
+		if c >= 'A' && c <= 'Z' {
+			bytes[i] += 'a' - 'A'
+		}
+	}
+	return string(bytes)
 }

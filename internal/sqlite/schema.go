@@ -1,5 +1,30 @@
 package sqlite
 
+type index struct {
+	name, columns string
+}
+
+// Non-unique indexes named <table>_<name> belong to this module.
+var indexes = map[string][]index{
+	"reference_prices": {
+		{"match_key", "match_key"},
+	},
+	"request_events": {
+		{"at", "at, id, failed"},
+		{"scope_at", "scope, at, id, failed"},
+		{"model_at", eventModelSQL + ", at"},
+	},
+	"request_errors": {
+		{"status", "status_code, error_type"},
+		{"type", "error_type, status_code"},
+		{"event_type_status", "request_event_id, error_type, status_code"},
+	},
+	"plugin_logs": {
+		{"at", "at"},
+		{"level_id_at", "level, id, at"},
+	},
+}
+
 // Time columns use Unix nanoseconds; JSON cycles use UTC RFC3339Nano.
 const schema = `
 CREATE TABLE api_keys (
@@ -71,8 +96,6 @@ CREATE TABLE reference_prices (
     PRIMARY KEY (provider_id, model_id)
 );
 
-CREATE INDEX reference_prices_match_key ON reference_prices(match_key);
-
 CREATE TABLE request_events (
 	id                          INTEGER PRIMARY KEY AUTOINCREMENT,
 	at                          INTEGER NOT NULL,
@@ -109,11 +132,6 @@ CREATE TABLE request_events (
 	applied_cache_write_per_1m  REAL    NOT NULL DEFAULT 0
 );
 
-CREATE INDEX request_events_at ON request_events(at);
-CREATE INDEX request_events_scope_at ON request_events(scope, at);
-CREATE INDEX request_events_model_at ON request_events(billing_model, at);
-CREATE INDEX request_events_auth_at ON request_events(auth_index, at);
-
 CREATE TABLE request_errors (
 	request_event_id INTEGER PRIMARY KEY REFERENCES request_events(id) ON DELETE CASCADE,
 	status_code      INTEGER NOT NULL DEFAULT 0,
@@ -122,16 +140,10 @@ CREATE TABLE request_errors (
 	body             TEXT    NOT NULL DEFAULT ''
 );
 
-CREATE INDEX request_errors_status ON request_errors(status_code);
-CREATE INDEX request_errors_type ON request_errors(error_type);
-
 CREATE TABLE plugin_logs (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
 	at      INTEGER NOT NULL,
 	level   TEXT    NOT NULL DEFAULT '',
 	message TEXT    NOT NULL DEFAULT ''
 );
-
-CREATE INDEX plugin_logs_at ON plugin_logs(at);
-
 `

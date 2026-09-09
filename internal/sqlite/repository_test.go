@@ -202,3 +202,62 @@ func TestQuotaDimensionsExtendExistingJSON(t *testing.T) {
 		t.Fatalf("quota round trip lost data: got %+v, want %+v", loaded, state)
 	}
 }
+
+func BenchmarkHistoryQueries(b *testing.B) {
+	d, err := Open(filepath.Join(b.TempDir(), "history.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = d.Close() })
+	from := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	to := from.Add(30 * 24 * time.Hour)
+	_, err = d.db.Exec(`WITH RECURSIVE seq(n) AS (
+		VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n < 200000
+	) INSERT INTO request_events (at, scope, billing_model, provider, account,
+		executor_type, failed, uncached_input_tokens, billed_output_tokens, total_usd)
+	SELECT ? + ((n * 7919) % 2592000) * 1000000000, 'scope-' || (n % 100),
+		'model-' || (n % 8), 'provider-' || (n % 3), 'dummy@example.com',
+		'DummyExecutor', n % 5 = 0, 100, 50, 0.125 FROM seq;
+	INSERT INTO request_errors SELECT id, 429, 'rate_limit_error', 'dummy failure',
+		printf('%02048d', 0) FROM request_events WHERE failed != 0;
+	INSERT INTO plugin_logs (at, level, message)
+		SELECT at, CASE WHEN id % 5 = 0 THEN 'error' ELSE 'info' END,
+		printf('%01024d', 0) FROM request_events;`, nanos(from))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, bench := range []struct {
+		name string
+		run  func() error
+	}{
+		{"keys", func() error { _, err := d.EventKeys(from, to, from); return err }},
+		{"events", func() error {
+			_, err := d.RequestEvents(billing.RequestEventQuery{From: from, To: to, Limit: 50}, from)
+			return err
+		}},
+		{"event_filters", func() error {
+			_, err := d.requestEventFilterValues(billing.RequestEventQuery{From: from, To: to}, from)
+			return err
+		}},
+		{"errors", func() error {
+			_, err := d.RequestErrors(billing.RequestErrorQuery{From: from, To: to, Limit: 50, IncludeFilters: true}, from)
+			return err
+		}},
+		{"logs", func() error {
+			_, err := d.PluginLogsPage(billing.PluginLogQuery{Since: from, Limit: 50})
+			return err
+		}},
+		{"analysis", func() error {
+			_, err := d.Analysis(billing.RequestEventQuery{From: from, To: to}, from)
+			return err
+		}},
+	} {
+		b.Run(bench.name, func(b *testing.B) {
+			for b.Loop() {
+				if err := bench.run(); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
