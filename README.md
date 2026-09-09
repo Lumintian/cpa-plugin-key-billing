@@ -87,7 +87,7 @@ plugins:
     cpa-key-billing:
       enabled: true
       debug: false # 是否记录 debug 日志，例如路由日志、匹配参考价日志
-      codex_fast_mode_billing: false # Codex 的 priority 请求按 2.5 倍计费
+      codex_fast_mode_billing: false # 开启后，Codex 的 priority 请求按 2.5 倍计费
       state_file: "plugins/cpa-key-billing-state-v1.db"
 ```
 
@@ -96,7 +96,7 @@ plugins:
 > [!WARNING]
 > 升级前请备份数据文件。
 >
-> - v1.0.0 至 v1.2.3 的数据库文件支持自动迁移。
+> - v1.0.0 至最新版本的数据库文件支持自动迁移。
 > - v0.8.4 及更早版本的 JSON 或 SQLite 数据文件不支持迁移，请将 `state_file` 指向新文件。
 
 重启 CLIProxyAPI 后，在管理中心打开「API Key 计费」。确认模型定价后，创建订阅计划并绑定需要限制的 API Key。
@@ -118,10 +118,10 @@ http(s)://<CLIProxyAPI 地址>/v0/resource/plugins/cpa-key-billing/ui#account
 ## 计费与订阅规则
 
 - 未绑定订阅计划的 API Key 只统计用量，不限制额度。
-- 订阅计划可设置多个自定义额度窗口，每个窗口可单独或组合限制金额、Token、请求数，任一额度用尽即暂停新请求。
+- 订阅计划可设置多个自定义额度窗口，每个窗口可单独或组合限制金额、Token、请求数。
 - 每个 API Key 独立记账，各周期从首次放行开始。
 - 自定义价优先于 models.dev 参考价，两者都没有时拒绝新请求。
-- 请求事件保留最近 365 天，分析统计由这些请求事件计算。
+- 请求事件保留最近 365 天。
 
 ## 路由规则
 
@@ -150,8 +150,6 @@ flowchart TB
 ```
 
 ## 拦截请求的响应
-
-被拦截的请求按 CLIProxyAPI 自身的错误格式返回，客户端 SDK 无需区分是代理还是插件拒绝了请求：
 
 | 场景 | 状态码 | `type` | `code` |
 | --- | --- | --- | --- |
