@@ -53,13 +53,16 @@ func (p Plan) Validate() error {
 		if names[strings.ToLower(name)] {
 			return invalidf("窗口名称 %q 重复", name)
 		}
-		if window.AmountUSD < 0 || math.IsNaN(window.AmountUSD) || math.IsInf(window.AmountUSD, 0) {
-			return invalidf("窗口 %q：金额额度必须为有限非负数", name)
+		hasAny := false
+		for _, dim := range quotaDimensions {
+			if err := dim.validateWindow(name, window); err != nil {
+				return err
+			}
+			if dim.hasLimit(window) {
+				hasAny = true
+			}
 		}
-		if window.TokenLimit < 0 || window.TokenLimit > maxQuotaCount || window.RequestLimit < 0 || window.RequestLimit > maxQuotaCount {
-			return invalidf("窗口 %q：Token 和请求限额必须为 0 到 %d 的整数", name, maxQuotaCount)
-		}
-		if window.AmountUSD == 0 && window.TokenLimit == 0 && window.RequestLimit == 0 {
+		if !hasAny {
 			return invalidf("窗口 %q：至少设置一种额度", name)
 		}
 		if window.PeriodSeconds <= 0 || window.PeriodSeconds > maxPeriodSeconds {
