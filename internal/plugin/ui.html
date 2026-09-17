@@ -49,6 +49,7 @@
         --quota-high-color: #10b981;
         --quota-medium-color: #e0aa14;
         --quota-low-color: var(--error-color);
+        --quota-temporary-color: var(--data-blue-base, var(--analysis-color-1));
         --viz-success: #10b981;
         --viz-failure: #c65746;
         --analysis-color-1: #3478f6;
@@ -653,6 +654,38 @@
       .quota-fill.high { background: var(--quota-high-color); }
       .quota-fill.medium { background: var(--quota-medium-color); }
       .quota-fill.low { background: var(--quota-low-color); }
+      .quota-fill.quota-segments { display: flex; overflow: hidden; }
+      .quota-segments > i { display: block; height: 100%; flex-shrink: 0; }
+      .quota-temporary { background: var(--quota-temporary-color); }
+      .quota-credit-details {
+        cursor: help;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 2px;
+        background: none;
+        font-weight: inherit;
+        line-height: inherit;
+      }
+      .quota-credit-details:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 3px; }
+      .quota-credit-tooltip {
+        position: fixed;
+        margin: 0;
+        padding: 10px 12px;
+        max-width: min(340px, calc(100vw - 24px));
+        border: 1px solid var(--border-primary);
+        border-radius: 8px;
+        background: var(--floating-surface);
+        color: var(--text-secondary);
+        box-shadow: var(--floating-shadow);
+        font-size: 12px;
+        line-height: 1.7;
+        white-space: pre-line;
+      }
+      #temporary-quota-fields input { width: 100%; min-width: 0; }
+      #temporary-quota-preview { margin-top: 16px; }
+      #temporary-quota-expiry { margin: 8px 0 12px; }
+
       @media (prefers-reduced-motion: reduce) {
         body,
         button,
@@ -2539,6 +2572,23 @@
       <div class="row dialog-actions"> <button id="action-cancel">取消</button> <button id="action-confirm" class="primary">确定</button> </div>
     </dialog>
 
+    <dialog id="temporary-quota-dialog" class="settings-dialog" aria-labelledby="temporary-quota-title" aria-describedby="temporary-quota-help">
+      <h2 id="temporary-quota-title">临时额度</h2>
+      <div class="editor-state notice hidden"></div>
+      <p id="temporary-quota-identity" class="muted small"></p>
+      <label class="field">额度窗口 <span class="native-select"><select id="temporary-quota-window"></select></span></label>
+      <p id="temporary-quota-expiry" class="muted small"></p>
+      <div id="temporary-quota-fields" class="plan-window-limits"></div>
+      <div id="temporary-quota-preview"></div>
+      <p id="temporary-quota-help" class="muted small">仅本周期有效，重置时清除。保存会替换现有临时额度；撤销不会退还已用额度。</p>
+      <div class="row dialog-actions">
+        <button id="temporary-quota-revoke" class="link">撤销临时额度</button>
+        <button id="temporary-quota-cancel">取消</button>
+        <button id="temporary-quota-save" class="primary">保存</button>
+      </div>
+    </dialog>
+    <div id="quota-credit-tooltip" class="quota-credit-tooltip" popover="auto" role="tooltip"></div>
+
     <div id="cost-tooltip" class="cost-tooltip" role="tooltip" aria-hidden="true"></div>
 
     <div id="key-route-tooltip" class="key-route-tooltip" popover="manual" role="tooltip" tabindex="0"></div>
@@ -3476,6 +3526,7 @@
 
       function updateEditorControls(editor) {
         for (const button of editor.dialog.querySelectorAll(".dialog-actions button")) button.disabled = editor.saving;
+        editor.updateControls?.();
         for (const field of editor.dialog.children) {
           if (!field.matches("h2, .editor-state, .dialog-actions")) field.inert = editor.saving;
         }
@@ -3526,7 +3577,7 @@
         }
       }
 
-      for (const id of ["plan-dialog", "route-dialog", "route-picker", "price-dialog", "action-dialog"]) {
+      for (const id of ["plan-dialog", "route-dialog", "route-picker", "price-dialog", "action-dialog", "temporary-quota-dialog"]) {
         const dialog = $(id);
         dialog.querySelector(".dialog-actions button:not(.primary):not(.link)").onclick = () => dialog.close();
         dialog.addEventListener("cancel", (event) => { if (editors.get(dialog)?.saving) event.preventDefault(); });
@@ -5754,6 +5805,7 @@
       function renderKeys() {
         if (currentRole !== "admin" || activeTab(false) !== "keys") return false;
         closeKeyRouteTooltip();
+        closeQuotaCreditTooltip();
         if (renderDataPending($("keys-body"), [resources.admin.keys], "正在加载…", "empty section-loading")) return;
         const plans = resources.admin.plans.value;
         const filter = $("key-filter").value.trim().toLowerCase();
@@ -5876,12 +5928,19 @@
                 { class: "small" },
                 el("button", {
                   class: "link",
+                  text: "加额",
+                  title: "设置或撤销当前窗口的临时额度",
+                  disabled: deleted || saving || view.unlimited,
+                  onclick: () => openTemporaryQuota(view.scope)
+                }),
+                el("button", {
+                  class: "link",
                   text: "重置",
                   disabled: deleted || view.unlimited,
                   onclick: () =>
                     openActionDialog(
                       "重置订阅额度？",
-                      view.windows[0]?.cycle_anchor_at ? "清零所有窗口的消费，周期重置时间保持不变。" : "所有额度周期将结束，下一次放行会开启新周期。",
+                      view.windows[0]?.cycle_anchor_at ? "清零所有窗口的消费及临时额度，周期重置时间保持不变。" : "所有额度周期及临时额度将结束，下一次放行会开启新周期。",
                       undefined,
                       async () => {
                         await mutateAdmin("POST", "/keys/reset", { mode: "all", scopes: [view.scope] });
@@ -7716,6 +7775,50 @@
         );
       }
 
+      function quotaCreditDetails(window, balance, metric) {
+        const summary =
+          metric.label + DISPLAY_SEPARATOR + "剩余 " + metric.exact(balance.remaining) + "/" + metric.exact(balance.limit) +
+          DISPLAY_SEPARATOR +
+          "已用 " +
+          metric.exact(balance.used);
+        if (!(Number(balance.temporary_limit) > 0)) return summary;
+        return (
+          summary + "\n基础额度 " + metric.exact(balance.base_limit) + "\n临时额度 +" + metric.exact(balance.temporary_limit) + "\n" +
+          when(window.end_at) +
+          " 重置时清除"
+        );
+      }
+
+      function closeQuotaCreditTooltip() {
+        const tooltip = $("quota-credit-tooltip");
+        if (tooltip.matches(":popover-open")) tooltip.hidePopover();
+      }
+
+      function showQuotaCreditTooltip(anchor, text) {
+        const tooltip = $("quota-credit-tooltip");
+        closeQuotaCreditTooltip();
+        tooltip.textContent = text;
+        tooltip.showPopover();
+        const rect = anchor.getBoundingClientRect();
+        const width = tooltip.offsetWidth, height = tooltip.offsetHeight;
+        tooltip.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) + "px";
+        tooltip.style.top = Math.max(12, rect.bottom + height + 8 < window.innerHeight ? rect.bottom + 8 : rect.top - height - 8) + "px";
+      }
+
+      function renderQuotaFill(balance, quota) {
+        const extra = Number(balance.temporary_limit || 0), remaining = Number(balance.remaining);
+        if (!(extra > 0)) return el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" });
+        // Display base-first consumption without creating a second ledger.
+        const baseRemaining = Math.min(remaining, Math.max(0, Number(balance.base_limit) - Number(balance.used)));
+        const basePercent = remaining > 0 ? (baseRemaining / remaining) * 100 : 0;
+        return el(
+          "i",
+          { class: "quota-fill quota-segments " + quota.level, style: "width:" + quota.percent + "%", "aria-hidden": "true" },
+          el("i", { style: "width:" + basePercent + "%" }),
+          el("i", { class: "quota-temporary", style: "width:" + (100 - basePercent) + "%" })
+        );
+      }
+
       function renderQuotaWindows(view, account = false) {
         if (view.unlimited) return el("span", { class: "muted", text: "不限制" });
         return el(
@@ -7736,6 +7839,9 @@
               dimensions.map((balance) => {
                 const metric = QUOTA_DIMENSIONS.find((item) => item.metric === balance.metric);
                 const quota = remainingQuota(balance.used_percent);
+                const hasCredit = Number(balance.temporary_limit) > 0;
+                const details = quotaCreditDetails(window, balance, metric);
+                const showDetails = (event) => showQuotaCreditTooltip(event.currentTarget, details);
                 const label = displayLabel(single ? window.name + (account ? DISPLAY_SEPARATOR + metric.label : "") : metric.label);
                 return el(
                   "div",
@@ -7745,13 +7851,24 @@
                     { class: "quota-heading" },
                     el(single ? "b" : "span", { class: single ? "" : "muted", text: label, title: single ? label : null }),
                     el("span", {
-                      class: "mono" + (balance.blocked ? " blocked" : ""),
+                      class: "mono" + (balance.blocked ? " blocked" : "") + (hasCredit ? " quota-credit-details" : ""),
                       text: metric.format(balance.remaining) + "/" + metric.format(balance.limit),
-                      title:
-                        metric.label + DISPLAY_SEPARATOR + "剩余 " + metric.exact(balance.remaining) + DISPLAY_SEPARATOR + "已用 " +
-                        metric.exact(balance.used) +
-                        "/" +
-                        metric.exact(balance.limit)
+                      title: details,
+                      ...(hasCredit
+                        ? {
+                            role: "button",
+                            tabindex: "0",
+                            "aria-label": details,
+                            "aria-controls": "quota-credit-tooltip",
+                            onclick: showDetails,
+                            onkeydown: (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                showDetails(event);
+                              }
+                            }
+                          }
+                        : {})
                     }),
                     single ? reset : null
                   ),
@@ -7763,9 +7880,10 @@
                       "aria-label": window.name + DISPLAY_SEPARATOR + metric.label + "剩余额度",
                       "aria-valuemin": "0",
                       "aria-valuemax": "100",
-                      "aria-valuenow": String(Math.round(quota.percent))
+                      "aria-valuenow": String(Math.round(quota.percent)),
+                      ...(hasCredit ? { title: details, "aria-valuetext": details, onclick: showDetails } : {})
                     },
-                    el("i", { class: "quota-fill " + quota.level, style: "width:" + quota.percent + "%" })
+                    renderQuotaFill(balance, quota)
                   )
                 );
               })
@@ -7773,6 +7891,139 @@
           })
         );
       }
+
+      function openTemporaryQuota(scope) {
+        openEditor("temporary-quota-dialog", null, () => {
+          const key = resources.admin.keys.value?.find((item) => item.scope === scope);
+          if (!key || key.deleted_at || key.unlimited) throw new Error("API Key 已不存在或未绑定计划，请刷新后重试");
+          const editor = editors.get($("temporary-quota-dialog"));
+          editor.initial = structuredClone(key);
+          editor.updateControls = () => {
+            const selected = editor.initial.windows.find((item) => item.id === $("temporary-quota-window").value);
+            const unavailable = editor.saving || !selected?.credit_revision;
+            $("temporary-quota-save").disabled = unavailable;
+            $("temporary-quota-revoke").disabled = unavailable || !selected.dimensions.some((item) => Number(item.temporary_limit) > 0);
+          };
+          $("temporary-quota-identity").textContent = apiKeyIdentity(key).primary + DISPLAY_SEPARATOR + key.plan_name;
+          const preferred =
+            key.windows.find((item) => item.dimensions.some((balance) => Number(balance.temporary_limit) > 0)) ||
+            key.windows.find((item) => item.credit_revision) ||
+            key.windows[0];
+          $("temporary-quota-window").replaceChildren(
+            ...key.windows.map((item) =>
+              el("option", { value: item.id, text: item.name + (item.started ? "" : "（未开始）"), selected: item.id === preferred.id })
+            )
+          );
+          renderTemporaryQuotaFields();
+          return editor.initial;
+        });
+      }
+
+      function selectedTemporaryQuotaWindow() {
+        return editors.get($("temporary-quota-dialog"))?.initial.windows.find((item) => item.id === $("temporary-quota-window").value);
+      }
+
+      function renderTemporaryQuotaFields() {
+        const selected = selectedTemporaryQuotaWindow();
+        if (!selected) return;
+        $("temporary-quota-expiry").textContent = selected.credit_revision ? when(selected.end_at) + " 重置时清除" : "独立周期尚未开始，请在首次使用后设置临时额度。";
+        $("temporary-quota-fields").replaceChildren(
+          ...QUOTA_DIMENSIONS.map((metric) => {
+            const balance = selected.dimensions.find((item) => item.metric === metric.metric);
+            const base = Number(balance?.base_limit ?? balance?.limit ?? 0);
+            return el(
+              "label",
+              { class: "field" },
+              metric.label + (metric.unit ? "（" + metric.unit + "）" : ""),
+              el("input", {
+                name: metric.key,
+                "aria-label": "临时" + metric.label,
+                type: "number",
+                min: "0",
+                step: metric.key === "amount_usd" ? "any" : "1",
+                ...(metric.key === "amount_usd" ? {} : { max: String(Number.MAX_SAFE_INTEGER - base) }),
+                value: balance ? String(balance.temporary_limit || 0) : "",
+                placeholder: "不限制",
+                disabled: !balance || !selected.credit_revision,
+                title: !balance ? "此维度不限制，无需临时加额" : "设置本周期的临时额度总量，不是追加数量",
+                oninput: updateTemporaryQuotaPreview
+              })
+            );
+          })
+        );
+        editors.get($("temporary-quota-dialog")).updateControls();
+        updateTemporaryQuotaPreview();
+      }
+
+      function readTemporaryQuota(report = false) {
+        const selected = selectedTemporaryQuotaWindow(), quota = {};
+        let valid = true;
+        for (const metric of QUOTA_DIMENSIONS) {
+          const input = $("temporary-quota-fields").querySelector('[name="' + metric.key + '"]');
+          const value = input.disabled || (input.value === "" && !input.validity.badInput) ? 0 : input.valueAsNumber;
+          const balance = selected.dimensions.find((item) => item.metric === metric.metric);
+          const total = Number(balance?.base_limit ?? balance?.limit ?? 0) + value;
+          input.setCustomValidity("");
+          if (
+            !Number.isFinite(value) || value < 0 || !Number.isFinite(total) ||
+            (metric.key !== "amount_usd" && (!Number.isSafeInteger(value) || !Number.isSafeInteger(total)))
+          ) { input.setCustomValidity("请输入有效的非负额度；Token 和请求数及其总额必须为安全整数"); }
+          if (!input.checkValidity()) {
+            if (valid && report) input.reportValidity();
+            valid = false;
+          }
+          quota[metric.key] = value;
+        }
+        return valid ? quota : null;
+      }
+
+      function updateTemporaryQuotaPreview() {
+        const quota = readTemporaryQuota();
+        if (!quota) {
+          $("temporary-quota-preview").replaceChildren();
+          return;
+        }
+        const selected = structuredClone(selectedTemporaryQuotaWindow());
+        for (const balance of selected.dimensions) {
+          const metric = QUOTA_DIMENSIONS.find((item) => item.metric === balance.metric);
+          const base = Number(balance.base_limit ?? balance.limit), extra = quota[metric.key], limit = base + extra;
+          Object.assign(balance, {
+            limit,
+            remaining: Math.max(0, limit - balance.used),
+            used_percent: Math.min(100, (balance.used / limit) * 100),
+            blocked: balance.used >= limit
+          });
+          if (extra > 0) Object.assign(balance, { base_limit: base, temporary_limit: extra });
+          else {
+            delete balance.base_limit;
+            delete balance.temporary_limit;
+          }
+        }
+        $("temporary-quota-preview").replaceChildren(renderQuotaWindows({ windows: [selected] }));
+      }
+
+      function saveTemporaryQuota(revoke = false) {
+        submitEditor("temporary-quota-dialog", async (editor) => {
+          const selected = selectedTemporaryQuotaWindow();
+          if (!selected?.credit_revision) throw new Error("该独立额度周期尚未开始，请刷新后重试");
+          const quota = revoke ? { amount_usd: 0, token_limit: 0, request_limit: 0 } : readTemporaryQuota(true);
+          if (!quota) return false;
+          await mutateAdmin("PUT", "/keys/temporary-quota", {
+            scope: editor.initial.scope,
+            plan_id: editor.initial.plan_id,
+            window_id: selected.id,
+            revision: selected.credit_revision,
+            quota
+          });
+          notify(revoke ? "已撤销该窗口的临时额度" : "已保存该窗口的临时额度");
+        });
+      }
+
+      $("temporary-quota-window").addEventListener("change", renderTemporaryQuotaFields);
+      $("temporary-quota-save").onclick = () => saveTemporaryQuota();
+      $("temporary-quota-revoke").onclick = () => saveTemporaryQuota(true);
+      window.addEventListener("resize", closeQuotaCreditTooltip);
+      document.addEventListener("scroll", closeQuotaCreditTooltip, true);
 
       function nextCycleStart(window, now = Date.now()) {
         const anchor = Date.parse(window.cycle_anchor_at);
@@ -8775,7 +9026,7 @@
       $("keys-reset-all").onclick = () =>
         openActionDialog(
           "重置全员订阅额度？",
-          "清零所有未删除且绑定计划的 API Key 的消费。统一周期保持原重置时间，独立周期在下一次放行时重新开始。",
+          "清零所有未删除且绑定计划的 API Key 的消费及临时额度。统一周期保持原重置时间，独立周期在下一次放行时重新开始。",
           undefined,
           async () => {
             const result = await mutateAdmin("POST", "/keys/reset", { mode: "global" });
