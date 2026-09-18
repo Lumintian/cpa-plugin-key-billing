@@ -313,7 +313,7 @@ def refresh_key_quota(key):
             # Match the real endpoint's stale-form semantics, not its opaque hash.
             identity = [key["plan_id"], {k: v for k, v in window.items() if k != "name"},
                         window["id"] in cycles, cycle["start_at"], cycle["end_at"],
-                        cycle.get("usage_since"), credit]
+                        cycle.get("usage_since"), credit, cycle.get("credit_sequence", 0)]
             view["credit_revision"] = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         if view["blocked"]:
             key["blocked"] = True
@@ -1531,13 +1531,24 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(404, {"error": {"message": "API Key 不存在或已删除"}})
                 return
             refresh_key_quota(key)
+            plan = next((p for p in PLANS if p["id"] == key["plan_id"]), None)
             view = next((w for w in key["windows"] if w["id"] == body.get("window_id")), None)
-            if (key["plan_id"] != body.get("plan_id") or not view or not view.get("credit_revision")
-                    or view["credit_revision"] != body.get("revision")):
+            window = next((w for w in plan["windows"] if w["id"] == (view["id"] if view else None)), None) if plan else None
+            cycles = QUOTA_CYCLES.get(key["scope"], {})
+            cycle_persisted = bool(view and view["id"] in cycles)
+            existing_cycle = cycles.get(view["id"]) if view else {}
+            existing_cycle = existing_cycle or {}
+            unstarted_identity = [key["plan_id"], {k: v for k, v in window.items() if k != "name"} if window else {},
+                                  False, view["start_at"] if view else None, view["end_at"] if view else None, None, {}, 0]
+            unstarted_rev = hashlib.sha256(json.dumps(unstarted_identity, sort_keys=True).encode()).hexdigest()
+            current_rev = view.get("credit_revision") if view else None
+            matches = bool(current_rev and ((body.get("revision") == current_rev) or (
+                cycle_persisted and not any(existing_cycle.get("temporary_quota", {}).values())
+                and existing_cycle.get("credit_sequence", 0) == 0 and body.get("revision") == unstarted_rev
+            )))
+            if key["plan_id"] != body.get("plan_id") or not view or not window or not current_rev or not matches:
                 self.send_json(409, {"error": {"message": "额度周期或临时额度已变更，请刷新后重试"}})
                 return
-            plan = next(p for p in PLANS if p["id"] == key["plan_id"])
-            window = next(w for w in plan["windows"] if w["id"] == view["id"])
             credit = body.get("quota")
             if not isinstance(credit, dict) or any(k not in ("amount_usd", "token_limit", "request_limit") for k in credit):
                 self.send_json(400, {"error": {"message": "临时额度无效"}})
@@ -1549,13 +1560,14 @@ class Handler(BaseHTTPRequestHandler):
                         or (field != "amount_usd" and (int(value) != value or base + value > 2**53 - 1))):
                     self.send_json(400, {"error": {"message": "请输入有限非负额度，不限制的维度无需加额"}})
                     return
-            cycles = QUOTA_CYCLES[key["scope"]]
             cycle = cycles.get(view["id"])
             if cycle or any(credit.values()):
                 if cycle is None:
                     cycle = dict(plan_id=key["plan_id"], period_seconds=window["period_seconds"],
                                  cycle_anchor_at=window.get("cycle_anchor_at"), start_at=view["start_at"],
                                  end_at=view["end_at"], usage_since=iso(datetime.now(timezone.utc)))
+                if cycle.get("temporary_quota") != credit:
+                    cycle["credit_sequence"] = cycle.get("credit_sequence", 0) + 1
                 cycle["temporary_quota"] = credit
                 cycles[view["id"]] = cycle
             refresh_key_quota(key)

@@ -8008,14 +8008,35 @@
           if (!selected?.credit_revision) throw new Error("该独立额度周期尚未开始，请刷新后重试");
           const quota = revoke ? { amount_usd: 0, token_limit: 0, request_limit: 0 } : readTemporaryQuota(true);
           if (!quota) return false;
-          await mutateAdmin("PUT", "/keys/temporary-quota", {
-            scope: editor.initial.scope,
-            plan_id: editor.initial.plan_id,
-            window_id: selected.id,
-            revision: selected.credit_revision,
-            quota
-          });
-          notify(revoke ? "已撤销该窗口的临时额度" : "已保存该窗口的临时额度");
+          try {
+            await mutateAdmin("PUT", "/keys/temporary-quota", {
+              scope: editor.initial.scope,
+              plan_id: editor.initial.plan_id,
+              window_id: selected.id,
+              revision: selected.credit_revision,
+              quota
+            });
+            notify(revoke ? "已撤销该窗口的临时额度" : "已保存该窗口的临时额度");
+          } catch (error) {
+            try {
+              const rows = await fetchAdminCollection("keys");
+              resources.admin.keys.value = keyDirectory.receive(rows);
+              renderPage();
+              const refreshed = resources.admin.keys.value?.find((item) => item.scope === editor.initial.scope);
+              if (refreshed && !refreshed.deleted_at && !refreshed.unlimited && editorCurrent(editor)) {
+                editor.initial = structuredClone(refreshed);
+                $("temporary-quota-identity").textContent = apiKeyIdentity(refreshed).primary + DISPLAY_SEPARATOR + refreshed.plan_name;
+                const currentWindowID = $("temporary-quota-window").value;
+                $("temporary-quota-window").replaceChildren(
+                  ...refreshed.windows.map((item) =>
+                    el("option", { value: item.id, text: item.name + (item.started ? "" : "（未开始）"), selected: item.id === currentWindowID })
+                  )
+                );
+                renderTemporaryQuotaFields();
+              }
+            } catch (_) {}
+            throw error;
+          }
         });
       }
 
